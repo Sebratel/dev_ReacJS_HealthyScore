@@ -6,29 +6,32 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "fetch:clients": "node scripts/fetch-clients.mjs"
   },
   "dependencies": {
+    "@tanstack/react-table": "^8.17.3",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "framer-motion": "^11.2.10",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.395.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.23.1",
     "recharts": "^2.12.7",
-    "@tanstack/react-table": "^8.17.3",
-    "leaflet": "^1.9.4",
-    "react-leaflet": "^4.2.1",
-    "lucide-react": "^0.395.0",
-    "zustand": "^4.5.4",
-    "clsx": "^2.1.1",
     "tailwind-merge": "^2.3.0",
-    "date-fns": "^3.6.0",
-    "framer-motion": "^11.2.10"
+    "zustand": "^4.5.4"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.12",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "@types/leaflet": "^1.9.12",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
+    "dotenv": "^17.4.2",
+    "pg": "^8.21.0",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.2",

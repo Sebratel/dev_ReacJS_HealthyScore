@@ -3,6 +3,30 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* App surfaces — Design System NexaView (creme quente) */
+    --app-bg:          244 241 232;  /* #f4f1e8 surface */
+    --app-surface:     235 231 219;  /* #ebe7db surface-container-low */
+    --app-card:        255 255 255;  /* cards */
+    --app-cardHover:   251 249 243;  /* warm white hover */
+    --app-border:      224 220 208;  /* #e0dcd0 contorno quente sutil */
+    --app-borderLight: 209 204 190;
+
+    /* Texto principal (near-black quente) */
+    --color-white: 26 26 26;         /* #1a1a1a on-surface */
+
+    /* Escala de cinza — neutros quentes (claro → escuro) */
+    --gray-100: 235 231 219;
+    --gray-200: 214 210 198;
+    --gray-300: 168 168 158;
+    --gray-400: 138 138 130;
+    --gray-500: 107 107 102;
+    --gray-600: 93 93 93;            /* #5d5d5d on-surface-variant */
+    --gray-700: 58 58 58;
+    --gray-800: 38 38 38;            /* #262626 inverse-surface */
+    --gray-900: 26 26 26;            /* #1a1a1a */
+  }
+
   * {
     box-sizing: border-box;
   }
@@ -15,8 +39,8 @@
   }
 
   body {
-    background-color: #060910;
-    color: #f9fafb;
+    background-color: rgb(var(--app-bg));
+    color: rgb(var(--color-white));
     overflow-x: hidden;
   }
 
@@ -30,18 +54,58 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #1a2236;
+    background: rgb(var(--app-border));
     border-radius: 99px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #243050;
+    background: rgb(var(--app-borderLight));
   }
 }
 
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #1a2236 transparent;
+    scrollbar-color: rgb(var(--app-border)) transparent;
+  }
+
+  /* Lift sutil no hover — usado em cards premium */
+  .hover-lift {
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+    will-change: transform;
+  }
+  .hover-lift:hover {
+    transform: translateY(-3px);
+  }
+
+  /* Texto com gradiente da marca (âmbar → laranja) */
+  .gradient-text {
+    background-image: linear-gradient(135deg, #ffb000 0%, #ff8f00 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Vidro fosco (glass) */
+  .glass {
+    background-color: rgb(var(--app-card) / 0.72);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+  }
+
+  /* Borda superior em gradiente — accent de seção */
+  .accent-top {
+    position: relative;
+  }
+  .accent-top::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 1rem;
+    right: 1rem;
+    height: 2px;
+    border-radius: 99px;
+    background-image: linear-gradient(90deg, transparent, #ffb000, #ff8f00, transparent);
+    opacity: 0.6;
   }
 }

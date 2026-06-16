@@ -3,7 +3,12 @@
     "allow": [
       "Bash(npm install *)",
       "Bash(npx tsc *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\misael.cruz\\\\Desktop\\\\4 - VSCode\\\\churn_mvp\\\\src\" -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\misael.cruz\\\\Desktop\\\\4 - VSCode\\\\churn_mvp\\\\src\" -Recurse -File -Filter \"*.tsx\")",
+      "Bash(Measure-Object)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\misael.cruz\\\\Desktop\\\\4 - VSCode\\\\churn_mvp\" -Directory)"
     ]
   }
 }

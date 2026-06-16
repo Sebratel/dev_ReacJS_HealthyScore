@@ -1,20 +1,25 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, Activity, DollarSign, Wifi, Wrench,
-  TrendingUp, Brain, ChevronLeft, ChevronRight, Zap, AlertTriangle, UserSquare2,
+  LayoutDashboard, Wifi, Wrench,
+  Brain, ChevronLeft, ChevronRight, Zap, UserSquare2, Cpu, Briefcase, Network, PackageOpen,
+  XCircle, Building2, MessageSquare,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { cn } from '@/utils/cn'
 
 const NAV_ITEMS = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard', sublabel: 'Executivo' },
-  { path: '/clientes', icon: Users, label: 'Clientes', sublabel: 'Health Score' },
-  { path: '/cliente360', icon: UserSquare2, label: 'Cliente 360°', sublabel: 'Análise Completa' },
-  { path: '/financeiro', icon: DollarSign, label: 'Financeiro', sublabel: 'Inadimplência' },
-  { path: '/rede', icon: Wifi, label: 'Rede', sublabel: 'Massivas' },
-  { path: '/manutencao', icon: Wrench, label: 'Manutenção', sublabel: 'Protocolos' },
-  { path: '/comercial', icon: TrendingUp, label: 'Comercial', sublabel: 'Vendedores' },
-  { path: '/ia', icon: Brain, label: 'IA Preditiva', sublabel: 'Previsões' },
+  { path: '/',                 icon: LayoutDashboard, label: 'Dashboard',         sublabel: 'Executivo' },
+  { path: '/cliente360',       icon: UserSquare2,     label: 'Timeline',          sublabel: 'Jornada Operacional' },
+  { path: '/financeiro',       icon: Cpu,             label: 'Financial Engine',  sublabel: 'Score Financeiro' },
+  { path: '/engine-comercial', icon: Briefcase,       label: 'Commercial Engine', sublabel: 'Score Comercial' },
+  { path: '/engine-conexao',   icon: Wifi,            label: 'Connection Engine', sublabel: 'Qualidade CPE' },
+  { path: '/engine-rede',      icon: Network,         label: 'Network Engine',    sublabel: 'Infraestrutura' },
+  { path: '/manutencao',       icon: Wrench,          label: 'Field Engine',      sublabel: 'Atendimento a Campo' },
+  { path: '/engine-instalacao',     icon: PackageOpen,    label: 'Installation Engine',  sublabel: 'Qualidade de Instalação' },
+  { path: '/cancelamentos',         icon: XCircle,        label: 'Cancelamento Engine',  sublabel: 'Score de Cancelamento' },
+  { path: '/concorrencia',          icon: Building2,      label: 'Competidores',         sublabel: 'Mapeamento Competitivo' },
+  { path: '/engine-relacionamento', icon: MessageSquare,  label: 'Relationship Engine',  sublabel: 'NPS · Sentimento' },
+  { path: '/ia',                    icon: Brain,          label: 'IA Preditiva',         sublabel: 'Previsões' },
 ]
 
 export function Sidebar() {
@@ -25,13 +30,11 @@ export function Sidebar() {
     <aside className={cn('fixed left-0 top-0 h-full flex flex-col bg-app-surface border-r border-app-border transition-all duration-300 z-40', sidebarCollapsed ? 'w-16' : 'w-56')}>
       {/* Logo */}
       <div className={cn('flex items-center border-b border-app-border h-14 shrink-0', sidebarCollapsed ? 'justify-center px-0' : 'px-4 gap-3')}>
-        <div className="w-7 h-7 rounded-lg bg-gradient-brand flex items-center justify-center shrink-0">
-          <Activity size={14} className="text-white" />
-        </div>
+        <img src="/logo-circular-sebratel.png" alt="Sebratel" className="w-8 h-8 rounded-full shrink-0 ring-1 ring-app-border" />
         {!sidebarCollapsed && (
           <div className="flex flex-col leading-tight">
-            <span className="text-sm font-bold text-white tracking-tight">ChurnIQ</span>
-            <span className="text-[10px] text-gray-500 font-medium uppercase tracking-widest">Health Score</span>
+            <span className="text-sm font-bold text-white tracking-tight">Healthy Score</span>
+            <span className="text-[10px] text-gray-500 font-medium uppercase tracking-widest">Sebratel</span>
           </div>
         )}
       </div>
@@ -46,17 +49,18 @@ export function Sidebar() {
               to={path}
               title={sidebarCollapsed ? `${label} — ${sublabel}` : undefined}
               className={cn(
-                'flex items-center gap-3 rounded-lg transition-all duration-150 group relative',
-                sidebarCollapsed ? 'justify-center h-10 w-10 mx-auto' : 'px-3 py-2.5',
-                isActive ? 'bg-brand-blue/10 text-brand-blue' : 'text-gray-400 hover:text-gray-100 hover:bg-white/5'
+                'flex items-center gap-3 rounded-2xl transition-all duration-300 ease-nexa group relative min-h-[44px]',
+                sidebarCollapsed ? 'justify-center h-11 w-11 mx-auto' : 'px-3 py-2.5',
+                isActive
+                  ? 'bg-primary text-white font-bold shadow-lg shadow-primary/20'
+                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low'
               )}
             >
-              {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-brand-blue rounded-r-full" />}
-              <Icon size={16} className={cn('shrink-0', isActive ? 'text-brand-blue' : 'text-current')} />
+              <Icon size={16} strokeWidth={2} className={cn('shrink-0', isActive ? 'text-white' : 'text-primary')} />
               {!sidebarCollapsed && (
                 <div className="flex flex-col leading-tight min-w-0">
                   <span className="text-xs font-semibold truncate">{label}</span>
-                  <span className={cn('text-[10px] truncate', isActive ? 'text-brand-blue/60' : 'text-gray-600')}>{sublabel}</span>
+                  <span className={cn('text-[10px] truncate', isActive ? 'text-white/70' : 'text-on-surface-variant/60')}>{sublabel}</span>
                 </div>
               )}
             </NavLink>
@@ -76,7 +80,7 @@ export function Sidebar() {
           </div>
           <div className="mt-1 flex items-center gap-1">
             <Zap size={9} className="text-brand-cyan" />
-            <span className="text-[10px] text-brand-cyan font-mono">500 clientes · 6 módulos</span>
+            <span className="text-[10px] text-brand-cyan font-mono">500 clientes · 12 módulos</span>
           </div>
         </div>
       )}

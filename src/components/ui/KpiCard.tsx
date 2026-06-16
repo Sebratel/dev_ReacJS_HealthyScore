@@ -12,6 +12,7 @@ interface KpiCardProps {
   iconColor?: string
   variant?: 'default' | 'danger' | 'success' | 'warning' | 'brand'
   size?: 'sm' | 'md'
+  className?: string
 }
 
 const VARIANT_STYLES = {
@@ -22,24 +23,24 @@ const VARIANT_STYLES = {
   brand: 'border-brand-blue/20 bg-brand-blue/5',
 }
 
-export function KpiCard({ label, value, subtitle, delta, deltaLabel, icon, iconColor = 'text-brand-blue', variant = 'default', size = 'md' }: KpiCardProps) {
+export function KpiCard({ label, value, subtitle, delta, deltaLabel, icon, iconColor = 'text-brand-blue', variant = 'default', size = 'md', className }: KpiCardProps) {
   const isPositive = delta !== undefined && delta > 0
   const isNegative = delta !== undefined && delta < 0
 
   return (
-    <div className={cn('bg-app-card border rounded-xl p-4 flex flex-col gap-3 hover:border-app-borderLight transition-all', VARIANT_STYLES[variant])}>
+    <div className={cn('group bg-app-card border border-app-border rounded-2xl p-4 sm:p-5 flex flex-col gap-3 shadow-card transition-[box-shadow,transform,border-color] duration-300 ease-nexa hover:shadow-card-md hover:border-app-borderLight', VARIANT_STYLES[variant], className)}>
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">{label}</span>
+        <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-[0.08em]">{label}</span>
         {icon && (
-          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center bg-app-surface', iconColor)}>
+          <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center bg-app-surface ring-1 ring-inset ring-app-border', iconColor)}>
             {icon}
           </div>
         )}
       </div>
 
       <div className="flex flex-col gap-0.5">
-        <span className={cn('font-bold text-white tabular-nums', size === 'md' ? 'text-2xl' : 'text-lg')}>{value}</span>
-        {subtitle && <span className="text-[11px] text-gray-500">{subtitle}</span>}
+        <span className={cn('font-semibold text-on-surface tabular-nums tracking-tight', size === 'md' ? 'text-2xl' : 'text-lg')}>{value}</span>
+        {subtitle && <span className="text-[11px] text-on-surface-variant/80">{subtitle}</span>}
       </div>
 
       {delta !== undefined && (

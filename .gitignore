@@ -1,1 +1,9 @@
 node_modules
+
+# Credenciais / segredos
+.env
+.env.*
+!.env.example
+
+# Dados reais com PII (gerados pelo ETL — não versionar)
+src/data/realClients.json

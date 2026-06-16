@@ -12,7 +12,7 @@ export function Card({ children, className, glow = 'none', hover = false }: Card
   return (
     <div
       className={cn(
-        'bg-app-card border border-app-border rounded-xl',
+        'bg-app-card border border-app-border rounded-2xl',
         hover && 'hover:border-app-borderLight hover:bg-app-cardHover transition-all duration-200 cursor-default',
         glow === 'blue' && 'shadow-glow',
         glow === 'danger' && 'shadow-glow-danger',

@@ -5,6 +5,7 @@ import {
   CustomerSignals, FinancialSignals, NetworkSignals, RelationshipSignals,
   InstallationSignals, CommercialSignals, ProfileSignals, Trend, ScoreFactor,
   WifiQuality, PaymentMethod, CustomerSegment, HousingType,
+  ConnectionSignals, InfraSignals,
 } from '@/types'
 import { subDays, subMonths, addDays, format } from 'date-fns'
 
@@ -28,6 +29,29 @@ const PLAN_VALUES: Record<PlanType, number> = { 'Fibra 100MB': 79.9, 'Fibra 200M
 const SELLER_IDS = ['S001', 'S002', 'S003', 'S004', 'S005', 'S006', 'S007', 'S008']
 const SELLER_NAMES: Record<string, string> = { S001: 'Carlos Mendonça', S002: 'Amanda Ferreira', S003: 'Ricardo Souza', S004: 'Beatriz Lima', S005: 'Thiago Rocha', S006: 'Patrícia Nunes', S007: 'Diego Martins', S008: 'Fernanda Costa' }
 const SELLER_QUALITY: Record<string, number> = { S001: 85, S002: 92, S003: 61, S004: 78, S005: 45, S006: 88, S007: 55, S008: 73 }
+const SELLER_TENURE: Record<string, number> = { S001: 48, S002: 36, S003: 24, S004: 60, S005: 18, S006: 42, S007: 12, S008: 30 }
+const SELLER_TYPE: Record<string, 'internal' | 'external'> = { S001: 'internal', S002: 'internal', S003: 'external', S004: 'internal', S005: 'external', S006: 'internal', S007: 'external', S008: 'internal' }
+
+const ONT_MODELS: Record<string, string[]> = {
+  ZTE: ['F670L', 'F601', 'F609'], Huawei: ['HG8145V5', 'EG8145X6', 'HG8120C'],
+  Nokia: ['G-240W-F', 'G-010G-P'], Intelbras: ['ONU 121 GE', 'ONU 110 GE'],
+  Datacom: ['DM991', 'DM985'], Parks: ['P-IQ100'], Generic: ['ONT-GEN'],
+}
+const CITY_INFRA: Record<string, { site: string; olts: string[] }> = {
+  'Porto Alegre': { site: 'POA-CENTRO', olts: ['OLT-POA-01', 'OLT-POA-02'] },
+  'Canoas':        { site: 'CAN-01',    olts: ['OLT-CAN-01'] },
+  'Novo Hamburgo': { site: 'NH-MAIN',   olts: ['OLT-NH-01'] },
+  'São Leopoldo':  { site: 'SL-MAIN',   olts: ['OLT-SL-01'] },
+  'Gravataí':      { site: 'GVT-01',    olts: ['OLT-GVT-01'] },
+  'Cachoeirinha':  { site: 'CCH-01',    olts: ['OLT-CCH-01'] },
+  'Alvorada':      { site: 'ALV-01',    olts: ['OLT-ALV-01'] },
+  'Viamão':        { site: 'ALV-01',    olts: ['OLT-ALV-01'] },
+}
+const COLLABS = [
+  { name: 'André Oliveira', score: 88 }, { name: 'Marcos Vieira', score: 75 },
+  { name: 'Tiago Borges',   score: 62 }, { name: 'Renato Cruz',   score: 91 },
+  { name: 'Paulo Neto',     score: 71 }, { name: 'Sandro Lima',   score: 55 },
+]
 
 // ─── Seeded RNG ────────────────────────────────────────────────
 let seed = 12345
@@ -161,7 +185,7 @@ function computeEquipmentReturnRisk(fin: FinancialSignals, rel: RelationshipSign
 }
 
 // ─── Signal generation (correlated with existing churn score) ──
-function generateSignals(churnScore: number, paymentDelay: number, netFailures: number, protocols: number, contacts: number, contractMonths: number, sellerId: string): CustomerSignals {
+function generateSignals(churnScore: number, paymentDelay: number, netFailures: number, protocols: number, contacts: number, contractMonths: number, sellerId: string, city: string): CustomerSignals {
   const bad = churnScore > 60
   const mid = churnScore > 35
 
@@ -174,6 +198,7 @@ function generateSignals(churnScore: number, paymentDelay: number, netFailures: 
     onTimePayments: Math.max(0, contractMonths - Math.ceil(paymentDelay / 30)),
     avgPaymentDelay: paymentDelay,
     hasNegativation: bad && rng() > 0.7,
+    trustReleases: bad ? randInt(1, 4) : mid ? randInt(0, 2) : 0,
   }
 
   const net: NetworkSignals = {
@@ -229,9 +254,49 @@ function generateSignals(churnScore: number, paymentDelay: number, netFailures: 
     housingType: pick(['house', 'apartment', 'condo'] as HousingType[]),
     locationScore: clamp(randFloat(bad ? 20 : mid ? 40 : 55, 95)),
     ageEstimate: randInt(21, 65),
+    gender: rng() > 0.52 ? 'M' : 'F',
+    timeAtAddress: bad ? randInt(1, 8) : mid ? randInt(1, 12) : randInt(2, 20),
   }
 
-  return { financial: fin, network: net, relationship: rel, installation: inst, commercial: com, profile: prof }
+  const ontBrand: string = bad
+    ? pick(['Intelbras', 'Datacom', 'Parks', 'Generic'])
+    : mid
+    ? pick(['ZTE', 'Huawei', 'Intelbras', 'Datacom'])
+    : pick(['ZTE', 'Huawei', 'Nokia'])
+  const conn: ConnectionSignals = {
+    wifiBand: (bad ? rng() > 0.72 : mid ? rng() > 0.52 : rng() > 0.32) ? '5GHz' : '2.4GHz',
+    wifiRssi: bad ? randInt(-90, -70) : mid ? randInt(-75, -60) : randInt(-65, -45),
+    pingMs: bad ? randInt(40, 200) : mid ? randInt(20, 60) : randInt(5, 25),
+    ontUptimeDays: bad ? randInt(1, 60) : mid ? randInt(15, 180) : randInt(30, 365),
+    pppoeUptimeDays: bad ? randInt(0, 15) : mid ? randInt(5, 60) : randInt(20, 180),
+    pppoeDrops: net.pppoeDrops,
+    ontRamUsage: bad ? randInt(70, 98) : mid ? randInt(45, 80) : randInt(20, 60),
+    ontCpuUsage: bad ? randInt(60, 95) : mid ? randInt(35, 70) : randInt(10, 45),
+    connectedDevices: randInt(1, bad ? 6 : mid ? 10 : 16),
+    txRxOscillation: bad ? randFloat(5, 12) : mid ? randFloat(2, 7) : randFloat(0.5, 3),
+    dataTrafficGb: randFloat(bad ? 5 : mid ? 20 : 50, bad ? 60 : mid ? 180 : 600),
+    ontBrand,
+    ontModel: pick(ONT_MODELS[ontBrand] ?? ['ONT-GEN']),
+    ontFirmwareAge: bad ? randInt(18, 48) : mid ? randInt(6, 24) : randInt(1, 12),
+  }
+
+  const cityData = CITY_INFRA[city] ?? { site: 'POA-CENTRO', olts: ['OLT-POA-01'] }
+  const collab = pick(COLLABS)
+  const infra: InfraSignals = {
+    site: cityData.site,
+    olt: pick(cityData.olts),
+    slot: randInt(1, 8),
+    port: randInt(1, 128),
+    splitter: pick(bad ? ['1:16', '1:32', '1:32'] : mid ? ['1:8', '1:16'] : ['1:4', '1:8']),
+    gmudCount: bad ? randInt(3, 10) : mid ? randInt(1, 5) : randInt(0, 2),
+    massivasCount: bad ? randInt(2, 8) : mid ? randInt(1, 4) : randInt(0, 2),
+    massivasSlaAvgMin: bad ? randInt(120, 480) : mid ? randInt(60, 240) : randInt(15, 90),
+    quebraCount: bad ? randInt(1, 5) : mid ? randInt(0, 3) : randInt(0, 1),
+    collaboratorScore: collab.score,
+    collaboratorName: collab.name,
+  }
+
+  return { financial: fin, network: net, relationship: rel, installation: inst, commercial: com, profile: prof, connection: conn, infra }
 }
 
 // ─── Health Score builder ──────────────────────────────────────
@@ -408,7 +473,7 @@ export function generateCustomers(count = 500): Customer[] {
     const sellerId = pick(SELLER_IDS)
     const status: CustomerStatus = churnScore > 85 && rng() < 0.08 ? 'suspended' : 'active'
 
-    const signals = generateSignals(churnScore, paymentDelay, netFailures, totalProtocols, supportContacts, contractMonths, sellerId)
+    const signals = generateSignals(churnScore, paymentDelay, netFailures, totalProtocols, supportContacts, contractMonths, sellerId, cityData.name)
     const healthScores = buildHealthScores(signals, churnScore)
     const derivedRisks = buildDerivedRisks(healthScores, signals, monthlyValue)
 
@@ -501,7 +566,21 @@ export function generateNetworkEvents(): NetworkEvent[] {
 
 export function generateSellers(): Seller[] {
   seed = 33333
-  return SELLER_IDS.map((id) => ({ id, name: SELLER_NAMES[id], region: pick(['Grande Porto Alegre Norte', 'Grande Porto Alegre Sul', 'Vale do Sinos', 'Região Metropolitana']), totalCustomers: randInt(45, 120), activeCustomers: randInt(35, 100), churnedCustomers: randInt(5, 25), earlyChurnRate: randFloat(8, 28), avgChurnScore: randFloat(28, 65), monthlyRevenue: randFloat(4500, 18000), conversionRate: randFloat(18, 45) }))
+  return SELLER_IDS.map((id) => ({
+    id,
+    name: SELLER_NAMES[id],
+    region: pick(['Grande Porto Alegre Norte', 'Grande Porto Alegre Sul', 'Vale do Sinos', 'Região Metropolitana']),
+    totalCustomers: randInt(45, 120),
+    activeCustomers: randInt(35, 100),
+    churnedCustomers: randInt(5, 25),
+    earlyChurnRate: randFloat(8, 28),
+    avgChurnScore: randFloat(28, 65),
+    monthlyRevenue: randFloat(4500, 18000),
+    conversionRate: randFloat(18, 45),
+    tenure: SELLER_TENURE[id] ?? 24,
+    type: SELLER_TYPE[id] ?? 'internal',
+    performanceScore: SELLER_QUALITY[id] ?? 70,
+  }))
 }
 
 export function generateTimeline(customer: Customer, payments: Payment[], protocols: Protocol[], networkEvents: NetworkEvent[]): TimelineEvent[] {

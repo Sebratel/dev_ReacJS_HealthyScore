@@ -1,6 +1,7 @@
-import { Bell, Search, Settings, AlertTriangle, ChevronDown } from 'lucide-react'
+import { Bell, Search, Settings, AlertTriangle, LogOut } from 'lucide-react'
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuthStore } from '@/store/authStore'
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/': { title: 'Dashboard Executivo', subtitle: 'Health Score · Riscos Derivados · Visão Operacional' },
@@ -17,8 +18,11 @@ export function TopBar() {
   const location = useLocation()
   const navigate = useNavigate()
   const [searchVal, setSearchVal] = useState('')
+  const user = useAuthStore((s) => s.user)
+  const logout = useAuthStore((s) => s.logout)
+  const handleLogout = () => { logout(); navigate('/login', { replace: true }) }
 
-  const page = PAGE_TITLES[location.pathname] ?? { title: 'ChurnIQ', subtitle: '' }
+  const page = PAGE_TITLES[location.pathname] ?? { title: 'Healthy Score Sebratel', subtitle: '' }
 
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-app-border bg-app-surface/90 backdrop-blur-sm sticky top-0 z-30">
@@ -52,15 +56,28 @@ export function TopBar() {
           </span>
         </div>
 
-        <button className="h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all">
+        <button className="h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all" aria-label="Configurações">
           <Settings size={13} />
         </button>
 
-        <button className="flex items-center gap-2 h-7 pl-2 pr-1.5 rounded-lg bg-app-card border border-app-border hover:border-app-borderLight transition-all">
-          <div className="w-5 h-5 rounded-full bg-gradient-brand flex items-center justify-center text-[10px] font-bold text-white">M</div>
-          <span className="text-xs text-gray-300 hidden md:block">Admin</span>
-          <ChevronDown size={11} className="text-gray-500" />
-        </button>
+        <div className="flex items-center gap-2 h-7 pl-1 pr-1 rounded-lg bg-app-card border border-app-border">
+          {user?.picture ? (
+            <img src={user.picture} alt="" className="w-5 h-5 rounded-full" referrerPolicy="no-referrer" />
+          ) : (
+            <div className="w-5 h-5 rounded-full bg-gradient-brand flex items-center justify-center text-[10px] font-bold text-white">
+              {(user?.name ?? 'U')[0].toUpperCase()}
+            </div>
+          )}
+          <span className="text-xs text-gray-700 hidden md:block max-w-[120px] truncate">{user?.name ?? 'Usuário'}</span>
+          <button
+            onClick={handleLogout}
+            title="Sair"
+            aria-label="Sair"
+            className="h-6 w-6 flex items-center justify-center rounded-md text-gray-500 hover:text-risk-critical hover:bg-risk-critical/10 transition-all"
+          >
+            <LogOut size={13} />
+          </button>
+        </div>
       </div>
     </header>
   )
