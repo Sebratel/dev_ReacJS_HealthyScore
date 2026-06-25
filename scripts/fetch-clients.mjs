@@ -10,6 +10,7 @@ import { writeFileSync, mkdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { makePool } from './db.mjs'
+import { makeMariaPool } from './db-maria.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const OUT = resolve(__dirname, '../src/data/realClients.json')
@@ -86,6 +87,205 @@ group by c.contract_number
 `
 // Lista de modelos distintos (base inteira) para config
 const Q_CONN_MODELS = `select p.title v, count(*) n ${EQUIP_FROM} group by p.title order by n desc`
+
+// ─── Field Engine — protocolos de manutenção ──────────────────
+// FROM/JOINs base (sem WHERE) + cláusula WHERE separada (joins extras entram ANTES do where)
+const FIELD_FROM = `
+from assignment_incidents ai
+left join assignments a on a.id = ai.assignment_id
+left join incident_types it on it.id = ai.incident_type_id
+left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+left join contracts c on c.id = cst.contract_id
+left join catalog_services cs on cs.id = ai.catalog_service_id
+`
+const FIELD_CAT_JOIN = `
+left join solicitation_category_matrices scm on scm.id = ai.solicitation_category_matrix_id
+left join solicitation_service_categories ssc1 on ssc1.id = scm.service_category_id_1
+left join solicitation_service_categories ssc2 on ssc2.id = scm.service_category_id_2
+left join solicitation_service_categories ssc3 on ssc3.id = scm.service_category_id_3
+left join solicitation_service_categories ssc4 on ssc4.id = scm.service_category_id_4
+`
+const FIELD_SCHED_JOIN = `
+left join service_desk_slots sds on sds.pre_reserved_assignment_id = a.id
+left join people p2 on p2.id = sds.resource_id
+`
+const FIELD_WHERE = `
+where (it.active is true or cs.title in ('Equipe reparo','Equipe tecnologia'))
+  and a.created >= '${FROM_DATE}'
+  and c.v_status <> 'Cancelado'
+`
+
+// Protocolos / SLA por contrato (nível protocolo, filtrado à amostra)
+const Q_FIELD_PROT = `
+select contract_number,
+  count(*) protocol_count,
+  count(*) filter (where late) sla_late_count,
+  round(avg(sla_days) filter (where sla_days is not null)::numeric, 2) avg_sla_days
+from (
+  select a.id pid, c.contract_number,
+    (max(a.conclusion_date) > max(ai.responsible_final_date))
+      or (max(a.conclusion_date) is null and max(ai.responsible_final_date) < now()) late,
+    case when max(a.conclusion_date) is not null
+      then extract(epoch from (max(a.conclusion_date) - max(a.created))) / 86400.0 end sla_days
+  ${FIELD_FROM} ${FIELD_WHERE}
+    and c.contract_number::text = any($1::text[])
+  group by a.id, c.contract_number
+) q
+group by contract_number
+`
+
+// Agendamentos + técnicos por contrato
+const Q_FIELD_SCHED = `
+select c.contract_number,
+  count(distinct sds.id) schedule_count,
+  array_remove(array_agg(distinct p2.name), null) technicians
+${FIELD_FROM} ${FIELD_SCHED_JOIN} ${FIELD_WHERE}
+  and c.contract_number::text = any($1::text[])
+group by c.contract_number
+`
+
+// Motivos (categorias 1-4) por contrato
+const Q_FIELD_REASONS = `
+select contract_number, array_remove(array_agg(distinct cat), null) reasons
+from (
+  select c.contract_number, unnest(array[ssc1.title, ssc2.title, ssc3.title, ssc4.title]) cat
+  ${FIELD_FROM} ${FIELD_CAT_JOIN} ${FIELD_WHERE}
+    and c.contract_number::text = any($1::text[])
+) q
+where cat is not null and cat <> ''
+group by contract_number
+`
+
+// Listas distintas (base inteira) para config
+const Q_FIELD_REASON_LIST = `
+select cat v, count(distinct pid) n from (
+  select a.id pid, unnest(array[ssc1.title, ssc2.title, ssc3.title, ssc4.title]) cat
+  ${FIELD_FROM} ${FIELD_CAT_JOIN} ${FIELD_WHERE}
+) q where cat is not null and cat <> '' group by cat order by n desc
+`
+const Q_FIELD_TECH_LIST = `
+select p2.name v, count(distinct a.id) n
+${FIELD_FROM} ${FIELD_SCHED_JOIN} ${FIELD_WHERE} and p2.id is not null
+group by p2.name order by n desc
+`
+
+// ─── Installation Engine — protocolos de instalação (ATV) ─────
+// Mesma estrutura da field, filtro it.code like 'ATV%'. contract_created = data da venda.
+const INST_WHERE = `
+where it.active is true and it.code like 'ATV%'
+  and a.created >= '${FROM_DATE}'
+  and c.v_status <> 'Cancelado'
+`
+// Protocolo / SLA / venda→agenda por contrato (nível protocolo + sds p/ 1ª agenda)
+const Q_INST_PROT = `
+select contract_number,
+  count(*) protocol_count,
+  count(*) filter (where late) sla_late_count,
+  round(avg(sla_days) filter (where sla_days is not null)::numeric, 2) avg_sla_days,
+  round(avg(s2a_days) filter (where s2a_days is not null)::numeric, 2) sale_to_schedule_days
+from (
+  select a.id pid, c.contract_number,
+    (max(a.conclusion_date) > max(ai.responsible_final_date))
+      or (max(a.conclusion_date) is null and max(ai.responsible_final_date) < now()) late,
+    case when max(a.conclusion_date) is not null
+      then extract(epoch from (max(a.conclusion_date) - max(a.created))) / 86400.0 end sla_days,
+    case when min(sds.begin_date) is not null
+      then extract(epoch from (min(sds.begin_date) - max(c.created))) / 86400.0 end s2a_days
+  ${FIELD_FROM} ${FIELD_SCHED_JOIN} ${INST_WHERE}
+    and c.contract_number::text = any($1::text[])
+  group by a.id, c.contract_number
+) q
+group by contract_number
+`
+// Agendamentos + técnicos por contrato
+const Q_INST_SCHED = `
+select c.contract_number,
+  count(distinct sds.id) schedule_count,
+  array_remove(array_agg(distinct p2.name), null) technicians
+${FIELD_FROM} ${FIELD_SCHED_JOIN} ${INST_WHERE}
+  and c.contract_number::text = any($1::text[])
+group by c.contract_number
+`
+const Q_INST_TECH_LIST = `
+select p2.name v, count(distinct a.id) n
+${FIELD_FROM} ${FIELD_SCHED_JOIN} ${INST_WHERE} and p2.id is not null
+group by p2.name order by n desc
+`
+
+// ─── Relationship Engine — protocolos de relacionamento ───────
+const REL_FROM = `
+from assignment_incidents ai
+left join assignments a on a.id = ai.assignment_id
+left join incident_types it on it.id = ai.incident_type_id
+left join people p2 on p2.id = a.responsible_id
+left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+left join contracts c on c.id = cst.contract_id
+`
+const REL_WHERE = `
+where it.active is true
+  and not (it.code like 'ATV%' or it.code like 'MNT%')
+  and a.created >= '${FROM_DATE}' and c.v_status <> 'Cancelado'
+`
+const CANCEL_IDS = '(1142,1131,1021,1143,1154)'
+
+// Protocolo / recorrência / atraso SLA / ameaças por contrato (nível protocolo)
+const Q_REL_PROT = `
+select contract_number,
+  count(*) protocol_count,
+  round(avg(rec_days)::numeric, 1) recurrence_days,
+  round(avg(overage_h)::numeric, 2) avg_overage_hours,
+  count(*) filter (where is_threat) cancel_threats
+from (
+  select a.id pid, c.contract_number,
+    extract(epoch from (max(a.created) - max(c.created))) / 86400.0 rec_days,
+    greatest(0, extract(epoch from (max(a.conclusion_date) - max(ai.responsible_final_date))) / 3600.0) overage_h,
+    bool_or(it.id in ${CANCEL_IDS}) is_threat
+  ${REL_FROM} ${REL_WHERE}
+    and c.contract_number::text = any($1::text[])
+  group by a.id, c.contract_number
+) q
+group by contract_number
+`
+// Tipos de protocolo + atendentes por contrato
+const Q_REL_DIM = `
+select c.contract_number,
+  array_remove(array_agg(distinct it.title), null) protocol_types,
+  array_remove(array_agg(distinct p2.name), null) attendant_names
+${REL_FROM} ${REL_WHERE}
+  and c.contract_number::text = any($1::text[])
+group by c.contract_number
+`
+// Listas distintas (base inteira) para config
+const Q_REL_TYPE_LIST = `select it.title v, count(distinct a.id) n ${REL_FROM} ${REL_WHERE} and it.title is not null group by it.title order by n desc`
+const Q_REL_ATT_LIST = `select p2.name v, count(distinct a.id) n ${REL_FROM} ${REL_WHERE} and p2.id is not null group by p2.name order by n desc`
+
+// ─── Network Engine — massivas (MariaDB) × infra (PostgreSQL) ──
+// Agregado de massivas por splitter_code (MariaDB)
+const Q_MARIA_SPLITTER = `
+select mhs.splitter_code,
+  count(*) massive_count,
+  round(avg(timestampdiff(minute, coalesce(mh.event_identified_at, mh.opened_at), mh.closed_at)), 2) avg_offline_min,
+  round(avg(case when mh.closed_at > mh.expected_close_at then timestampdiff(minute, mh.expected_close_at, mh.closed_at) end), 2) avg_overage_min
+from DB_Massives.massiva_history mh
+left join DB_Massives.massiva_history_splitters mhs on mhs.massiva_history_id = mh.id
+where mhs.splitter_code is not null and mh.closed_at is not null
+group by mhs.splitter_code
+`
+// Infra dos clientes da amostra que estão em splitters afetados (PostgreSQL)
+const Q_NET_INFRA = `
+select p.id::text client_id, as3.code splitter_code,
+  as2.title site, ac2.title concentrator, aap.title access_point, as3.title splitter,
+  ac.slot_olt slot, ac.port_olt pon
+from authentication_contracts ac
+left join authentication_concentrators ac2 on ac2.id = ac.authentication_concentrator_id
+left join authentication_access_points aap on aap.id = ac.authentication_access_point_id
+left join contracts c on c.id = ac.contract_id
+left join authentication_sites as2 on as2.id = ac2.authentication_site_id
+left join authentication_splitter_ports asp on asp.authentication_contract_id = ac.id
+left join authentication_splitters as3 on as3.id = asp.authentication_splitter_id
+left join people p on p.id = c.client_id
+where p.id::text = any($1::text[]) and as3.code = any($2::text[])
+`
 
 // Status de cada fatura (definição refinada da regra do usuário):
 //   on_time = paga até o vencimento | late = paga após o vencimento
@@ -172,7 +372,7 @@ group by ym order by ym
 `
 
 try {
-  const [totals, byCity, payforms, sample, commSellers, commPlans, commValues, commCities, commHoods, commCGender, commSGender, connModels] = await Promise.all([
+  const [totals, byCity, payforms, sample, commSellers, commPlans, commValues, commCities, commHoods, commCGender, commSGender, connModels, fieldReasonList, fieldTechList, instTechList, relTypeList, relAttList] = await Promise.all([
     pool.query(Q_TOTALS),
     pool.query(Q_BY_CITY),
     pool.query(Q_PAYFORMS),
@@ -185,6 +385,11 @@ try {
     pool.query(Q_COMM_CGENDER),
     pool.query(Q_COMM_SGENDER),
     pool.query(Q_CONN_MODELS),
+    pool.query(Q_FIELD_REASON_LIST),
+    pool.query(Q_FIELD_TECH_LIST),
+    pool.query(Q_INST_TECH_LIST),
+    pool.query(Q_REL_TYPE_LIST),
+    pool.query(Q_REL_ATT_LIST),
   ])
 
   const t = totals.rows[0]
@@ -222,24 +427,130 @@ try {
       onTimeInvoices: 0, lateInvoices: 0, overdueInvoices: 0, totalInvoices: 0,
       renegotiations: 0, trustReleases: 0,
       equipment: [],
+      protocolCount: 0, scheduleCount: 0, slaLateCount: 0, avgSlaDays: 0,
+      reasons: [], technicians: [],
+      installProtocols: 0, installScheduleCount: 0, installSlaLateCount: 0,
+      installAvgSlaDays: 0, installSaleToScheduleDays: 0, installTechnicians: [],
+      relProtocolCount: 0, relRecurrenceDays: 0, relAvgOverageHours: 0,
+      relCancelThreats: 0, relTypes: [], relAttendants: [],
+      netSite: '', netConcentrator: '', netAccessPoint: '', netSplitter: '', netSplitterCode: '',
+      netSlot: '', netPon: '', netMassiveCount: 0, netAvgOfflineMin: 0, netAvgOverageMin: 0,
     })
   }
   const clients = Array.from(byClient.values()).slice(0, SAMPLE_SIZE)
   const byContract = new Map(clients.filter((c) => c.contractNumber).map((c) => [c.contractNumber, c]))
+  const byClientId = new Map(clients.map((c) => [c.clientId, c]))
   const contractNumbers = Array.from(byContract.keys())
+  const clientIds = clients.map((c) => c.clientId)
   console.log(`Amostra: ${clients.length} clientes, ${contractNumbers.length} contratos. Buscando sinais financeiros…`)
 
-  const [inv, reneg, trust, monthly, equip] = await Promise.all([
+  // MariaDB — massivas por splitter_code (cross-DB)
+  const maria = await makeMariaPool()
+  const massiveBySplitter = new Map()
+  try {
+    const [rows] = await maria.query(Q_MARIA_SPLITTER)
+    for (const r of rows) {
+      massiveBySplitter.set(String(r.splitter_code), {
+        count: Number(r.massive_count),
+        offline: r.avg_offline_min != null ? Number(r.avg_offline_min) : 0,
+        overage: r.avg_overage_min != null ? Number(r.avg_overage_min) : 0,
+      })
+    }
+  } finally { await maria.end() }
+  const massiveCodes = Array.from(massiveBySplitter.keys())
+  const totalMassives = Array.from(massiveBySplitter.values()).reduce((a, v) => a + v.count, 0)
+  console.log(`Massivas (MariaDB): ${totalMassives} em ${massiveCodes.length} splitters.`)
+
+  const [inv, reneg, trust, monthly, equip, fieldProt, fieldSched, fieldReasons, instProt, instSched, relProt, relDim, netInfra] = await Promise.all([
     pool.query(Q_INV_AGG, [contractNumbers]),
     pool.query(Q_RENEG_AGG, [contractNumbers]),
     pool.query(Q_TRUST_AGG, [contractNumbers]),
     pool.query(Q_MONTHLY_OK),
     pool.query(Q_CONN_AGG, [contractNumbers]),
+    pool.query(Q_FIELD_PROT, [contractNumbers]),
+    pool.query(Q_FIELD_SCHED, [contractNumbers]),
+    pool.query(Q_FIELD_REASONS, [contractNumbers]),
+    pool.query(Q_INST_PROT, [contractNumbers]),
+    pool.query(Q_INST_SCHED, [contractNumbers]),
+    pool.query(Q_REL_PROT, [contractNumbers]),
+    pool.query(Q_REL_DIM, [contractNumbers]),
+    pool.query(Q_NET_INFRA, [clientIds, massiveCodes]),
   ])
+
+  // Network — junta infra (PG) × massivas (Maria) por splitter_code, agrega por cliente
+  const netAcc = new Map()
+  for (const r of netInfra.rows) {
+    const c = byClientId.get(String(r.client_id)); if (!c) continue
+    const code = String(r.splitter_code)
+    const agg = massiveBySplitter.get(code); if (!agg) continue
+    let a = netAcc.get(c.clientId)
+    if (!a) {
+      a = { codes: new Set(), countSum: 0, offlineW: 0, overageSum: 0, overageN: 0 }
+      netAcc.set(c.clientId, a)
+      c.netSite = r.site?.trim() || ''
+      c.netConcentrator = r.concentrator?.trim() || ''
+      c.netAccessPoint = r.access_point?.trim() || ''
+      c.netSplitter = r.splitter?.trim() || ''
+      c.netSplitterCode = code
+      c.netSlot = r.slot != null ? String(r.slot) : ''
+      c.netPon = r.pon != null ? String(r.pon) : ''
+    }
+    if (a.codes.has(code)) continue
+    a.codes.add(code)
+    a.countSum += agg.count
+    a.offlineW += agg.offline * agg.count
+    if (agg.overage > 0) { a.overageSum += agg.overage; a.overageN++ }
+  }
+  for (const [clientId, a] of netAcc) {
+    const c = byClientId.get(clientId); if (!c) continue
+    c.netMassiveCount = a.countSum
+    c.netAvgOfflineMin = a.countSum > 0 ? Math.round(a.offlineW / a.countSum) : 0
+    c.netAvgOverageMin = a.overageN > 0 ? Math.round(a.overageSum / a.overageN) : 0
+  }
+  console.log(`Network: ${netAcc.size}/${clients.length} clientes em splitters afetados.`)
 
   for (const r of equip.rows) {
     const c = byContract.get(String(r.contract_number)); if (!c) continue
     c.equipment = (r.models || []).filter(Boolean).map((m) => String(m).trim())
+  }
+  for (const r of fieldProt.rows) {
+    const c = byContract.get(String(r.contract_number)); if (!c) continue
+    c.protocolCount = Number(r.protocol_count)
+    c.slaLateCount = Number(r.sla_late_count)
+    c.avgSlaDays = r.avg_sla_days != null ? Number(r.avg_sla_days) : 0
+  }
+  for (const r of fieldSched.rows) {
+    const c = byContract.get(String(r.contract_number)); if (!c) continue
+    c.scheduleCount = Number(r.schedule_count)
+    c.technicians = (r.technicians || []).filter(Boolean).map((t) => String(t).trim())
+  }
+  for (const r of fieldReasons.rows) {
+    const c = byContract.get(String(r.contract_number)); if (!c) continue
+    c.reasons = (r.reasons || []).filter(Boolean).map((x) => String(x).trim())
+  }
+  for (const r of instProt.rows) {
+    const c = byContract.get(String(r.contract_number)); if (!c) continue
+    c.installProtocols = Number(r.protocol_count)
+    c.installSlaLateCount = Number(r.sla_late_count)
+    c.installAvgSlaDays = r.avg_sla_days != null ? Number(r.avg_sla_days) : 0
+    c.installSaleToScheduleDays = r.sale_to_schedule_days != null ? Number(r.sale_to_schedule_days) : 0
+  }
+  for (const r of instSched.rows) {
+    const c = byContract.get(String(r.contract_number)); if (!c) continue
+    c.installScheduleCount = Number(r.schedule_count)
+    c.installTechnicians = (r.technicians || []).filter(Boolean).map((t) => String(t).trim())
+  }
+  for (const r of relProt.rows) {
+    const c = byContract.get(String(r.contract_number)); if (!c) continue
+    c.relProtocolCount = Number(r.protocol_count)
+    c.relRecurrenceDays = r.recurrence_days != null ? Number(r.recurrence_days) : 0
+    c.relAvgOverageHours = r.avg_overage_hours != null ? Number(r.avg_overage_hours) : 0
+    c.relCancelThreats = Number(r.cancel_threats)
+  }
+  for (const r of relDim.rows) {
+    const c = byContract.get(String(r.contract_number)); if (!c) continue
+    c.relTypes = (r.protocol_types || []).filter(Boolean).map((x) => String(x).trim())
+    c.relAttendants = (r.attendant_names || []).filter(Boolean).map((x) => String(x).trim())
   }
 
   for (const r of inv.rows) {
@@ -279,6 +590,25 @@ try {
     // Connection Engine — modelos de equipamento distintos
     connection: {
       models: connModels.rows.map((r) => ({ value: String(r.v).trim(), count: Number(r.n) })),
+    },
+    // Field Engine — listas distintas (motivos / técnicos)
+    field: {
+      reasons: fieldReasonList.rows.map((r) => ({ value: String(r.v).trim(), count: Number(r.n) })),
+      technicians: fieldTechList.rows.map((r) => ({ value: String(r.v).trim(), count: Number(r.n) })),
+    },
+    // Installation Engine — técnicos distintos
+    installation: {
+      technicians: instTechList.rows.map((r) => ({ value: String(r.v).trim(), count: Number(r.n) })),
+    },
+    // Relationship Engine — tipos de protocolo / atendentes distintos
+    relationship: {
+      types: relTypeList.rows.map((r) => ({ value: String(r.v).trim(), count: Number(r.n) })),
+      attendants: relAttList.rows.map((r) => ({ value: String(r.v).trim(), count: Number(r.n) })),
+    },
+    // Network Engine — totais de massivas (MariaDB)
+    network: {
+      totalMassives,
+      splittersAffected: massiveCodes.length,
     },
     clients,
   }

@@ -24,6 +24,21 @@ export interface RealCommercial {
 export interface RealConnection {
   models: RealDistinctEntry[]
 }
+export interface RealField {
+  reasons: RealDistinctEntry[]
+  technicians: RealDistinctEntry[]
+}
+export interface RealInstallation {
+  technicians: RealDistinctEntry[]
+}
+export interface RealRelationship {
+  types: RealDistinctEntry[]
+  attendants: RealDistinctEntry[]
+}
+export interface RealNetwork {
+  totalMassives: number
+  splittersAffected: number
+}
 
 interface RealClientsFile {
   meta: RealClientsMeta
@@ -33,6 +48,10 @@ interface RealClientsFile {
   monthly: RealMonthly[]
   commercial: RealCommercial
   connection: RealConnection
+  field: RealField
+  installation: RealInstallation
+  relationship: RealRelationship
+  network: RealNetwork
   clients: RealClient[]
 }
 
@@ -46,4 +65,8 @@ export const realByCity = data.byCity
 export const realMonthly = data.monthly
 export const realCommercial = data.commercial
 export const realConnection = data.connection
+export const realField = data.field
+export const realInstallation = data.installation
+export const realRelationship = data.relationship
+export const realNetwork = data.network
 export const realClients: RealClient[] = data.clients

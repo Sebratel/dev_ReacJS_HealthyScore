@@ -1,0 +1,21 @@
+import{c as l,r as x,j as t}from"./index-CSwmQdsf.js";/**
+ * @license lucide-react v0.395.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const m=l("FileText",[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"M10 9H8",key:"b1mrlr"}],["path",{d:"M16 13H8",key:"t4e002"}],["path",{d:"M16 17H8",key:"z1uh3a"}]]);/**
+ * @license lucide-react v0.395.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const b=l("MapPin",[["path",{d:"M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z",key:"2oe9fu"}],["circle",{cx:"12",cy:"10",r:"3",key:"ilqhr7"}]]);/**
+ * @license lucide-react v0.395.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const h=l("Search",[["circle",{cx:"11",cy:"11",r:"8",key:"4ej97u"}],["path",{d:"m21 21-4.3-4.3",key:"1qie3q"}]]);/**
+ * @license lucide-react v0.395.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const y=l("X",[["path",{d:"M18 6 6 18",key:"1bl5f8"}],["path",{d:"m6 6 12 12",key:"d8bk6v"}]]),u={contract:"",name:"",city:""};function v(r){const[o,i]=x.useState(u),s=x.useMemo(()=>Array.from(new Set(r.map(a=>a.city).filter(Boolean))).sort((a,e)=>a.localeCompare(e,"pt-BR")),[r]),n=x.useMemo(()=>{const a=o.contract.trim().toLowerCase(),e=o.name.trim().toLowerCase(),p=o.city;return!a&&!e&&!p?r:r.filter(c=>(!a||String(c.contractNumber).toLowerCase().includes(a)||String(c.clientId).toLowerCase().includes(a))&&(!e||c.name.toLowerCase().includes(e))&&(!p||c.city===p))},[r,o]),d=!!(o.contract||o.name||o.city);return{filters:o,setFilters:i,filtered:n,cities:s,active:d}}function f({filters:r,onChange:o,cities:i,resultCount:s,totalCount:n}){const d=!!(r.contract||r.name||r.city),a=e=>o({...r,...e});return t.jsxs("div",{className:"flex items-center gap-2 flex-wrap rounded-2xl border border-app-border bg-app-card px-3 py-2.5 shadow-card-md",children:[t.jsx("span",{className:"text-[10px] uppercase tracking-wider text-gray-500 font-semibold px-1",children:"Filtros"}),t.jsxs("div",{className:"relative flex items-center",children:[t.jsx(m,{size:12,className:"absolute left-2.5 text-gray-500 pointer-events-none"}),t.jsx("input",{value:r.contract,onChange:e=>a({contract:e.target.value}),placeholder:"Contrato (nº / id)",className:"pl-7 pr-2.5 h-8 w-40 text-xs bg-app-surface border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50 transition-all"})]}),t.jsxs("div",{className:"relative flex items-center",children:[t.jsx(h,{size:12,className:"absolute left-2.5 text-gray-500 pointer-events-none"}),t.jsx("input",{value:r.name,onChange:e=>a({name:e.target.value}),placeholder:"Nome do cliente",className:"pl-7 pr-2.5 h-8 w-48 text-xs bg-app-surface border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50 transition-all"})]}),t.jsxs("div",{className:"relative flex items-center",children:[t.jsx(b,{size:12,className:"absolute left-2.5 text-gray-500 pointer-events-none z-10"}),t.jsxs("select",{value:r.city,onChange:e=>a({city:e.target.value}),className:"pl-7 pr-7 h-8 w-44 text-xs bg-app-surface border border-app-border rounded-lg text-gray-300 focus:outline-none focus:border-brand-blue/50 transition-all appearance-none cursor-pointer",children:[t.jsx("option",{value:"",children:"Todas as cidades"}),i.map(e=>t.jsx("option",{value:e,children:e},e))]})]}),d&&t.jsxs("button",{onClick:()=>o(u),className:"flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-200 px-2 h-8 rounded-lg border border-app-border hover:border-app-borderLight transition-all",children:[t.jsx(y,{size:12})," Limpar"]}),s!==void 0&&t.jsxs("span",{className:"ml-auto text-[11px] text-gray-500 font-mono pr-1",children:[s.toLocaleString("pt-BR"),n!==void 0?` / ${n.toLocaleString("pt-BR")}`:""," contratos"]})]})}export{f as C,h as S,y as X,v as u};

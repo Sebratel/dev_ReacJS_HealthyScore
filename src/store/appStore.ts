@@ -4,10 +4,18 @@ import {
   Customer, FinancialEngineConfig, FinancialIndicatorKey, FinancialIndicatorConfig,
   CommercialEngineConfig, CommercialIndicatorKey, CommercialIndicatorConfig,
   ConnectionEngineConfig, ConnectionIndicatorKey, ConnectionIndicatorConfig,
+  FieldEngineConfig, FieldIndicatorKey, FieldIndicatorConfig,
+  InstallationEngineConfig, InstallationIndicatorKey, InstallationIndicatorConfig,
+  RelationshipEngineConfig, RelationshipIndicatorKey, RelationshipIndicatorConfig,
+  NetworkEngineConfig, NetworkIndicatorKey, NetworkIndicatorConfig,
 } from '@/types'
 import { cloneDefaultFinancialConfig } from '@/features/financial-engine/financialConfig'
 import { cloneDefaultCommercialConfig } from '@/features/commercial-engine/commercialConfig'
 import { cloneDefaultConnectionConfig } from '@/features/connection-engine/connectionConfig'
+import { cloneDefaultFieldConfig } from '@/features/field-engine/fieldConfig'
+import { cloneDefaultInstallationConfig } from '@/features/installation-engine/installationConfig'
+import { cloneDefaultRelationshipConfig } from '@/features/relationship-engine/relationshipConfig'
+import { cloneDefaultNetworkConfig } from '@/features/network-engine/networkConfig'
 
 type IndexEntry = { key: string; label: string }
 
@@ -39,6 +47,33 @@ interface AppState {
   updateConnectionIndex: (key: ConnectionIndicatorKey, indexKey: string, points: number) => void
   syncConnectionLists: (lists: Partial<Record<ConnectionIndicatorKey, IndexEntry[]>>) => void
   resetConnectionConfig: () => void
+
+  // ─── Configuração da Field Engine (persistida) ───
+  fieldConfig: FieldEngineConfig
+  updateFieldIndicator: (key: FieldIndicatorKey, patch: Partial<FieldIndicatorConfig>) => void
+  updateFieldIndex: (key: FieldIndicatorKey, indexKey: string, points: number) => void
+  syncFieldLists: (lists: Partial<Record<FieldIndicatorKey, IndexEntry[]>>) => void
+  resetFieldConfig: () => void
+
+  // ─── Configuração da Installation Engine (persistida) ───
+  installationConfig: InstallationEngineConfig
+  updateInstallationIndicator: (key: InstallationIndicatorKey, patch: Partial<InstallationIndicatorConfig>) => void
+  updateInstallationIndex: (key: InstallationIndicatorKey, indexKey: string, points: number) => void
+  syncInstallationLists: (lists: Partial<Record<InstallationIndicatorKey, IndexEntry[]>>) => void
+  resetInstallationConfig: () => void
+
+  // ─── Configuração da Relationship Engine (persistida) ───
+  relationshipConfig: RelationshipEngineConfig
+  updateRelationshipIndicator: (key: RelationshipIndicatorKey, patch: Partial<RelationshipIndicatorConfig>) => void
+  updateRelationshipIndex: (key: RelationshipIndicatorKey, indexKey: string, points: number) => void
+  syncRelationshipLists: (lists: Partial<Record<RelationshipIndicatorKey, IndexEntry[]>>) => void
+  resetRelationshipConfig: () => void
+
+  // ─── Configuração da Network Engine (persistida) ───
+  networkConfig: NetworkEngineConfig
+  updateNetworkIndicator: (key: NetworkIndicatorKey, patch: Partial<NetworkIndicatorConfig>) => void
+  updateNetworkIndex: (key: NetworkIndicatorKey, indexKey: string, points: number) => void
+  resetNetworkConfig: () => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -165,6 +200,113 @@ export const useAppStore = create<AppState>()(
           return changed ? { connectionConfig: { indicators } } : s
         }),
       resetConnectionConfig: () => set({ connectionConfig: cloneDefaultConnectionConfig() }),
+
+      // ─── Field ───
+      fieldConfig: cloneDefaultFieldConfig(),
+      updateFieldIndicator: (key, patch) =>
+        set((s) => ({
+          fieldConfig: { indicators: { ...s.fieldConfig.indicators, [key]: { ...s.fieldConfig.indicators[key], ...patch } } },
+        })),
+      updateFieldIndex: (key, indexKey, points) =>
+        set((s) => {
+          const indicator = s.fieldConfig.indicators[key]
+          const indices = indicator.indices.map((i) => (i.key === indexKey ? { ...i, points } : i))
+          return { fieldConfig: { indicators: { ...s.fieldConfig.indicators, [key]: { ...indicator, indices } } } }
+        }),
+      syncFieldLists: (lists) =>
+        set((s) => {
+          let changed = false
+          const indicators = { ...s.fieldConfig.indicators }
+          for (const k of Object.keys(lists) as FieldIndicatorKey[]) {
+            const entries = lists[k]!
+            const ind = indicators[k]
+            const current = ind.indices
+            const next = entries.map((e) => {
+              const existing = current.find((i) => i.key === e.key)
+              return { key: e.key, label: e.label, points: existing?.points ?? 0 }
+            })
+            const same = next.length === current.length && next.every((i, idx) => current[idx]?.key === i.key && current[idx]?.points === i.points)
+            if (!same) { indicators[k] = { ...ind, indices: next }; changed = true }
+          }
+          return changed ? { fieldConfig: { indicators } } : s
+        }),
+      resetFieldConfig: () => set({ fieldConfig: cloneDefaultFieldConfig() }),
+
+      // ─── Installation ───
+      installationConfig: cloneDefaultInstallationConfig(),
+      updateInstallationIndicator: (key, patch) =>
+        set((s) => ({
+          installationConfig: { indicators: { ...s.installationConfig.indicators, [key]: { ...s.installationConfig.indicators[key], ...patch } } },
+        })),
+      updateInstallationIndex: (key, indexKey, points) =>
+        set((s) => {
+          const indicator = s.installationConfig.indicators[key]
+          const indices = indicator.indices.map((i) => (i.key === indexKey ? { ...i, points } : i))
+          return { installationConfig: { indicators: { ...s.installationConfig.indicators, [key]: { ...indicator, indices } } } }
+        }),
+      syncInstallationLists: (lists) =>
+        set((s) => {
+          let changed = false
+          const indicators = { ...s.installationConfig.indicators }
+          for (const k of Object.keys(lists) as InstallationIndicatorKey[]) {
+            const entries = lists[k]!
+            const ind = indicators[k]
+            const current = ind.indices
+            const next = entries.map((e) => {
+              const existing = current.find((i) => i.key === e.key)
+              return { key: e.key, label: e.label, points: existing?.points ?? 0 }
+            })
+            const same = next.length === current.length && next.every((i, idx) => current[idx]?.key === i.key && current[idx]?.points === i.points)
+            if (!same) { indicators[k] = { ...ind, indices: next }; changed = true }
+          }
+          return changed ? { installationConfig: { indicators } } : s
+        }),
+      resetInstallationConfig: () => set({ installationConfig: cloneDefaultInstallationConfig() }),
+
+      // ─── Relationship ───
+      relationshipConfig: cloneDefaultRelationshipConfig(),
+      updateRelationshipIndicator: (key, patch) =>
+        set((s) => ({
+          relationshipConfig: { indicators: { ...s.relationshipConfig.indicators, [key]: { ...s.relationshipConfig.indicators[key], ...patch } } },
+        })),
+      updateRelationshipIndex: (key, indexKey, points) =>
+        set((s) => {
+          const indicator = s.relationshipConfig.indicators[key]
+          const indices = indicator.indices.map((i) => (i.key === indexKey ? { ...i, points } : i))
+          return { relationshipConfig: { indicators: { ...s.relationshipConfig.indicators, [key]: { ...indicator, indices } } } }
+        }),
+      syncRelationshipLists: (lists) =>
+        set((s) => {
+          let changed = false
+          const indicators = { ...s.relationshipConfig.indicators }
+          for (const k of Object.keys(lists) as RelationshipIndicatorKey[]) {
+            const entries = lists[k]!
+            const ind = indicators[k]
+            const current = ind.indices
+            const next = entries.map((e) => {
+              const existing = current.find((i) => i.key === e.key)
+              return { key: e.key, label: e.label, points: existing?.points ?? 0 }
+            })
+            const same = next.length === current.length && next.every((i, idx) => current[idx]?.key === i.key && current[idx]?.points === i.points)
+            if (!same) { indicators[k] = { ...ind, indices: next }; changed = true }
+          }
+          return changed ? { relationshipConfig: { indicators } } : s
+        }),
+      resetRelationshipConfig: () => set({ relationshipConfig: cloneDefaultRelationshipConfig() }),
+
+      // ─── Network ───
+      networkConfig: cloneDefaultNetworkConfig(),
+      updateNetworkIndicator: (key, patch) =>
+        set((s) => ({
+          networkConfig: { indicators: { ...s.networkConfig.indicators, [key]: { ...s.networkConfig.indicators[key], ...patch } } },
+        })),
+      updateNetworkIndex: (key, indexKey, points) =>
+        set((s) => {
+          const indicator = s.networkConfig.indicators[key]
+          const indices = indicator.indices.map((i) => (i.key === indexKey ? { ...i, points } : i))
+          return { networkConfig: { indicators: { ...s.networkConfig.indicators, [key]: { ...indicator, indices } } } }
+        }),
+      resetNetworkConfig: () => set({ networkConfig: cloneDefaultNetworkConfig() }),
     }),
     {
       name: 'churniq-app',
@@ -172,7 +314,7 @@ export const useAppStore = create<AppState>()(
       version: 2,
       // Persiste apenas o que faz sentido manter entre sessões.
       // (futuro: substituir por sincronização com MariaDB)
-      partialize: (s) => ({ financialConfig: s.financialConfig, commercialConfig: s.commercialConfig, connectionConfig: s.connectionConfig }),
+      partialize: (s) => ({ financialConfig: s.financialConfig, commercialConfig: s.commercialConfig, connectionConfig: s.connectionConfig, fieldConfig: s.fieldConfig, installationConfig: s.installationConfig, relationshipConfig: s.relationshipConfig, networkConfig: s.networkConfig }),
       // Mescla o estado salvo sobre os defaults atuais — garante que indicadores
       // NOVOS (adicionados após o último save) existam, preservando as notas salvas.
       merge: (persisted, current) => {
@@ -191,6 +333,10 @@ export const useAppStore = create<AppState>()(
           financialConfig: mergeConfig(current.financialConfig, p.financialConfig),
           commercialConfig: mergeConfig(current.commercialConfig, p.commercialConfig),
           connectionConfig: mergeConfig(current.connectionConfig, p.connectionConfig),
+          fieldConfig: mergeConfig(current.fieldConfig, p.fieldConfig),
+          installationConfig: mergeConfig(current.installationConfig, p.installationConfig),
+          relationshipConfig: mergeConfig(current.relationshipConfig, p.relationshipConfig),
+          networkConfig: mergeConfig(current.networkConfig, p.networkConfig),
         }
       },
     },
