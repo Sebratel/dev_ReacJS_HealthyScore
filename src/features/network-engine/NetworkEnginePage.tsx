@@ -49,7 +49,7 @@ function CustomerRow({ score, rank }: { score: NetworkEngineScore; rank: number 
           <td colSpan={8} className="px-6 py-3">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Indicadores — atributo real × pontuação</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Indicadores — atributo × pontuação</p>
                 <div className="space-y-1">
                   {score.indicators.map((ind) => (
                     <div key={ind.key} className="flex items-center justify-between gap-3 text-[11px] py-0.5 border-b border-app-border/40">
@@ -127,10 +127,9 @@ export default function NetworkEnginePage() {
               <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow shrink-0"><Network size={18} className="text-[#fff]" /></div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold gradient-text tracking-tight">Rede</h1>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-risk-low/10 text-risk-low border border-risk-low/20 font-mono">dados reais · cross-DB</span>
               </div>
             </div>
-            <p className="text-xs text-gray-500 max-w-xl leading-relaxed">Score de infraestrutura 100% real — massivas (MariaDB) × infra do cliente (PostgreSQL), por splitter, pontuado pela configuração.</p>
+            <p className="text-xs text-gray-500 max-w-xl leading-relaxed">Score de infraestrutura a partir das massivas e da infraestrutura do cliente, por splitter — pontuado pela configuração.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div className="flex items-center gap-1.5 text-[11px] bg-app-surface border border-app-border px-3 py-2 rounded-xl" title="Clientes afetados · massivas na base">
@@ -150,7 +149,7 @@ export default function NetworkEnginePage() {
 
       {/* Ranking */}
       <Card className="shadow-card-md hover:shadow-card-lg hover-lift">
-        <CardHeader title="Ranking de Rede" subtitle="Clientes afetados ordenados por Network Health Score" icon={<ShieldAlert size={14} />} />
+        <CardHeader title="Ranking de Rede" subtitle="Clientes ordenados por Health Score de rede" icon={<ShieldAlert size={14} />} />
         <div className="px-5 pt-3 flex items-center gap-2 flex-wrap">
           {([
             { key: 'all', label: 'Todos', count: data.scores.length },
@@ -180,13 +179,13 @@ export default function NetworkEnginePage() {
         </div>
       </Card>
 
-      <p className="text-[10px] text-gray-500 text-center">Fontes: ELLEVEN (infra) + DB_Massives (massivas) · {realNetwork.splittersAffected.toLocaleString('pt-BR')} splitters com massiva · amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · gerado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
+      <p className="text-[10px] text-gray-500 text-center">{realNetwork.splittersAffected.toLocaleString('pt-BR')} splitters com massiva · amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
 
       <NetworkEngineConfigModal open={configOpen} onClose={() => setConfigOpen(false)} />
       <EngineDataModal
         open={dataOpen}
         onClose={() => setDataOpen(false)}
-        title="Dados do Engine de Rede"
+        title="Dados — Rede"
         subtitle={`${clientsAffected.length.toLocaleString('pt-BR')} clientes afetados por massivas`}
         columns={DATA_COLUMNS}
         rows={clientsAffected}

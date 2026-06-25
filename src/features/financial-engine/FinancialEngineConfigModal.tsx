@@ -155,7 +155,7 @@ export function FinancialEngineConfigModal({ open, onClose }: Props) {
               <SlidersHorizontal size={15} className="text-white" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white">Configuração da Financial Engine</h2>
+              <h2 className="text-sm font-bold text-white">Configuração — Financeiro</h2>
               <p className="text-[11px] text-gray-500">Defina como cada indicador pontua o score — manualmente ou via IA</p>
             </div>
           </div>

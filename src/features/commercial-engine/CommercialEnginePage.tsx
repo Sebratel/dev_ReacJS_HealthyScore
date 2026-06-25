@@ -49,7 +49,7 @@ function CustomerRow({ score, rank }: { score: CommercialEngineScore; rank: numb
       {open && (
         <tr className="border-b border-app-border bg-app-surface/50">
           <td colSpan={8} className="px-6 py-3">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Indicadores — atributo real × pontuação</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Indicadores — atributo × pontuação</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
               {score.indicators.map((ind) => (
                 <div key={ind.key} className="flex items-center justify-between gap-2 text-[11px] py-0.5 border-b border-app-border/40">
@@ -126,10 +126,9 @@ export default function CommercialEnginePage() {
               <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow shrink-0"><Briefcase size={18} className="text-[#fff]" /></div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold gradient-text tracking-tight">Comercial</h1>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-risk-low/10 text-risk-low border border-risk-low/20 font-mono">dados reais</span>
               </div>
             </div>
-            <p className="text-xs text-gray-500 max-w-xl leading-relaxed">Score comercial 100% real — vendedor, plano, valor, tempo de contrato e endereço, pontuados pelas notas da configuração.</p>
+            <p className="text-xs text-gray-500 max-w-xl leading-relaxed">Score comercial a partir de vendedor, plano, valor, tempo de contrato e endereço — pontuado pela configuração.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div className="flex items-center gap-1.5 text-[11px] bg-app-surface border border-app-border px-3 py-2 rounded-xl" title="Amostra analisada · total de clientes ativos">
@@ -149,7 +148,7 @@ export default function CommercialEnginePage() {
 
       {/* Ranking */}
       <Card className="shadow-card-md hover:shadow-card-lg hover-lift">
-        <CardHeader title="Ranking Comercial" subtitle="Clientes reais ordenados por Commercial Health Score" icon={<ShieldAlert size={14} />} />
+        <CardHeader title="Ranking Comercial" subtitle="Clientes ordenados por Health Score comercial" icon={<ShieldAlert size={14} />} />
         <div className="px-5 pt-3 flex items-center gap-2 flex-wrap">
           {([
             { key: 'all', label: 'Todos', count: data.scores.length },
@@ -179,13 +178,13 @@ export default function CommercialEnginePage() {
         </div>
       </Card>
 
-      <p className="text-[10px] text-gray-500 text-center">Fonte: {realMeta.source} · amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · gerado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
+      <p className="text-[10px] text-gray-500 text-center">amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
 
       <CommercialEngineConfigModal open={configOpen} onClose={() => setConfigOpen(false)} />
       <EngineDataModal
         open={dataOpen}
         onClose={() => setDataOpen(false)}
-        title="Dados do Engine Comercial"
+        title="Dados — Comercial"
         subtitle={`${realClients.length.toLocaleString('pt-BR')} clientes ativos`}
         columns={DATA_COLUMNS}
         rows={realClients}

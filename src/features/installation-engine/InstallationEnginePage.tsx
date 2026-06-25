@@ -47,7 +47,7 @@ function CustomerRow({ score, rank }: { score: InstallationEngineScore; rank: nu
       {open && (
         <tr className="border-b border-app-border bg-app-surface/50">
           <td colSpan={8} className="px-6 py-3">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Indicadores — atributo real × pontuação</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Indicadores — atributo × pontuação</p>
             <div className="space-y-1">
               {score.indicators.map((ind) => (
                 <div key={ind.key} className="flex items-start justify-between gap-3 text-[11px] py-0.5 border-b border-app-border/40">
@@ -117,10 +117,9 @@ export default function InstallationEnginePage() {
               <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow shrink-0"><PackageOpen size={18} className="text-[#fff]" /></div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold gradient-text tracking-tight">Instalação</h1>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-risk-low/10 text-risk-low border border-risk-low/20 font-mono">dados reais</span>
               </div>
             </div>
-            <p className="text-xs text-gray-500 max-w-xl leading-relaxed">Score de instalação 100% real — agendamentos, SLA, venda→agenda e técnicos, pontuados pelas notas da configuração.</p>
+            <p className="text-xs text-gray-500 max-w-xl leading-relaxed">Score de instalação a partir de agendamentos, SLA, venda→agenda e técnicos — pontuado pela configuração.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div className="flex items-center gap-1.5 text-[11px] bg-app-surface border border-app-border px-3 py-2 rounded-xl" title="Clientes com instalação · total ativos">
@@ -140,7 +139,7 @@ export default function InstallationEnginePage() {
 
       {/* Ranking */}
       <Card className="shadow-card-md hover:shadow-card-lg hover-lift">
-        <CardHeader title="Ranking de Instalação" subtitle="Clientes reais ordenados por Installation Health Score" icon={<ShieldAlert size={14} />} />
+        <CardHeader title="Ranking de Instalação" subtitle="Clientes ordenados por Health Score de instalação" icon={<ShieldAlert size={14} />} />
         <div className="px-5 pt-3 flex items-center gap-2 flex-wrap">
           {([
             { key: 'all', label: 'Todos', count: data.scores.length },
@@ -170,13 +169,13 @@ export default function InstallationEnginePage() {
         </div>
       </Card>
 
-      <p className="text-[10px] text-gray-500 text-center">Fonte: {realMeta.source} · amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · instalações desde {realMeta.fromDate} · gerado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
+      <p className="text-[10px] text-gray-500 text-center">amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · instalações desde {realMeta.fromDate} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
 
       <InstallationEngineConfigModal open={configOpen} onClose={() => setConfigOpen(false)} />
       <EngineDataModal
         open={dataOpen}
         onClose={() => setDataOpen(false)}
-        title="Dados do Engine de Instalação"
+        title="Dados — Instalação"
         subtitle={`${clientsWithInstall.length.toLocaleString('pt-BR')} clientes com protocolos de instalação`}
         columns={DATA_COLUMNS}
         rows={clientsWithInstall}

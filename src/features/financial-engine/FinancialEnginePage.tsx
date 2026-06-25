@@ -67,7 +67,7 @@ function CustomerRow({ score, rank }: { score: FinancialEngineScore; rank: numbe
       {open && (
         <tr className="border-b border-app-border bg-app-surface/50">
           <td colSpan={8} className="px-6 py-3">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Indicadores — atributo real × pontuação</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Indicadores — atributo × pontuação</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
               {score.indicators.map((ind) => (
                 <div key={ind.key} className="flex items-center justify-between gap-2 text-[11px] py-0.5 border-b border-app-border/40">
@@ -155,10 +155,9 @@ export default function FinancialEnginePage() {
               </div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold gradient-text tracking-tight">Financeiro</h1>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-risk-low/10 text-risk-low border border-risk-low/20 font-mono">dados reais</span>
               </div>
             </div>
-            <p className="text-xs text-gray-500 max-w-xl leading-relaxed">Score financeiro 100% baseado nas faturas, renegociações e desbloqueios reais — pontuado pelas notas da configuração.</p>
+            <p className="text-xs text-gray-500 max-w-xl leading-relaxed">Score financeiro a partir das faturas, renegociações e desbloqueios — pontuado pela configuração.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div className="flex items-center gap-1.5 text-[11px] bg-app-surface border border-app-border px-3 py-2 rounded-xl" title="Amostra analisada · total de clientes ativos na base">
@@ -185,7 +184,7 @@ export default function FinancialEnginePage() {
 
       {/* Customer ranking table */}
       <Card className="shadow-card-md hover:shadow-card-lg hover-lift">
-        <CardHeader title="Ranking de Risco Financeiro" subtitle="Clientes reais ordenados por Health Score financeiro" icon={<ShieldAlert size={14} />} />
+        <CardHeader title="Ranking de Risco Financeiro" subtitle="Clientes ordenados por Health Score financeiro" icon={<ShieldAlert size={14} />} />
         <div className="px-5 pt-3 flex items-center gap-2 flex-wrap">
           {([
             { key: 'all', label: 'Todos', count: data.scores.length },
@@ -226,15 +225,15 @@ export default function FinancialEnginePage() {
       </Card>
 
       <p className="text-[10px] text-gray-500 text-center">
-        Fonte: {realMeta.source} · amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · faturas desde {realMeta.fromDate} · gerado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
+        amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · faturas desde {realMeta.fromDate} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
       </p>
 
       <FinancialEngineConfigModal open={configOpen} onClose={() => setConfigOpen(false)} />
       <EngineDataModal
         open={dataOpen}
         onClose={() => setDataOpen(false)}
-        title="Dados do Engine Financeiro"
-        subtitle={`${clientsWithData.length.toLocaleString('pt-BR')} clientes com movimentação financeira real`}
+        title="Dados — Financeiro"
+        subtitle={`${clientsWithData.length.toLocaleString('pt-BR')} clientes com movimentação financeira`}
         columns={DATA_COLUMNS}
         rows={clientsWithData}
         aggregates={[

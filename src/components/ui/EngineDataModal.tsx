@@ -86,7 +86,7 @@ export function EngineDataModal({ open, onClose, title, subtitle, columns, rows,
             </div>
             <div>
               <h2 className="text-sm font-bold text-white">{title}</h2>
-              <p className="text-[11px] text-gray-500">{subtitle ?? 'Retorno das queries que alimentam este engine'}</p>
+              <p className="text-[11px] text-gray-500">{subtitle ?? 'Dados que alimentam esta tela'}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-200 transition-colors p-1">

@@ -102,7 +102,7 @@ export function NetworkEngineConfigModal({ open, onClose }: Props) {
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-blue to-brand-violet flex items-center justify-center"><SlidersHorizontal size={15} className="text-[#fff]" /></div>
             <div>
-              <h2 className="text-sm font-bold text-white">Configuração da Network Engine</h2>
+              <h2 className="text-sm font-bold text-white">Configuração — Rede</h2>
               <p className="text-[11px] text-gray-500">Massivas, SLA offline e atrasos de SLA</p>
             </div>
           </div>

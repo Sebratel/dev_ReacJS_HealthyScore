@@ -71,7 +71,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Clientes Ativos" value={realTotals.clients.toLocaleString('pt-BR')} subtitle={`${realTotals.contracts.toLocaleString('pt-BR')} contratos`} icon={<Users size={14} />} variant="brand" />
         <KpiCard label="MRR (Base Ativa)" value={formatCurrency(realTotals.mrr)} subtitle="Receita recorrente mensal" icon={<DollarSign size={14} />} variant="success" iconColor="text-risk-low" />
-        <KpiCard label="Health Score Global" value={`${globalHealth}/100`} subtitle="Média dos 7 engines" icon={<Activity size={14} />} variant={globalHealth < 50 ? 'danger' : globalHealth < 70 ? 'warning' : 'success'} iconColor={globalHealth < 50 ? 'text-risk-critical' : 'text-risk-low'} />
+        <KpiCard label="Health Score Global" value={`${globalHealth}/100`} subtitle="Média dos 7 módulos" icon={<Activity size={14} />} variant={globalHealth < 50 ? 'danger' : globalHealth < 70 ? 'warning' : 'success'} iconColor={globalHealth < 50 ? 'text-risk-critical' : 'text-risk-low'} />
         <KpiCard label="Clientes em Risco" value={criticalClients.toLocaleString('pt-BR')} subtitle={`Receita em risco: ${formatCurrency(revenueAtRisk)}/mês`} icon={<AlertTriangle size={14} />} variant="danger" iconColor="text-risk-critical" />
       </div>
 
@@ -79,8 +79,7 @@ export default function DashboardPage() {
       <div>
         <div className="flex items-center gap-2 mb-3">
           <GaugeIcon size={14} className="text-brand-cyan" />
-          <h2 className="text-sm font-bold text-white">Resumo dos Health Scores por Engine</h2>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-risk-low/10 text-risk-low border border-risk-low/20 font-mono">dados reais</span>
+          <h2 className="text-sm font-bold text-white">Resumo dos Health Scores por Módulo</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {engines.map((e) => {
@@ -115,7 +114,7 @@ export default function DashboardPage() {
           <div className="bg-gradient-to-br from-brand-blue/10 to-brand-violet/10 border border-brand-blue/25 rounded-2xl p-4 flex flex-col items-center justify-center">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Health Global</p>
             <HealthGauge score={globalHealth} size={96} />
-            <p className="text-[10px] text-gray-500 mt-1">{enginesAtRisk} de {engines.length} engines &lt; 60</p>
+            <p className="text-[10px] text-gray-500 mt-1">{enginesAtRisk} de {engines.length} módulos abaixo de 60</p>
           </div>
         </div>
       </div>
@@ -123,7 +122,7 @@ export default function DashboardPage() {
       {/* Comparação entre engines + maiores riscos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader title="Comparação de Health Score por Engine" subtitle="Média do score de cada engine (dados reais)" icon={<GaugeIcon size={14} />} />
+          <CardHeader title="Comparação de Health Score por Módulo" subtitle="Média do score de cada módulo" icon={<GaugeIcon size={14} />} />
           <div className="p-4 h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={compData} layout="vertical" margin={{ top: 4, right: 16, left: 24, bottom: 0 }}>
@@ -142,7 +141,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader
             title="Clientes com Maior Risco"
-            subtitle="Score combinado dos engines por cliente"
+            subtitle="Score combinado por cliente"
             icon={<AlertTriangle size={14} />}
             action={<button onClick={() => navigate('/ia')} className="text-[11px] text-brand-blue hover:text-brand-blueLight flex items-center gap-1"><Brain size={11} /> Análise de IA →</button>}
           />
@@ -160,7 +159,7 @@ export default function DashboardPage() {
                     <p className="text-[10px] text-gray-500">{c.city} · {c.plan}</p>
                   </div>
                   <div className="hidden sm:flex flex-col items-center">
-                    <span className="text-[9px] text-gray-600">{c.enginesPresent} engines</span>
+                    <span className="text-[9px] text-gray-600">{c.enginesPresent} módulos</span>
                   </div>
                   <div className="flex flex-col items-end">
                     <span style={{ color }} className="text-sm font-bold tabular-nums leading-none">{c.overallHealth}</span>
@@ -175,7 +174,7 @@ export default function DashboardPage() {
       </div>
 
       <p className="text-[10px] text-gray-500 text-center">
-        Fonte: {realMeta.source} · {realTotals.clients.toLocaleString('pt-BR')} clientes ativos · amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} · gerado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
+        {realTotals.clients.toLocaleString('pt-BR')} clientes ativos · amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
       </p>
     </div>
   )

@@ -50,7 +50,7 @@ function explain(c: RealClient | undefined, risk: ClientRisk): string {
   }
   const worst = [...risk.byEngine].sort((a, b) => a.healthScore - b.healthScore)[0]
   if (worst) parts.push(`menor score em ${worst.label} (${worst.healthScore}/100)`)
-  if (parts.length === 0) parts.push('deterioração combinada de múltiplos engines')
+  if (parts.length === 0) parts.push('deterioração combinada de múltiplos módulos')
   return `Modelo estima risco de churn de ${risk.overallChurnRisk}% (health ${risk.overallHealth}/100 · ${HEALTH_LABELS[risk.classification]}) — causas: ${parts.slice(0, 3).join('; ')}. Receita mensal exposta: ${formatCurrency(risk.revenueRisk)}.`
 }
 
@@ -120,9 +120,9 @@ export default function AiPredictivePage() {
             </div>
             <div>
               <h2 className="text-base font-bold text-white">IA Preditiva — Health Score combinado</h2>
-              <p className="text-sm text-gray-400 mt-0.5">7 engines · risco por cliente · 100% dados reais</p>
+              <p className="text-sm text-gray-400 mt-0.5">7 módulos · risco por cliente</p>
               <div className="flex items-center gap-4 mt-2 flex-wrap">
-                {[{ label: 'Engines', value: String(engines.length) }, { label: 'Clientes', value: ranking.length.toLocaleString('pt-BR') }, { label: 'Em risco', value: atRisk.length.toLocaleString('pt-BR') }, { label: 'Fonte', value: realMeta.source }].map(({ label, value }) => (
+                {[{ label: 'Módulos', value: String(engines.length) }, { label: 'Clientes', value: ranking.length.toLocaleString('pt-BR') }, { label: 'Em risco', value: atRisk.length.toLocaleString('pt-BR') }].map(({ label, value }) => (
                   <div key={label} className="flex items-center gap-1.5">
                     <span className="text-[10px] text-gray-500">{label}:</span>
                     <span className="text-[11px] font-semibold text-brand-cyan font-mono">{value}</span>
@@ -151,7 +151,7 @@ export default function AiPredictivePage() {
 
       {/* Auto alerts */}
       <Card>
-        <CardHeader title="Alertas Automáticos do Modelo" subtitle="Derivados dos sinais reais dos engines" icon={<Radio size={14} />} />
+        <CardHeader title="Alertas Automáticos do Modelo" subtitle="Derivados dos sinais de cada módulo" icon={<Radio size={14} />} />
         <div className="p-4 space-y-2">
           {autoAlerts.map((alert, i) => {
             const cfg = { critical: { bg: 'bg-risk-critical/10 border-risk-critical/25', text: 'text-risk-critical', dot: 'bg-risk-critical animate-pulse' }, high: { bg: 'bg-risk-high/10 border-risk-high/25', text: 'text-risk-high', dot: 'bg-risk-high' }, medium: { bg: 'bg-risk-medium/10 border-risk-medium/25', text: 'text-risk-medium', dot: 'bg-risk-medium' }, info: { bg: 'bg-brand-blue/10 border-brand-blue/25', text: 'text-brand-blue', dot: 'bg-brand-blue' } }[alert.type as 'critical' | 'high' | 'medium' | 'info']!
@@ -191,7 +191,7 @@ export default function AiPredictivePage() {
         </Card>
 
         <Card>
-          <CardHeader title="Radar de Scores" subtitle="Média dos engines no grupo de risco" />
+          <CardHeader title="Radar de Scores" subtitle="Média dos módulos no grupo de risco" />
           <div className="p-2 h-52">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={radarData}>
@@ -209,7 +209,7 @@ export default function AiPredictivePage() {
 
       {/* Top risk with AI explanations */}
       <Card>
-        <CardHeader title="Clientes com Maior Risco — Explicação de IA" subtitle="Health combinado dos engines com análise automatizada por cliente" icon={<Brain size={14} />} />
+        <CardHeader title="Clientes com Maior Risco — Explicação de IA" subtitle="Health combinado dos módulos com análise automatizada por cliente" icon={<Brain size={14} />} />
         <div className="divide-y divide-app-border">
           {topRisk.map((r, i) => {
             const color = HEALTH_COLORS[r.classification]
@@ -234,7 +234,7 @@ export default function AiPredictivePage() {
                   </div>
                   <div className="hidden lg:flex flex-col items-end">
                     <span className="text-xs font-mono text-risk-medium">{r.enginesPresent}</span>
-                    <span className="text-[10px] text-gray-600">engines</span>
+                    <span className="text-[10px] text-gray-600">módulos</span>
                   </div>
                   <ChevronRight size={12} className={cn('text-gray-600 transition-transform', isSelected && 'rotate-90')} />
                 </div>
@@ -265,7 +265,7 @@ export default function AiPredictivePage() {
       </Card>
 
       <p className="text-[10px] text-gray-500 text-center">
-        Fonte: {realMeta.source} · {ranking.length.toLocaleString('pt-BR')} clientes pontuados · gerado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
+        {ranking.length.toLocaleString('pt-BR')} clientes pontuados · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
       </p>
     </div>
   )

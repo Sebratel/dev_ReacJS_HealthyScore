@@ -73,11 +73,11 @@ export function Sidebar() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
-            <span className="text-[10px] text-gray-400">Health Engine ativo</span>
+            <span className="text-[10px] text-gray-400">Monitoramento ativo</span>
           </div>
           <div className="mt-1 flex items-center gap-1">
             <Zap size={9} className="text-brand-cyan" />
-            <span className="text-[10px] text-brand-cyan font-mono">{realTotals.clients.toLocaleString('pt-BR')} clientes · 7 engines</span>
+            <span className="text-[10px] text-brand-cyan font-mono">{realTotals.clients.toLocaleString('pt-BR')} clientes · 7 módulos</span>
           </div>
         </div>
       )}

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
-  '/': { title: 'Dashboard Executivo', subtitle: 'Resumo dos Health Scores por engine · dados reais' },
+  '/': { title: 'Dashboard Executivo', subtitle: 'Resumo dos Health Scores por módulo' },
   '/financeiro': { title: 'Financeiro', subtitle: 'Inadimplência, aging e receita em risco' },
   '/engine-comercial': { title: 'Comercial', subtitle: 'Performance de vendedores e qualidade de aquisição' },
   '/engine-conexao': { title: 'Conexão', subtitle: 'Qualidade de CPE e equipamentos' },
