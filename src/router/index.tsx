@@ -15,6 +15,7 @@ const CommercialEnginePage  = lazy(() => import('@/features/commercial-engine/Co
 const ConnectionEnginePage  = lazy(() => import('@/features/connection-engine/ConnectionEnginePage'))
 const NetworkEnginePage         = lazy(() => import('@/features/network-engine/NetworkEnginePage'))
 const RelationshipEnginePage    = lazy(() => import('@/features/relationship-engine/RelationshipEnginePage'))
+const SettingsPage              = lazy(() => import('@/features/settings/SettingsPage'))
 
 function PageLoader() {
   return (
@@ -62,6 +63,7 @@ export const router = createBrowserRouter([
       { path: 'engine-conexao',         element: <PageSuspense><ConnectionEnginePage /></PageSuspense> },
       { path: 'engine-rede',            element: <PageSuspense><NetworkEnginePage /></PageSuspense> },
       { path: 'engine-relacionamento',  element: <PageSuspense><RelationshipEnginePage /></PageSuspense> },
+      { path: 'configuracoes',          element: <PageSuspense><SettingsPage /></PageSuspense> },
       // Rotas antigas removidas → redireciona para o dashboard
       { path: 'clientes',               element: <Navigate to="/" replace /> },
       { path: 'cliente360',             element: <Navigate to="/" replace /> },

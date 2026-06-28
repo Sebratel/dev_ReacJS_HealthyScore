@@ -1,5 +1,5 @@
 import type {
-  RealClient, HealthClassification,
+  RealClient,
   FieldEngineScore, FieldEngineData, FieldScoreFactor,
   FieldEngineConfig, FieldIndicatorSummary, FieldIndicatorKey,
 } from '@/types'
@@ -7,14 +7,7 @@ import {
   DEFAULT_FIELD_CONFIG, FIELD_INDICATOR_ORDER, bucketByMax,
   PROTOCOL_RANGES, SCHEDULE_RANGES, SLA_OVERDUE_RANGES, AVG_SLA_RANGES,
 } from './fieldConfig'
-
-function scoreToHealthClass(v: number): HealthClassification {
-  if (v >= 81) return 'excellent'
-  if (v >= 61) return 'healthy'
-  if (v >= 41) return 'attention'
-  if (v >= 21) return 'high_risk'
-  return 'critical'
-}
+import { scoreToHealthClass } from '@/utils/health'
 const clamp = (v: number, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(v)))
 
 // ─── Score por cliente — 100% real + config ────────────────────

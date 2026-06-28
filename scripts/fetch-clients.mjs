@@ -5,17 +5,24 @@
 //     renegociações e desbloqueios por confiança
 //   - formas de pagamento ativas (para config dinâmica)
 //   - série mensal real de adimplência + totais reais (clientes, contratos, MRR)
-// Uso: node scripts/fetch-clients.mjs [sampleSize=2000]
+// Uso: node scripts/fetch-clients.mjs [sampleSize=2000 | full]
+//   sem argumento → amostra de 2000 | 'full'/'all'/'0' → BASE COMPLETA
 import { writeFileSync, mkdirSync } from 'node:fs'
+import { gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { makePool } from './db.mjs'
 import { makeMariaPool } from './db-maria.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const OUT = resolve(__dirname, '../src/data/realClients.json')
-const SAMPLE_SIZE = Number(process.argv[2]) || 2000
+// Snapshot gzipado, servido como asset estático e baixado pelo front no boot.
+const OUT = resolve(__dirname, '../public/realClients.data')
+const ARG = (process.argv[2] || '').toLowerCase()
+const FULL = ARG === 'full' || ARG === 'all' || ARG === '0'
+const SAMPLE_SIZE = FULL ? Infinity : (Number(process.argv[2]) || 2000)
 const FROM_DATE = '2026-01-01'
+// PII/geo não usados no front — removidos do snapshot (privacidade + tamanho).
+const STRIP_FIELDS = ['cpfCnpj', 'phone', 'email', 'lat', 'lng', 'state']
 
 // ─── Base (clientes/contratos ativos) ──────────────────────────
 const BASE_FROM = `
@@ -55,8 +62,8 @@ select
   ac.city, ac.neighborhood, ac.street, ac.street_number, ac.state,
   p.tx_id cpf_cnpj, p.phone, p.email, ac.lat, ac.lng
 ${BASE_FROM}
-order by random()
-limit $1
+${FULL ? '' : 'order by random()'}
+${FULL ? '' : 'limit $1'}
 `
 
 // Listas distinct para o config comercial (base inteira, com contagem)
@@ -376,7 +383,7 @@ try {
     pool.query(Q_TOTALS),
     pool.query(Q_BY_CITY),
     pool.query(Q_PAYFORMS),
-    pool.query(Q_SAMPLE, [Math.ceil(SAMPLE_SIZE * 1.25)]),
+    pool.query(Q_SAMPLE, FULL ? [] : [Math.ceil(SAMPLE_SIZE * 1.25)]),
     pool.query(Q_COMM_SELLERS),
     pool.query(Q_COMM_PLANS),
     pool.query(Q_COMM_VALUES),
@@ -437,7 +444,7 @@ try {
       netSlot: '', netPon: '', netMassiveCount: 0, netAvgOfflineMin: 0, netAvgOverageMin: 0,
     })
   }
-  const clients = Array.from(byClient.values()).slice(0, SAMPLE_SIZE)
+  const clients = FULL ? Array.from(byClient.values()) : Array.from(byClient.values()).slice(0, SAMPLE_SIZE)
   const byContract = new Map(clients.filter((c) => c.contractNumber).map((c) => [c.contractNumber, c]))
   const byClientId = new Map(clients.map((c) => [c.clientId, c]))
   const contractNumbers = Array.from(byContract.keys())
@@ -566,12 +573,16 @@ try {
   const withInv = clients.filter((c) => c.totalInvoices > 0).length
   console.log(`Sinais aplicados: ${withInv}/${clients.length} clientes com faturas no período.`)
 
+  // Remove PII/geo de cada cliente antes de exportar (não usados no front).
+  const clientsOut = clients.map((c) => { const o = { ...c }; for (const k of STRIP_FIELDS) delete o[k]; return o })
+
   const payload = {
     meta: {
       generatedAt: new Date().toISOString(),
       source: 'ELLEVEN / PostgreSQL — dados reais (sem mock)',
       fromDate: FROM_DATE,
       sampleSize: clients.length,
+      coverage: FULL ? 'full' : 'sample',
     },
     totals: { clients: Number(t.clients), contracts: Number(t.contracts), mrr: Number(t.mrr) },
     paymentForms: payforms.rows.map((r) => r.title?.trim()).filter(Boolean),
@@ -610,12 +621,14 @@ try {
       totalMassives,
       splittersAffected: massiveCodes.length,
     },
-    clients,
+    clients: clientsOut,
   }
 
   mkdirSync(dirname(OUT), { recursive: true })
-  writeFileSync(OUT, JSON.stringify(payload, null, 0))
-  console.log(`OK — ${clients.length} clientes gravados em ${OUT}`)
+  const json = JSON.stringify(payload)
+  const gz = gzipSync(json, { level: 9 })
+  writeFileSync(OUT, gz)
+  console.log(`OK — ${clients.length} clientes (${FULL ? 'BASE COMPLETA' : 'amostra'}) · JSON ${(json.length / 1048576).toFixed(1)} MB → gzip ${(gz.length / 1048576).toFixed(1)} MB em ${OUT}`)
 } catch (e) {
   console.error('ERRO:', e.message)
   process.exitCode = 1

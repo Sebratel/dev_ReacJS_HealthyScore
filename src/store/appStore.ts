@@ -16,6 +16,7 @@ import { cloneDefaultFieldConfig } from '@/features/field-engine/fieldConfig'
 import { cloneDefaultInstallationConfig } from '@/features/installation-engine/installationConfig'
 import { cloneDefaultRelationshipConfig } from '@/features/relationship-engine/relationshipConfig'
 import { cloneDefaultNetworkConfig } from '@/features/network-engine/networkConfig'
+import { HealthThresholds, DEFAULT_HEALTH_THRESHOLDS, applyHealthThresholds } from '@/utils/health'
 
 type IndexEntry = { key: string; label: string }
 
@@ -26,6 +27,12 @@ interface AppState {
   toggleSidebar: () => void
   searchQuery: string
   setSearchQuery: (q: string) => void
+
+  // ─── Limiares de Health Score (globais, persistidos) ───
+  // Abaixo de `high_risk` o cliente é crítico. Editável em /configuracoes.
+  healthThresholds: HealthThresholds
+  updateHealthThresholds: (patch: Partial<HealthThresholds>) => void
+  resetHealthThresholds: () => void
 
   // ─── Configuração da Financial Engine (persistida) ───
   financialConfig: FinancialEngineConfig
@@ -85,6 +92,23 @@ export const useAppStore = create<AppState>()(
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       searchQuery: '',
       setSearchQuery: (q) => set({ searchQuery: q }),
+
+      // ─── Health Score thresholds ───
+      healthThresholds: { ...DEFAULT_HEALTH_THRESHOLDS },
+      // Mescla o patch e normaliza para garantir ordem estritamente decrescente
+      // dentro de 1..100 — o estado nunca fica inválido, o que evita quebrar a
+      // classificação que roda em todo o app.
+      updateHealthThresholds: (patch) =>
+        set((s) => {
+          const merged = { ...s.healthThresholds, ...patch }
+          const clampInt = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round(v || 0)))
+          const high_risk = clampInt(merged.high_risk, 1, 97)
+          const attention = clampInt(merged.attention, high_risk + 1, 98)
+          const healthy = clampInt(merged.healthy, attention + 1, 99)
+          const excellent = clampInt(merged.excellent, healthy + 1, 100)
+          return { healthThresholds: { excellent, healthy, attention, high_risk } }
+        }),
+      resetHealthThresholds: () => set({ healthThresholds: { ...DEFAULT_HEALTH_THRESHOLDS } }),
 
       financialConfig: cloneDefaultFinancialConfig(),
       updateFinancialIndicator: (key, patch) =>
@@ -314,7 +338,7 @@ export const useAppStore = create<AppState>()(
       version: 2,
       // Persiste apenas o que faz sentido manter entre sessões.
       // (futuro: substituir por sincronização com MariaDB)
-      partialize: (s) => ({ financialConfig: s.financialConfig, commercialConfig: s.commercialConfig, connectionConfig: s.connectionConfig, fieldConfig: s.fieldConfig, installationConfig: s.installationConfig, relationshipConfig: s.relationshipConfig, networkConfig: s.networkConfig }),
+      partialize: (s) => ({ healthThresholds: s.healthThresholds, financialConfig: s.financialConfig, commercialConfig: s.commercialConfig, connectionConfig: s.connectionConfig, fieldConfig: s.fieldConfig, installationConfig: s.installationConfig, relationshipConfig: s.relationshipConfig, networkConfig: s.networkConfig }),
       // Mescla o estado salvo sobre os defaults atuais — garante que indicadores
       // NOVOS (adicionados após o último save) existam, preservando as notas salvas.
       merge: (persisted, current) => {
@@ -330,6 +354,8 @@ export const useAppStore = create<AppState>()(
         return {
           ...current,
           ...p,
+          // Garante os 4 cortes presentes mesmo vindo de um save legado/parcial.
+          healthThresholds: { ...current.healthThresholds, ...(p.healthThresholds ?? {}) },
           financialConfig: mergeConfig(current.financialConfig, p.financialConfig),
           commercialConfig: mergeConfig(current.commercialConfig, p.commercialConfig),
           connectionConfig: mergeConfig(current.connectionConfig, p.connectionConfig),
@@ -339,6 +365,15 @@ export const useAppStore = create<AppState>()(
           networkConfig: mergeConfig(current.networkConfig, p.networkConfig),
         }
       },
+      // Após reidratar do localStorage, propaga os limiares salvos para health.ts.
+      onRehydrateStorage: () => (state) => {
+        if (state) applyHealthThresholds(state.healthThresholds)
+      },
     },
   ),
 )
+
+// Mantém o espelho de limiares em health.ts (usado por scoreToHealthClass em
+// todo o app) sempre em sincronia com o store, que é a fonte de verdade.
+applyHealthThresholds(useAppStore.getState().healthThresholds)
+useAppStore.subscribe((s) => applyHealthThresholds(s.healthThresholds))

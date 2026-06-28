@@ -1,5 +1,5 @@
 import type {
-  RealClient, HealthClassification,
+  RealClient,
   RelationshipEngineScore, RelationshipEngineData, RelationshipScoreFactor,
   RelationshipEngineConfig, RelationshipIndicatorSummary, RelationshipIndicatorKey,
 } from '@/types'
@@ -7,14 +7,7 @@ import {
   DEFAULT_RELATIONSHIP_CONFIG, REL_INDICATOR_ORDER, bucketByMax,
   PROTOCOL_RANGES, RECURRENCE_RANGES, CANCEL_RANGES, SLA_SATISFACTION_RANGES,
 } from './relationshipConfig'
-
-function scoreToHealthClass(v: number): HealthClassification {
-  if (v >= 81) return 'excellent'
-  if (v >= 61) return 'healthy'
-  if (v >= 41) return 'attention'
-  if (v >= 21) return 'high_risk'
-  return 'critical'
-}
+import { scoreToHealthClass } from '@/utils/health'
 const clamp = (v: number, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(v)))
 
 function scoreClient(c: RealClient, config: RelationshipEngineConfig) {

@@ -12,6 +12,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/engine-instalacao': { title: 'Instalação', subtitle: 'Qualidade e SLA de instalação' },
   '/engine-relacionamento': { title: 'Relacionamento', subtitle: 'NPS, sentimento e ameaças de cancelamento' },
   '/ia': { title: 'IA Preditiva', subtitle: 'Health Score combinado · Previsões · Alertas automáticos' },
+  '/configuracoes': { title: 'Configurações', subtitle: 'Limiares de Health Score e parâmetros globais' },
 }
 
 export function TopBar() {
@@ -44,7 +45,7 @@ export function TopBar() {
           </span>
         </div>
 
-        <button className="h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all" aria-label="Configurações">
+        <button onClick={() => navigate('/configuracoes')} className="h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all" aria-label="Configurações">
           <Settings size={13} />
         </button>
 

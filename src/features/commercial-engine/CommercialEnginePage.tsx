@@ -3,7 +3,7 @@ import {
   Briefcase, ShieldAlert, Zap, SlidersHorizontal,
   ChevronDown, ChevronUp, Table2,
 } from 'lucide-react'
-import { realClients, realTotals, realCommercial, realMeta } from '@/data/realClients'
+import { realClients, realTotals, realCommercial, realMeta, coverageLabel } from '@/data/realClients'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EngineDataModal, type DataColumn } from '@/components/ui/EngineDataModal'
 import { ContractFilters, useContractFilters } from '@/components/ui/ContractFilters'
@@ -82,6 +82,7 @@ const DATA_COLUMNS: DataColumn[] = [
 
 export default function CommercialEnginePage() {
   const commercialConfig = useAppStore((s) => s.commercialConfig)
+  const healthThresholds = useAppStore((s) => s.healthThresholds)
   const syncCommercialLists = useAppStore((s) => s.syncCommercialLists)
 
   // Sincroniza as categorias reais (do banco) com a config do engine comercial
@@ -99,7 +100,7 @@ export default function CommercialEnginePage() {
 
   // Filtros de contrato / nome / cidade (aplicados antes da pontuação)
   const { filters, setFilters, filtered, cities } = useContractFilters(realClients)
-  const data = useMemo(() => buildCommercialEngineData(filtered, commercialConfig), [filtered, commercialConfig])
+  const data = useMemo(() => buildCommercialEngineData(filtered, commercialConfig), [filtered, commercialConfig, healthThresholds])
 
   const [configOpen, setConfigOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
@@ -178,7 +179,7 @@ export default function CommercialEnginePage() {
         </div>
       </Card>
 
-      <p className="text-[10px] text-gray-500 text-center">amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
+      <p className="text-[10px] text-gray-500 text-center">{coverageLabel()} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
 
       <CommercialEngineConfigModal open={configOpen} onClose={() => setConfigOpen(false)} />
       <EngineDataModal

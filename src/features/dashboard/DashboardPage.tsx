@@ -13,7 +13,7 @@ import type { HealthClassification } from '@/types'
 const DIST_ORDER: HealthClassification[] = ['critical', 'high_risk', 'attention', 'healthy', 'excellent']
 
 function scoreColor(v: number) {
-  return v >= 81 ? '#22d3ee' : v >= 61 ? '#10b981' : v >= 41 ? '#f59e0b' : v >= 21 ? '#f97316' : '#ef4444'
+  return HEALTH_COLORS[scoreToHealthClass(v)]
 }
 
 const CompTooltip = ({ active, payload, label }: any) => {
@@ -174,7 +174,7 @@ export default function DashboardPage() {
       </div>
 
       <p className="text-[10px] text-gray-500 text-center">
-        {realTotals.clients.toLocaleString('pt-BR')} clientes ativos · amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
+        {realTotals.clients.toLocaleString('pt-BR')} clientes ativos · {realMeta.coverage === 'full' ? 'base completa analisada' : `amostra de ${realMeta.sampleSize.toLocaleString('pt-BR')}`} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
       </p>
     </div>
   )

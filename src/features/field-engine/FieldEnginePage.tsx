@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Wrench, ShieldAlert, Zap, SlidersHorizontal, ChevronDown, ChevronUp, Table2,
 } from 'lucide-react'
-import { realClients, realTotals, realField, realMeta } from '@/data/realClients'
+import { realClients, realTotals, realField, realMeta, coverageLabel } from '@/data/realClients'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EngineDataModal, type DataColumn } from '@/components/ui/EngineDataModal'
 import { ContractFilters, useContractFilters } from '@/components/ui/ContractFilters'
@@ -80,6 +80,7 @@ const DATA_COLUMNS: DataColumn[] = [
 
 export default function FieldEnginePage() {
   const fieldConfig = useAppStore((s) => s.fieldConfig)
+  const healthThresholds = useAppStore((s) => s.healthThresholds)
   const syncFieldLists = useAppStore((s) => s.syncFieldLists)
 
   useEffect(() => {
@@ -93,7 +94,7 @@ export default function FieldEnginePage() {
   const clientsWithProtocols = useMemo(() => realClients.filter((c) => c.protocolCount > 0), [])
   // Filtros de contrato / nome / cidade (aplicados antes da pontuação)
   const { filters, setFilters, filtered, cities } = useContractFilters(clientsWithProtocols)
-  const data = useMemo(() => buildFieldEngineData(filtered, fieldConfig), [filtered, fieldConfig])
+  const data = useMemo(() => buildFieldEngineData(filtered, fieldConfig), [filtered, fieldConfig, healthThresholds])
 
   const [configOpen, setConfigOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
@@ -172,7 +173,7 @@ export default function FieldEnginePage() {
         </div>
       </Card>
 
-      <p className="text-[10px] text-gray-500 text-center">amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · protocolos desde {realMeta.fromDate} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
+      <p className="text-[10px] text-gray-500 text-center">{coverageLabel()} · protocolos desde {realMeta.fromDate} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
 
       <FieldEngineConfigModal open={configOpen} onClose={() => setConfigOpen(false)} />
       <EngineDataModal

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   DollarSign, ChevronDown, ChevronUp, ShieldAlert, Zap, SlidersHorizontal, Table2,
 } from 'lucide-react'
-import { realClients, realTotals, realMonthly, realPaymentForms, realMeta } from '@/data/realClients'
+import { realClients, realTotals, realMonthly, realPaymentForms, realMeta, coverageLabel } from '@/data/realClients'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EngineDataModal, type DataColumn } from '@/components/ui/EngineDataModal'
 import { ContractFilters, useContractFilters } from '@/components/ui/ContractFilters'
@@ -104,6 +104,7 @@ const DATA_COLUMNS: DataColumn[] = [
 // ─── Main Page ─────────────────────────────────────────────────
 export default function FinancialEnginePage() {
   const financialConfig = useAppStore((s) => s.financialConfig)
+  const healthThresholds = useAppStore((s) => s.healthThresholds)
   const syncPaymentForms = useAppStore((s) => s.syncPaymentForms)
 
   // Sincroniza as formas de pagamento ativas (do banco) com a config do engine
@@ -116,7 +117,7 @@ export default function FinancialEnginePage() {
   )
   // Filtros de contrato / nome / cidade (aplicados antes da pontuação)
   const { filters, setFilters, filtered, cities } = useContractFilters(clientsWithData)
-  const data = useMemo(() => buildFinancialEngineData(filtered, financialConfig), [filtered, financialConfig])
+  const data = useMemo(() => buildFinancialEngineData(filtered, financialConfig), [filtered, financialConfig, healthThresholds])
 
   const [configOpen, setConfigOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
@@ -225,7 +226,7 @@ export default function FinancialEnginePage() {
       </Card>
 
       <p className="text-[10px] text-gray-500 text-center">
-        amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · faturas desde {realMeta.fromDate} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
+        {coverageLabel()} · faturas desde {realMeta.fromDate} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
       </p>
 
       <FinancialEngineConfigModal open={configOpen} onClose={() => setConfigOpen(false)} />

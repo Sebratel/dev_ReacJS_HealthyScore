@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   Network, ShieldAlert, Zap, SlidersHorizontal, ChevronDown, ChevronUp, Table2,
 } from 'lucide-react'
-import { realClients, realNetwork, realMeta } from '@/data/realClients'
+import { realClients, realNetwork, realMeta, coverageLabel } from '@/data/realClients'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EngineDataModal, type DataColumn } from '@/components/ui/EngineDataModal'
 import { ContractFilters, useContractFilters } from '@/components/ui/ContractFilters'
@@ -95,12 +95,13 @@ const DATA_COLUMNS: DataColumn[] = [
 
 export default function NetworkEnginePage() {
   const networkConfig = useAppStore((s) => s.networkConfig)
+  const healthThresholds = useAppStore((s) => s.healthThresholds)
 
   // Analisa apenas clientes afetados por massiva (em splitters com massiva)
   const clientsAffected = useMemo(() => realClients.filter((c) => c.netMassiveCount > 0), [])
   // Filtros de contrato / nome / cidade (aplicados antes da pontuação)
   const { filters, setFilters, filtered, cities } = useContractFilters(clientsAffected)
-  const data = useMemo(() => buildNetworkEngineData(filtered, networkConfig), [filtered, networkConfig])
+  const data = useMemo(() => buildNetworkEngineData(filtered, networkConfig), [filtered, networkConfig, healthThresholds])
 
   const [configOpen, setConfigOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
@@ -179,7 +180,7 @@ export default function NetworkEnginePage() {
         </div>
       </Card>
 
-      <p className="text-[10px] text-gray-500 text-center">{realNetwork.splittersAffected.toLocaleString('pt-BR')} splitters com massiva · amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
+      <p className="text-[10px] text-gray-500 text-center">{realNetwork.splittersAffected.toLocaleString('pt-BR')} splitters com massiva · {coverageLabel()} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
 
       <NetworkEngineConfigModal open={configOpen} onClose={() => setConfigOpen(false)} />
       <EngineDataModal

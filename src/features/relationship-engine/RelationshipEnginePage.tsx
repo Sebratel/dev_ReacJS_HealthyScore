@@ -3,7 +3,7 @@ import {
   MessageSquare, ShieldAlert, Zap, SlidersHorizontal,
   ChevronDown, ChevronUp, Table2,
 } from 'lucide-react'
-import { realClients, realTotals, realRelationship, realMeta } from '@/data/realClients'
+import { realClients, realTotals, realRelationship, realMeta, coverageLabel } from '@/data/realClients'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EngineDataModal, type DataColumn } from '@/components/ui/EngineDataModal'
 import { ContractFilters, useContractFilters } from '@/components/ui/ContractFilters'
@@ -81,6 +81,7 @@ const DATA_COLUMNS: DataColumn[] = [
 
 export default function RelationshipEnginePage() {
   const relationshipConfig = useAppStore((s) => s.relationshipConfig)
+  const healthThresholds = useAppStore((s) => s.healthThresholds)
   const syncRelationshipLists = useAppStore((s) => s.syncRelationshipLists)
 
   useEffect(() => {
@@ -94,7 +95,7 @@ export default function RelationshipEnginePage() {
   const clientsWithRel = useMemo(() => realClients.filter((c) => c.relProtocolCount > 0), [])
   // Filtros de contrato / nome / cidade (aplicados antes da pontuação)
   const { filters, setFilters, filtered, cities } = useContractFilters(clientsWithRel)
-  const data = useMemo(() => buildRelationshipEngineData(filtered, relationshipConfig), [filtered, relationshipConfig])
+  const data = useMemo(() => buildRelationshipEngineData(filtered, relationshipConfig), [filtered, relationshipConfig, healthThresholds])
 
   const [configOpen, setConfigOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
@@ -173,7 +174,7 @@ export default function RelationshipEnginePage() {
         </div>
       </Card>
 
-      <p className="text-[10px] text-gray-500 text-center">amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · protocolos desde {realMeta.fromDate} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
+      <p className="text-[10px] text-gray-500 text-center">{coverageLabel()} · protocolos desde {realMeta.fromDate} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
 
       <RelationshipEngineConfigModal open={configOpen} onClose={() => setConfigOpen(false)} />
       <EngineDataModal

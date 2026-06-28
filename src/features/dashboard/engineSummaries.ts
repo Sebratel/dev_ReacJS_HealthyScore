@@ -9,6 +9,7 @@ import { buildNetworkEngineData } from '@/features/network-engine/networkEngine'
 import { buildFieldEngineData } from '@/features/field-engine/fieldEngine'
 import { buildInstallationEngineData } from '@/features/installation-engine/installationEngine'
 import { buildRelationshipEngineData } from '@/features/relationship-engine/relationshipEngine'
+import { scoreToHealthClass } from '@/utils/health'
 
 // Subconjunto comum a todos os *EngineScore — o que o dashboard/IA realmente consomem.
 export interface EngineScoreLite {
@@ -88,6 +89,9 @@ export function useEngineSummaries(): EngineSummary[] {
   const fieldConfig = useAppStore((s) => s.fieldConfig)
   const installationConfig = useAppStore((s) => s.installationConfig)
   const relationshipConfig = useAppStore((s) => s.relationshipConfig)
+  // Os limiares são lidos por scoreToHealthClass (via health.ts); entram nas deps
+  // para reclassificar quando o usuário editá-los em /configuracoes.
+  const healthThresholds = useAppStore((s) => s.healthThresholds)
 
   return useMemo(() => {
     const financialClients = realClients.filter((c) => c.totalInvoices > 0 || c.trustReleases > 0 || c.renegotiations > 0)
@@ -106,7 +110,7 @@ export function useEngineSummaries(): EngineSummary[] {
       summarize('installation', 'Instalação', '/engine-instalacao', buildInstallationEngineData(installationClients, installationConfig)),
       summarize('relationship', 'Relacionamento', '/engine-relacionamento', buildRelationshipEngineData(relationshipClients, relationshipConfig)),
     ]
-  }, [financialConfig, commercialConfig, connectionConfig, networkConfig, fieldConfig, installationConfig, relationshipConfig])
+  }, [financialConfig, commercialConfig, connectionConfig, networkConfig, fieldConfig, installationConfig, relationshipConfig, healthThresholds])
 }
 
 // ─── Risco combinado por cliente (usado pela IA Preditiva) ──────────────
@@ -122,14 +126,6 @@ export interface ClientRisk {
   revenueRisk: number            // churnRisk% × MRR
   enginesPresent: number
   byEngine: { key: string; label: string; healthScore: number; classification: HealthClassification }[]
-}
-
-function classify(v: number): HealthClassification {
-  if (v >= 81) return 'excellent'
-  if (v >= 61) return 'healthy'
-  if (v >= 41) return 'attention'
-  if (v >= 21) return 'high_risk'
-  return 'critical'
 }
 
 // Agrega os scores de todos os engines por cliente e devolve um ranking de risco.
@@ -173,7 +169,7 @@ export function buildClientRiskRanking(summaries: EngineSummary[]): ClientRisk[]
       monthlyValue: e.monthlyValue,
       overallHealth,
       overallChurnRisk,
-      classification: classify(overallHealth),
+      classification: scoreToHealthClass(overallHealth),
       revenueRisk: (overallChurnRisk / 100) * e.monthlyValue,
       enginesPresent: e.enginesPresent,
       byEngine: e.byEngine,

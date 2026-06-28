@@ -467,12 +467,13 @@ export interface RealClient {
   paymentForm: string
   city: string
   neighborhood: string
-  state: string
-  cpfCnpj: string
-  phone: string
-  email: string
-  lat: number | null
-  lng: number | null
+  // PII/geo removidos do snapshot enviado ao navegador (não usados no front) — opcionais.
+  state?: string
+  cpfCnpj?: string
+  phone?: string
+  email?: string
+  lat?: number | null
+  lng?: number | null
   onTimeInvoices: number
   lateInvoices: number
   overdueInvoices: number

@@ -3,7 +3,7 @@ import {
   Wifi, ShieldAlert, Zap, SlidersHorizontal,
   ChevronDown, ChevronUp, Table2,
 } from 'lucide-react'
-import { realClients, realTotals, realConnection, realMeta } from '@/data/realClients'
+import { realClients, realTotals, realConnection, realMeta, coverageLabel } from '@/data/realClients'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EngineDataModal, type DataColumn } from '@/components/ui/EngineDataModal'
 import { ContractFilters, useContractFilters } from '@/components/ui/ContractFilters'
@@ -77,6 +77,7 @@ const DATA_COLUMNS: DataColumn[] = [
 
 export default function ConnectionEnginePage() {
   const connectionConfig = useAppStore((s) => s.connectionConfig)
+  const healthThresholds = useAppStore((s) => s.healthThresholds)
   const syncConnectionLists = useAppStore((s) => s.syncConnectionLists)
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export default function ConnectionEnginePage() {
   const clientsWithEquip = useMemo(() => realClients.filter((c) => c.equipment.length > 0), [])
   // Filtros de contrato / nome / cidade (aplicados antes da pontuação)
   const { filters, setFilters, filtered, cities } = useContractFilters(clientsWithEquip)
-  const data = useMemo(() => buildConnectionEngineData(filtered, connectionConfig), [filtered, connectionConfig])
+  const data = useMemo(() => buildConnectionEngineData(filtered, connectionConfig), [filtered, connectionConfig, healthThresholds])
 
   const [configOpen, setConfigOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
@@ -166,7 +167,7 @@ export default function ConnectionEnginePage() {
         </div>
       </Card>
 
-      <p className="text-[10px] text-gray-500 text-center">amostra de {realMeta.sampleSize.toLocaleString('pt-BR')} clientes · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
+      <p className="text-[10px] text-gray-500 text-center">{coverageLabel()} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}</p>
 
       <ConnectionEngineConfigModal open={configOpen} onClose={() => setConfigOpen(false)} />
       <EngineDataModal

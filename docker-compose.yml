@@ -1,0 +1,23 @@
+# Healthy Score Sebratel — stack de produção (SPA estática via nginx).
+# Deploy no Portainer: Stacks → Add stack → Repository → branch main.
+# Defina VITE_GOOGLE_CLIENT_ID nas "Environment variables" da stack.
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Client ID público do Google OAuth (variável de build do Vite).
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    image: healthyscore-web:latest
+    container_name: healthyscore-web
+    restart: unless-stopped
+    ports:
+      # Porta do host (esquerda) configurável; 80 é a porta interna do nginx.
+      - "${WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

@@ -1,4 +1,7 @@
 import { HealthClassification } from '@/types'
+import { scoreToHealthClass } from '@/utils/health'
+
+export { scoreToHealthClass }
 
 export const HEALTH_COLORS: Record<HealthClassification, string> = {
   critical: '#ef4444',
@@ -14,14 +17,6 @@ export const HEALTH_LABELS: Record<HealthClassification, string> = {
   attention: 'Atenção',
   healthy: 'Saudável',
   excellent: 'Excelente',
-}
-
-export function scoreToHealthClass(v: number): HealthClassification {
-  if (v >= 81) return 'excellent'
-  if (v >= 61) return 'healthy'
-  if (v >= 41) return 'attention'
-  if (v >= 21) return 'high_risk'
-  return 'critical'
 }
 
 interface HealthGaugeProps {

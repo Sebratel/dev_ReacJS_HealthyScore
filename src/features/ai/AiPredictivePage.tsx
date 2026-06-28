@@ -9,6 +9,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { ContractFilters, useContractFilters } from '@/components/ui/ContractFilters'
 import { formatCurrency, cn } from '@/utils/cn'
+import { useAppStore } from '@/store/appStore'
 import type { RealClient } from '@/types'
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -75,6 +76,8 @@ export default function AiPredictivePage() {
   const visibleRanking = useMemo(() => ranking.filter((r) => allowedIds.has(r.customerId)), [ranking, allowedIds])
   const topRisk = visibleRanking.slice(0, 12)
 
+  // Limiar editável (abaixo dele = crítico) — usado nos textos dos alertas/KPIs.
+  const criticalThreshold = useAppStore((s) => s.healthThresholds.high_risk)
   const criticalCount = ranking.filter((r) => r.classification === 'critical').length
   const atRisk = ranking.filter((r) => r.classification === 'critical' || r.classification === 'high_risk')
   const annualRevenueRisk = atRisk.reduce((a, r) => a + r.revenueRisk * 12, 0)
@@ -85,12 +88,12 @@ export default function AiPredictivePage() {
   const massiveClients = useMemo(() => realClients.filter((c) => c.netMassiveCount > 0).length, [])
 
   const autoAlerts = useMemo(() => [
-    { type: 'critical', message: `${criticalCount} clientes com health combinado crítico (<21) — ação imediata`, action: 'Ver financeiro', path: '/financeiro' },
+    { type: 'critical', message: `${criticalCount} clientes com health combinado crítico (<${criticalThreshold}) — ação imediata`, action: 'Ver financeiro', path: '/financeiro' },
     { type: 'critical', message: `${cancelThreats} clientes com ameaça ativa de cancelamento`, action: 'Relacionamento', path: '/engine-relacionamento' },
     { type: 'high', message: `${overdueClients} clientes com faturas em atraso ou em aberto vencidas`, action: 'Financeiro', path: '/financeiro' },
     { type: 'medium', message: `${slaLateClients} clientes com SLA de atendimento em campo estourado`, action: 'Campo', path: '/manutencao' },
     { type: 'info', message: `${massiveClients} clientes impactados por massivas de rede no período`, action: 'Rede', path: '/engine-rede' },
-  ], [criticalCount, cancelThreats, overdueClients, slaLateClients, massiveClients])
+  ], [criticalCount, cancelThreats, overdueClients, slaLateClients, massiveClients, criticalThreshold])
 
   // Radar: média do score de cada engine no grupo de maior risco
   const radarData = useMemo(() =>
@@ -143,7 +146,7 @@ export default function AiPredictivePage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Clientes Críticos" value={criticalCount.toLocaleString('pt-BR')} subtitle="Health combinado < 21" variant="danger" icon={<AlertTriangle size={14} />} iconColor="text-risk-critical" />
+        <KpiCard label="Clientes Críticos" value={criticalCount.toLocaleString('pt-BR')} subtitle={`Health combinado < ${criticalThreshold}`} variant="danger" icon={<AlertTriangle size={14} />} iconColor="text-risk-critical" />
         <KpiCard label="Receita Anual em Risco" value={formatCurrency(annualRevenueRisk)} subtitle="Risco × MRR × 12" variant="warning" icon={<DollarSign size={14} />} iconColor="text-risk-medium" />
         <KpiCard label="Ameaças de Cancelamento" value={cancelThreats.toLocaleString('pt-BR')} subtitle="Registradas no relacionamento" variant="danger" icon={<MessageSquare size={14} />} iconColor="text-risk-high" />
         <KpiCard label="Alertas Automáticos" value={autoAlerts.length} subtitle="Ações recomendadas" variant="brand" icon={<Radio size={14} />} iconColor="text-brand-blue" />
