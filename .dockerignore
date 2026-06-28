@@ -1,0 +1,26 @@
+# Dependências e artefatos (reinstalados/rebuildados dentro da imagem)
+node_modules
+dist
+
+# Git e metadados
+.git
+.gitignore
+
+# Segredos — NUNCA entram no contexto de build da imagem
+.env
+.env.*
+!.env.example
+
+# Os próprios arquivos de docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Diversos
+*.log
+npm-debug.log*
+.DS_Store
+.vscode
+
+# OBS: public/realClients.data NÃO é ignorado de propósito — é o snapshot
+# de dados servido pelo app.

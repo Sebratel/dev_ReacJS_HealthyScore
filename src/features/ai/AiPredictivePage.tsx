@@ -1,14 +1,16 @@
 import { useMemo, useState, useEffect } from 'react'
-import { Brain, Zap, AlertTriangle, Activity, ChevronRight, Cpu, Sparkles, Target, Radio, TrendingDown, Package, DollarSign } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar, ScatterChart, Scatter, Cell } from 'recharts'
-import { mockCustomers, MONTHLY_CHURN } from '@/mocks'
-import { Customer } from '@/types'
+import { Brain, Zap, AlertTriangle, Activity, ChevronRight, Cpu, Sparkles, Radio, DollarSign, MessageSquare } from 'lucide-react'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts'
+import { useNavigate } from 'react-router-dom'
+import { realClients, realMonthly, realMeta } from '@/data/realClients'
+import { useEngineSummaries, buildClientRiskRanking, type ClientRisk } from '@/features/dashboard/engineSummaries'
 import { HEALTH_COLORS, HEALTH_LABELS, HealthGauge } from '@/components/ui/HealthGauge'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { KpiCard } from '@/components/ui/KpiCard'
-import { formatCurrency } from '@/utils/cn'
-import { cn } from '@/utils/cn'
-import { useNavigate } from 'react-router-dom'
+import { ContractFilters, useContractFilters } from '@/components/ui/ContractFilters'
+import { formatCurrency, cn } from '@/utils/cn'
+import { useAppStore } from '@/store/appStore'
+import type { RealClient } from '@/types'
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null
@@ -20,7 +22,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   )
 }
 
-function TypewriterText({ text, speed = 15 }: { text: string; speed?: number }) {
+function TypewriterText({ text, speed = 12 }: { text: string; speed?: number }) {
   const [displayed, setDisplayed] = useState('')
   const [done, setDone] = useState(false)
   useEffect(() => {
@@ -35,68 +37,78 @@ function TypewriterText({ text, speed = 15 }: { text: string; speed?: number }) 
   return <span>{displayed}{!done && <span className="inline-block w-0.5 h-3.5 bg-brand-blue ml-0.5 animate-pulse" />}</span>
 }
 
-function generateAiExplanation(customer: Customer): string {
-  const hs = customer.healthScores
-  const risks = customer.derivedRisks
-  const s = customer.signals
+// Explicação derivada 100% dos sinais reais do cliente
+function explain(c: RealClient | undefined, risk: ClientRisk): string {
   const parts: string[] = []
-  if (s.relationship.cancellationThreats > 0) parts.push(`${s.relationship.cancellationThreats} ameaça(s) de cancelamento`)
-  if (s.financial.overdueBills > 1) parts.push(`${s.financial.overdueBills} faturas em atraso (${s.financial.avgPaymentDelay}d)`)
-  if (s.network.networkEvents30d > 5) parts.push(`${s.network.networkEvents30d} eventos de rede em 30d`)
-  if (s.relationship.planDowngrade) parts.push('downgrade de plano solicitado')
-  if (hs.relationship.value < 40) parts.push(`relacionamento degradado (${hs.relationship.value}/100)`)
-  if (parts.length === 0) parts.push('deterioração contínua de múltiplos indicadores')
-  return `Modelo detecta risco de churn de ${risks.churn.probability}% (${HEALTH_LABELS[hs.classification]}) — causas: ${parts.slice(0, 3).join('; ')}. Risco de equipamento: ${risks.equipmentReturn.probability}%. Perda anual estimada: ${formatCurrency(risks.revenueLossMonthly * 12)}.`
+  if (c) {
+    const overdue = c.lateInvoices + c.overdueInvoices
+    if (c.relCancelThreats > 0) parts.push(`${c.relCancelThreats} ameaça(s) de cancelamento registrada(s)`)
+    if (overdue > 0) parts.push(`${overdue} fatura(s) em atraso/aberto`)
+    if (c.renegotiations > 0) parts.push(`${c.renegotiations} renegociação(ões)`)
+    if (c.netMassiveCount > 0) parts.push(`${c.netMassiveCount} massiva(s) de rede`)
+    if (c.slaLateCount > 0) parts.push(`${c.slaLateCount} atendimento(s) de campo com SLA estourado`)
+    if (c.trustReleases > 0) parts.push(`${c.trustReleases} desbloqueio(s) por confiança`)
+  }
+  const worst = [...risk.byEngine].sort((a, b) => a.healthScore - b.healthScore)[0]
+  if (worst) parts.push(`menor score em ${worst.label} (${worst.healthScore}/100)`)
+  if (parts.length === 0) parts.push('deterioração combinada de múltiplos módulos')
+  return `Modelo estima risco de churn de ${risk.overallChurnRisk}% (health ${risk.overallHealth}/100 · ${HEALTH_LABELS[risk.classification]}) — causas: ${parts.slice(0, 3).join('; ')}. Receita mensal exposta: ${formatCurrency(risk.revenueRisk)}.`
 }
-
-const FORECAST_DATA = MONTHLY_CHURN.slice(-6).concat([
-  { month: 'Jun/25', churned: 34, newCustomers: 58, churnRate: 5.1, revenueAtRisk: 45900, recovered: 24 },
-  { month: 'Jul/25', churned: 31, newCustomers: 65, churnRate: 4.7, revenueAtRisk: 41800, recovered: 27 },
-  { month: 'Ago/25', churned: 28, newCustomers: 70, churnRate: 4.2, revenueAtRisk: 37800, recovered: 30 },
-])
 
 export default function AiPredictivePage() {
   const navigate = useNavigate()
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const engines = useEngineSummaries()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [modelRunning, setModelRunning] = useState(false)
   const [modelDone, setModelDone] = useState(false)
 
-  const topRisk = useMemo(() =>
-    mockCustomers.filter((c) => c.healthScores.classification === 'critical' || c.healthScores.classification === 'high_risk')
-      .sort((a, b) => a.healthScores.overall - b.healthScores.overall).slice(0, 12),
-    []
-  )
+  const clientById = useMemo(() => {
+    const m = new Map<string, RealClient>()
+    realClients.forEach((c) => m.set(c.clientId, c))
+    return m
+  }, [])
 
-  const totalLostRevenue = useMemo(() =>
-    mockCustomers.reduce((a, c) => a + c.derivedRisks.revenueLossMonthly * 12, 0),
-    []
-  )
+  const ranking = useMemo(() => buildClientRiskRanking(engines), [engines])
 
-  const equipmentHighRisk = useMemo(() =>
-    mockCustomers.filter((c) => c.derivedRisks.equipmentReturn.probability > 60).length,
-    []
-  )
+  // Filtros de contrato / nome / cidade — escopam a lista de clientes em risco (KPIs seguem sobre a base inteira)
+  const { filters, setFilters, filtered, cities } = useContractFilters(realClients)
+  const allowedIds = useMemo(() => new Set(filtered.map((c) => c.clientId)), [filtered])
+  const visibleRanking = useMemo(() => ranking.filter((r) => allowedIds.has(r.customerId)), [ranking, allowedIds])
+  const topRisk = visibleRanking.slice(0, 12)
+
+  // Limiar editável (abaixo dele = crítico) — usado nos textos dos alertas/KPIs.
+  const criticalThreshold = useAppStore((s) => s.healthThresholds.high_risk)
+  const criticalCount = ranking.filter((r) => r.classification === 'critical').length
+  const atRisk = ranking.filter((r) => r.classification === 'critical' || r.classification === 'high_risk')
+  const annualRevenueRisk = atRisk.reduce((a, r) => a + r.revenueRisk * 12, 0)
+
+  const cancelThreats = useMemo(() => realClients.filter((c) => c.relCancelThreats > 0).length, [])
+  const overdueClients = useMemo(() => realClients.filter((c) => c.lateInvoices + c.overdueInvoices > 0).length, [])
+  const slaLateClients = useMemo(() => realClients.filter((c) => c.slaLateCount > 0).length, [])
+  const massiveClients = useMemo(() => realClients.filter((c) => c.netMassiveCount > 0).length, [])
 
   const autoAlerts = useMemo(() => [
-    { type: 'critical', message: `${mockCustomers.filter((c) => c.healthScores.classification === 'critical').length} clientes com Health Score < 20 — deterioração severa detectada`, action: 'Ver lista', path: '/clientes' },
-    { type: 'critical', message: `${mockCustomers.filter((c) => c.signals.relationship.cancellationThreats > 0).length} clientes com ameaça ativa de cancelamento — requer ação imediata`, action: 'Priorizar' },
-    { type: 'high', message: `${equipmentHighRisk} clientes com risco de não devolução de equipamento > 60%`, action: 'Ver lista' },
-    { type: 'medium', message: `${mockCustomers.filter((c) => c.signals.financial.brokenRenegotiations > 0).length} clientes quebraram acordos de renegociação recentemente`, action: 'Acionar cobrança' },
-    { type: 'info', message: `Modelo identificou correlação: clientes com NPS < 5 + atraso > 30d têm 4x mais chance de cancelar`, action: 'Ver análise' },
-  ], [equipmentHighRisk])
+    { type: 'critical', message: `${criticalCount} clientes com health combinado crítico (<${criticalThreshold}) — ação imediata`, action: 'Ver financeiro', path: '/financeiro' },
+    { type: 'critical', message: `${cancelThreats} clientes com ameaça ativa de cancelamento`, action: 'Relacionamento', path: '/engine-relacionamento' },
+    { type: 'high', message: `${overdueClients} clientes com faturas em atraso ou em aberto vencidas`, action: 'Financeiro', path: '/financeiro' },
+    { type: 'medium', message: `${slaLateClients} clientes com SLA de atendimento em campo estourado`, action: 'Campo', path: '/manutencao' },
+    { type: 'info', message: `${massiveClients} clientes impactados por massivas de rede no período`, action: 'Rede', path: '/engine-rede' },
+  ], [criticalCount, cancelThreats, overdueClients, slaLateClients, massiveClients, criticalThreshold])
 
-  const radarData = [
-    { metric: 'Fin. Score', value: Math.round(mockCustomers.filter(c => c.healthScores.classification === 'critical' || c.healthScores.classification === 'high_risk').reduce((a, c) => a + c.healthScores.financial.value, 0) / Math.max(topRisk.length, 1)) },
-    { metric: 'Net. Score', value: Math.round(topRisk.reduce((a, c) => a + c.healthScores.network.value, 0) / Math.max(topRisk.length, 1)) },
-    { metric: 'Rel. Score', value: Math.round(topRisk.reduce((a, c) => a + c.healthScores.relationship.value, 0) / Math.max(topRisk.length, 1)) },
-    { metric: 'Inst. Score', value: Math.round(topRisk.reduce((a, c) => a + c.healthScores.installation.value, 0) / Math.max(topRisk.length, 1)) },
-    { metric: 'Com. Score', value: Math.round(topRisk.reduce((a, c) => a + c.healthScores.commercial.value, 0) / Math.max(topRisk.length, 1)) },
-    { metric: 'Perfil', value: Math.round(topRisk.reduce((a, c) => a + c.healthScores.profile.value, 0) / Math.max(topRisk.length, 1)) },
-  ]
+  // Radar: média do score de cada engine no grupo de maior risco
+  const radarData = useMemo(() =>
+    engines.map((eng) => {
+      const vals = topRisk.flatMap((r) => r.byEngine.filter((b) => b.key === eng.key).map((b) => b.healthScore))
+      return { metric: eng.label, value: vals.length ? Math.round(vals.reduce((a, v) => a + v, 0) / vals.length) : 0 }
+    }),
+    [engines, topRisk],
+  )
+
+  const monthlyData = realMonthly.map((m) => ({ month: m.month, 'No prazo': m.onTime, 'Em atraso': m.late, 'Em aberto': m.overdue }))
 
   const runModel = () => {
     setModelRunning(true); setModelDone(false)
-    setTimeout(() => { setModelRunning(false); setModelDone(true) }, 2500)
+    setTimeout(() => { setModelRunning(false); setModelDone(true) }, 2200)
   }
 
   return (
@@ -110,10 +122,10 @@ export default function AiPredictivePage() {
               <Brain size={18} className="text-white" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Motor de IA Preditiva — Health Score Engine</h2>
-              <p className="text-sm text-gray-400 mt-0.5">6 módulos de score · 3 riscos derivados · análise multivaríavel contínua</p>
+              <h2 className="text-base font-bold text-white">IA Preditiva — Health Score combinado</h2>
+              <p className="text-sm text-gray-400 mt-0.5">7 módulos · risco por cliente</p>
               <div className="flex items-center gap-4 mt-2 flex-wrap">
-                {[{ label: 'Acurácia', value: '89.2%' }, { label: 'AUC-ROC', value: '0.93' }, { label: 'Variáveis', value: '42' }, { label: 'Última exec.', value: 'Hoje 03:00' }].map(({ label, value }) => (
+                {[{ label: 'Módulos', value: String(engines.length) }, { label: 'Clientes', value: ranking.length.toLocaleString('pt-BR') }, { label: 'Em risco', value: atRisk.length.toLocaleString('pt-BR') }].map(({ label, value }) => (
                   <div key={label} className="flex items-center gap-1.5">
                     <span className="text-[10px] text-gray-500">{label}:</span>
                     <span className="text-[11px] font-semibold text-brand-cyan font-mono">{value}</span>
@@ -134,15 +146,15 @@ export default function AiPredictivePage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Críticos (HS < 20)" value={mockCustomers.filter(c => c.healthScores.classification === 'critical').length} subtitle="Ação imediata" variant="danger" icon={<AlertTriangle size={14} />} iconColor="text-risk-critical" />
-        <KpiCard label="Receita Anual em Risco" value={formatCurrency(totalLostRevenue)} subtitle="Probabilidade × MRR × 12" variant="warning" icon={<DollarSign size={14} />} iconColor="text-risk-medium" />
-        <KpiCard label="Risco de Equipamento" value={equipmentHighRisk} subtitle="Probabilidade > 60%" variant="danger" icon={<Package size={14} />} iconColor="text-risk-high" />
+        <KpiCard label="Clientes Críticos" value={criticalCount.toLocaleString('pt-BR')} subtitle={`Health combinado < ${criticalThreshold}`} variant="danger" icon={<AlertTriangle size={14} />} iconColor="text-risk-critical" />
+        <KpiCard label="Receita Anual em Risco" value={formatCurrency(annualRevenueRisk)} subtitle="Risco × MRR × 12" variant="warning" icon={<DollarSign size={14} />} iconColor="text-risk-medium" />
+        <KpiCard label="Ameaças de Cancelamento" value={cancelThreats.toLocaleString('pt-BR')} subtitle="Registradas no relacionamento" variant="danger" icon={<MessageSquare size={14} />} iconColor="text-risk-high" />
         <KpiCard label="Alertas Automáticos" value={autoAlerts.length} subtitle="Ações recomendadas" variant="brand" icon={<Radio size={14} />} iconColor="text-brand-blue" />
       </div>
 
       {/* Auto alerts */}
       <Card>
-        <CardHeader title="Alertas Automáticos do Modelo" subtitle="Gerados em tempo real pela engine de IA" icon={<Radio size={14} />} />
+        <CardHeader title="Alertas Automáticos do Modelo" subtitle="Derivados dos sinais de cada módulo" icon={<Radio size={14} />} />
         <div className="p-4 space-y-2">
           {autoAlerts.map((alert, i) => {
             const cfg = { critical: { bg: 'bg-risk-critical/10 border-risk-critical/25', text: 'text-risk-critical', dot: 'bg-risk-critical animate-pulse' }, high: { bg: 'bg-risk-high/10 border-risk-high/25', text: 'text-risk-high', dot: 'bg-risk-high' }, medium: { bg: 'bg-risk-medium/10 border-risk-medium/25', text: 'text-risk-medium', dot: 'bg-risk-medium' }, info: { bg: 'bg-brand-blue/10 border-brand-blue/25', text: 'text-brand-blue', dot: 'bg-brand-blue' } }[alert.type as 'critical' | 'high' | 'medium' | 'info']!
@@ -160,33 +172,29 @@ export default function AiPredictivePage() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
-          <CardHeader title="Evolução + Previsão de Churn" subtitle="Histórico e projeção 3 meses" icon={<Activity size={14} />} />
+          <CardHeader title="Adimplência da Base — Histórico Real" subtitle="Faturas no prazo × atraso × em aberto vencidas" icon={<Activity size={14} />} />
           <div className="p-4 h-52">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={FORECAST_DATA} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+              <AreaChart data={monthlyData} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="gChurn" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="gRecov" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
-                  </linearGradient>
+                  <linearGradient id="gOn" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
+                  <linearGradient id="gLate" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f97316" stopOpacity={0.3} /><stop offset="95%" stopColor="#f97316" stopOpacity={0} /></linearGradient>
+                  <linearGradient id="gOvd" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} /><stop offset="95%" stopColor="#ef4444" stopOpacity={0} /></linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a2236" />
                 <XAxis dataKey="month" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="churned" name="Cancelamentos" stroke="#7c3aed" fill="url(#gChurn)" strokeWidth={2} dot={false} />
-                <Area type="monotone" dataKey="recovered" name="Recuperados" stroke="#22d3ee" fill="url(#gRecov)" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="No prazo" stroke="#10b981" fill="url(#gOn)" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="Em atraso" stroke="#f97316" fill="url(#gLate)" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="Em aberto" stroke="#ef4444" fill="url(#gOvd)" strokeWidth={2} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
         <Card>
-          <CardHeader title="Radar de Scores" subtitle="Média dos clientes em risco" />
+          <CardHeader title="Radar de Scores" subtitle="Média dos módulos no grupo de risco" />
           <div className="p-2 h-52">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={radarData}>
@@ -199,53 +207,41 @@ export default function AiPredictivePage() {
         </Card>
       </div>
 
+      {/* Filtros de contrato / nome / cidade */}
+      <ContractFilters filters={filters} onChange={setFilters} cities={cities} resultCount={visibleRanking.length} totalCount={ranking.length} />
+
       {/* Top risk with AI explanations */}
       <Card>
-        <CardHeader title="Clientes com Maior Risco — Explicação de IA" subtitle="Health Score crítico com análise automatizada por cliente" icon={<Brain size={14} />} />
+        <CardHeader title="Clientes com Maior Risco — Explicação de IA" subtitle="Health combinado dos módulos com análise automatizada por cliente" icon={<Brain size={14} />} />
         <div className="divide-y divide-app-border">
-          {topRisk.map((c, i) => {
-            const color = HEALTH_COLORS[c.healthScores.classification]
-            const isSelected = selectedCustomer?.id === c.id
+          {topRisk.map((r, i) => {
+            const color = HEALTH_COLORS[r.classification]
+            const isSelected = selectedId === r.customerId
+            const c = clientById.get(r.customerId)
             return (
-              <div key={c.id} className={cn('transition-colors', isSelected && 'bg-app-cardHover')}>
-                <div className="flex items-center gap-3 px-5 py-3 cursor-pointer group" onClick={() => setSelectedCustomer(isSelected ? null : c)}>
+              <div key={r.customerId} className={cn('transition-colors', isSelected && 'bg-app-cardHover')}>
+                <div className="flex items-center gap-3 px-5 py-3 cursor-pointer group" onClick={() => setSelectedId(isSelected ? null : r.customerId)}>
                   <span className="text-sm font-bold text-gray-700 w-5">{i + 1}</span>
-
-                  {/* Mini gauge */}
-                  <HealthGauge score={c.healthScores.overall} size={42} showLabel={false} />
-
+                  <HealthGauge score={r.overallHealth} size={42} showLabel={false} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-gray-100 truncate">{c.name}</p>
-                    <p className="text-[10px] text-gray-500">{c.city} · {c.plan}</p>
+                    <p className="text-xs font-semibold text-gray-100 truncate">{r.customerName}</p>
+                    <p className="text-[10px] text-gray-500">{r.city} · {r.plan}</p>
                   </div>
-
                   <div className="hidden sm:flex flex-col items-end">
-                    <span style={{ color }} className="text-sm font-bold">{c.healthScores.overall}</span>
-                    <span className="text-[9px] text-gray-600">{HEALTH_LABELS[c.healthScores.classification]}</span>
+                    <span style={{ color }} className="text-sm font-bold">{r.overallHealth}</span>
+                    <span className="text-[9px] text-gray-600">{HEALTH_LABELS[r.classification]}</span>
                   </div>
-
                   <div className="hidden md:flex flex-col items-end">
-                    <span className="text-xs font-mono text-risk-critical">{c.derivedRisks.churn.probability}%</span>
+                    <span className="text-xs font-mono text-risk-critical">{r.overallChurnRisk}%</span>
                     <span className="text-[10px] text-gray-600">churn</span>
                   </div>
-
                   <div className="hidden lg:flex flex-col items-end">
-                    <span className="text-xs font-mono text-risk-medium">{c.derivedRisks.equipmentReturn.probability}%</span>
-                    <span className="text-[10px] text-gray-600">equip.</span>
+                    <span className="text-xs font-mono text-risk-medium">{r.enginesPresent}</span>
+                    <span className="text-[10px] text-gray-600">módulos</span>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/cliente360?id=${c.id}`) }}
-                      className="hidden group-hover:flex items-center gap-1 text-[10px] text-brand-blue"
-                    >
-                      <ChevronRight size={10} /> 360°
-                    </button>
-                    <ChevronRight size={12} className={cn('text-gray-600 transition-transform', isSelected && 'rotate-90')} />
-                  </div>
+                  <ChevronRight size={12} className={cn('text-gray-600 transition-transform', isSelected && 'rotate-90')} />
                 </div>
 
-                {/* AI explanation panel */}
                 {isSelected && (
                   <div className="mx-5 mb-3 p-3.5 rounded-lg bg-brand-violet/10 border border-brand-violet/25">
                     <div className="flex items-center gap-1.5 mb-2">
@@ -253,19 +249,14 @@ export default function AiPredictivePage() {
                       <span className="text-[10px] font-bold text-brand-violetLight uppercase tracking-wider">Análise de IA</span>
                     </div>
                     <p className="text-xs text-gray-300 leading-relaxed font-mono">
-                      <TypewriterText text={generateAiExplanation(c)} />
+                      <TypewriterText text={explain(c, r)} />
                     </p>
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      {(['financial', 'network', 'relationship'] as const).map((key) => (
-                        <div key={key} className="text-center">
-                          <p style={{ color: HEALTH_COLORS[c.healthScores[key].classification] }} className="text-sm font-bold">{c.healthScores[key].value}</p>
-                          <p className="text-[9px] text-gray-600 capitalize">{key}</p>
+                    <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                      {r.byEngine.map((b) => (
+                        <div key={b.key} className="text-center">
+                          <p style={{ color: HEALTH_COLORS[b.classification] }} className="text-sm font-bold">{b.healthScore}</p>
+                          <p className="text-[9px] text-gray-600 truncate">{b.label}</p>
                         </div>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {c.derivedRisks.churn.factors.map((f) => (
-                        <span key={f} className="text-[10px] bg-brand-violet/15 border border-brand-violet/25 text-brand-violetLight rounded-full px-2 py-0.5">{f}</span>
                       ))}
                     </div>
                   </div>
@@ -275,6 +266,10 @@ export default function AiPredictivePage() {
           })}
         </div>
       </Card>
+
+      <p className="text-[10px] text-gray-500 text-center">
+        {ranking.length.toLocaleString('pt-BR')} clientes pontuados · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
+      </p>
     </div>
   )
 }

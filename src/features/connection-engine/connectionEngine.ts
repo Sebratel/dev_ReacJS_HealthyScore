@@ -1,17 +1,10 @@
 import type {
-  RealClient, HealthClassification,
+  RealClient,
   ConnectionEngineScore, ConnectionEngineData, ConnectionScoreFactor,
   ConnectionEngineConfig, ConnectionIndicatorSummary,
 } from '@/types'
 import { DEFAULT_CONNECTION_CONFIG, CONNECTION_INDICATOR_ORDER } from './connectionConfig'
-
-function scoreToHealthClass(v: number): HealthClassification {
-  if (v >= 81) return 'excellent'
-  if (v >= 61) return 'healthy'
-  if (v >= 41) return 'attention'
-  if (v >= 21) return 'high_risk'
-  return 'critical'
-}
+import { scoreToHealthClass } from '@/utils/health'
 const clamp = (v: number, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(v)))
 
 // ─── Score por cliente — 100% real + config ────────────────────

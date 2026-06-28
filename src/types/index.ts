@@ -467,12 +467,13 @@ export interface RealClient {
   paymentForm: string
   city: string
   neighborhood: string
-  state: string
-  cpfCnpj: string
-  phone: string
-  email: string
-  lat: number | null
-  lng: number | null
+  // PII/geo removidos do snapshot enviado ao navegador (não usados no front) — opcionais.
+  state?: string
+  cpfCnpj?: string
+  phone?: string
+  email?: string
+  lat?: number | null
+  lng?: number | null
   onTimeInvoices: number
   lateInvoices: number
   overdueInvoices: number
@@ -480,6 +481,38 @@ export interface RealClient {
   renegotiations: number
   trustReleases: number
   equipment: string[]      // modelos de equipamento alocados no contrato
+  // Field Engine — protocolos de manutenção
+  protocolCount: number
+  scheduleCount: number
+  slaLateCount: number
+  avgSlaDays: number
+  reasons: string[]
+  technicians: string[]
+  // Installation Engine — protocolos de instalação (ATV)
+  installProtocols: number
+  installScheduleCount: number
+  installSlaLateCount: number
+  installAvgSlaDays: number
+  installSaleToScheduleDays: number
+  installTechnicians: string[]
+  // Relationship Engine — protocolos de relacionamento
+  relProtocolCount: number
+  relRecurrenceDays: number
+  relAvgOverageHours: number
+  relCancelThreats: number
+  relTypes: string[]
+  relAttendants: string[]
+  // Network Engine — infraestrutura + massivas (cross-DB)
+  netSite: string
+  netConcentrator: string
+  netAccessPoint: string
+  netSplitter: string
+  netSplitterCode: string
+  netSlot: string
+  netPon: string
+  netMassiveCount: number
+  netAvgOfflineMin: number
+  netAvgOverageMin: number
 }
 
 // Sinais financeiros REAIS por cliente/contrato (vindos do PostgreSQL via ETL)
@@ -634,12 +667,31 @@ export interface ConnectionEngineData {
   modelBreakdown: { model: string; count: number; avgScore: number }[]
 }
 
-// ─── Network Engine ────────────────────────────────────────────
+// ─── Network Engine (100% real + config · massivas cross-DB) ───
 export interface NetworkInfraScoreFactor {
   label: string
   points: number
   impact: 'positive' | 'negative'
-  category: 'gmud' | 'massiva' | 'quebra' | 'collaborator' | 'infra' | 'connection'
+}
+
+// Indicadores configuráveis na engine de rede (todos por faixa)
+export type NetworkIndicatorKey =
+  | 'massiveCount'   // Qtd. de massivas por contrato
+  | 'avgOffline'     // SLA médio offline (event_identified → closed)
+  | 'slaOverage'     // Atraso de SLA (closed − expected)
+
+export interface NetworkIndicatorConfig {
+  key: NetworkIndicatorKey
+  label: string
+  description: string
+  mode: FinancialIndicatorMode
+  indices: FinancialIndicatorIndex[]
+  dynamic: boolean
+  query: string
+}
+
+export interface NetworkEngineConfig {
+  indicators: Record<NetworkIndicatorKey, NetworkIndicatorConfig>
 }
 
 export interface NetworkEngineScore {
@@ -648,130 +700,149 @@ export interface NetworkEngineScore {
   city: string
   plan: string
   monthlyValue: number
-  networkScore: number
-  infraScore: number
-  connectionScore: number
+  site: string
+  concentrator: string
+  accessPoint: string
+  splitter: string
+  splitterCode: string
+  slot: string
+  pon: string
+  massiveCount: number
+  avgOfflineMin: number
+  avgOverageMin: number
+  healthScore: number
+  churnRisk: number
+  revenueRisk: number
   classification: HealthClassification
-  trend: Trend
-  trendValue: number
   factors: NetworkInfraScoreFactor[]
   positiveFactors: NetworkInfraScoreFactor[]
   negativeFactors: NetworkInfraScoreFactor[]
-  site: string
-  olt: string
-  slot: number
-  port: number
-  splitter: string
-  gmudCount: number
-  massivasCount: number
-  quebraCount: number
-  collaboratorScore: number
-  collaboratorName: string
+  indicators: EngineIndicatorBreakdown[]
 }
 
-export interface NetworkEngineInsight {
-  finding: string
-  confidence: number
-  factor: string
-  impact: 'high' | 'medium' | 'low'
-  affectedCount: number
-  churnMultiplier: number
+export interface NetworkIndicatorSummary {
+  key: NetworkIndicatorKey
+  label: string
+  mode: FinancialIndicatorMode
+  totalIndices: number
+  configuredCount: number
 }
 
 export interface NetworkEngineData {
   scores: NetworkEngineScore[]
-  avgNetworkScore: number
-  avgInfraScore: number
-  avgConnectionScore: number
+  avgHealthScore: number
+  avgChurnRisk: number
+  totalRevenueRisk: number
   criticalCount: number
   highRiskCount: number
-  avgGmudCount: number
-  avgMassivasCount: number
-  insights: NetworkEngineInsight[]
-  oltBreakdown: { olt: string; site: string; count: number; avgNetworkScore: number; avgInfraScore: number }[]
-  siteBreakdown: { site: string; count: number; avgNetworkScore: number }[]
-  splitterBreakdown: { splitter: string; count: number; avgScore: number }[]
-  collaboratorBreakdown: { name: string; score: number; count: number; avgNetworkScore: number }[]
-  gmudBreakdown: { label: string; count: number; avgScore: number }[]
-  massivasSlaBreakdown: { label: string; count: number; avgScore: number }[]
-  cityBreakdown: { city: string; avgScore: number; count: number }[]
-  scoreHistory: { month: string; avgNetworkScore: number; avgInfraScore: number; avgConnectionScore: number }[]
+  affectedClients: number
+  indicatorSummary: NetworkIndicatorSummary[]
+  cityBreakdown: { city: string; avgScore: number; avgRisk: number; count: number }[]
+  siteBreakdown: { site: string; count: number; avgScore: number }[]
+  splitterBreakdown: { splitter: string; count: number; avgScore: number; avgOfflineMin: number }[]
 }
 
-// ─── Field Engine ──────────────────────────────────────────────
+// ─── Field Engine (100% real + config) ─────────────────────────
 export interface FieldScoreFactor {
   label: string
   points: number
   impact: 'positive' | 'negative'
-  category: 'visits' | 'scheduling' | 'sla' | 'punctuality' | 'returns'
+}
+
+// Indicadores configuráveis na engine de campo
+export type FieldIndicatorKey =
+  | 'protocolCount'   // Quantidade de protocolos (faixas)
+  | 'reasons'         // Motivos (categorias 1-4) — dinâmico
+  | 'scheduleCount'   // Agendamentos por protocolo (faixas)
+  | 'slaOverdue'      // SLAs atrasados (faixas)
+  | 'avgSla'          // Média de SLA em dias (faixas)
+  | 'technician'      // Técnicos — dinâmico
+
+export interface FieldIndicatorConfig {
+  key: FieldIndicatorKey
+  label: string
+  description: string
+  mode: FinancialIndicatorMode
+  indices: FinancialIndicatorIndex[]
+  dynamic: boolean
+  query: string
+}
+
+export interface FieldEngineConfig {
+  indicators: Record<FieldIndicatorKey, FieldIndicatorConfig>
 }
 
 export interface FieldEngineScore {
   customerId: string
   customerName: string
   city: string
-  neighborhood: string
   plan: string
   monthlyValue: number
-  fieldScore: number
+  protocolCount: number
+  scheduleCount: number
+  slaLateCount: number
+  avgSlaDays: number
+  reasons: string[]
+  technicians: string[]
+  healthScore: number
+  churnRisk: number
+  revenueRisk: number
   classification: HealthClassification
-  trend: Trend
-  trendValue: number
   factors: FieldScoreFactor[]
   positiveFactors: FieldScoreFactor[]
   negativeFactors: FieldScoreFactor[]
-  fieldVisits: number
-  visitMotives: string[]
-  technicianName: string
-  schedulingChanges: number
-  schedulingChangeBy: 'client' | 'us' | 'both' | 'none'
-  arrivedLate: boolean
-  avgSlaHours: number
-  slaBreaches: number
-  slaCompliant: boolean
-  technicalReturns: number
+  indicators: EngineIndicatorBreakdown[]
 }
 
-export interface FieldEngineInsight {
-  finding: string
-  confidence: number
-  factor: string
-  impact: 'high' | 'medium' | 'low'
-  affectedCount: number
-  churnMultiplier: number
-}
-
-export interface FieldEngineTechnicianStats {
-  name: string
-  count: number
-  avgScore: number
-  slaBreaches: number
-  lateArrivals: number
-  avgVisits: number
+export interface FieldIndicatorSummary {
+  key: FieldIndicatorKey
+  label: string
+  mode: FinancialIndicatorMode
+  totalIndices: number
+  configuredCount: number
 }
 
 export interface FieldEngineData {
   scores: FieldEngineScore[]
-  avgFieldScore: number
+  avgHealthScore: number
+  avgChurnRisk: number
+  totalRevenueRisk: number
   criticalCount: number
   highRiskCount: number
-  lateArrivalCount: number
-  avgSlaHours: number
-  totalSlaBreaches: number
-  insights: FieldEngineInsight[]
-  technicianBreakdown: FieldEngineTechnicianStats[]
-  visitMotiveBreakdown: { motive: string; count: number; pct: number }[]
-  schedulingChangeBreakdown: { label: string; count: number; pct: number }[]
-  slaBreakdown: { label: string; count: number; avgScore: number }[]
-  scoreHistory: { month: string; avgScore: number }[]
+  withProtocols: number
+  indicatorSummary: FieldIndicatorSummary[]
+  cityBreakdown: { city: string; avgScore: number; avgRisk: number; count: number }[]
+  reasonBreakdown: { reason: string; count: number; avgScore: number }[]
+  technicianBreakdown: { technician: string; count: number; avgScore: number }[]
 }
 
-// ─── Installation Engine ───────────────────────────────────────
+// ─── Installation Engine (100% real + config) ──────────────────
 export interface InstallationScoreFactor {
   label: string
   points: number
   impact: 'positive' | 'negative'
-  category: 'installer' | 'uc_type' | 'ont' | 'warranty' | 'delay' | 'scheduling'
+}
+
+// Indicadores configuráveis na engine de instalação
+export type InstallationIndicatorKey =
+  | 'scheduleCount'    // Alterações de agendamento (faixas)
+  | 'avgSla'           // Média de SLA do protocolo (faixas)
+  | 'slaOverdue'       // SLAs atrasados (faixas)
+  | 'saleToSchedule'   // Média venda → agenda (faixas)
+  | 'technician'       // Técnicos — dinâmico
+
+export interface InstallationIndicatorConfig {
+  key: InstallationIndicatorKey
+  label: string
+  description: string
+  mode: FinancialIndicatorMode
+  indices: FinancialIndicatorIndex[]
+  dynamic: boolean
+  query: string
+}
+
+export interface InstallationEngineConfig {
+  indicators: Record<InstallationIndicatorKey, InstallationIndicatorConfig>
 }
 
 export interface InstallationEngineScore {
@@ -780,48 +851,41 @@ export interface InstallationEngineScore {
   city: string
   plan: string
   monthlyValue: number
-  installationScore: number
+  protocolCount: number
+  scheduleCount: number
+  slaLateCount: number
+  avgSlaDays: number
+  saleToScheduleDays: number
+  technicians: string[]
+  healthScore: number
+  churnRisk: number
+  revenueRisk: number
   classification: HealthClassification
-  trend: Trend
-  trendValue: number
   factors: InstallationScoreFactor[]
   positiveFactors: InstallationScoreFactor[]
   negativeFactors: InstallationScoreFactor[]
-  installerName: string
-  ucType: HousingType
-  ontModel: string
-  ontBrand: string
-  warrantyTickets: number
-  installDelayDays: number
-  technicalReturns: number
-  schedulingChanges: number
-  slaCompliant: boolean
+  indicators: EngineIndicatorBreakdown[]
 }
 
-export interface InstallationEngineInsight {
-  finding: string
-  confidence: number
-  factor: string
-  impact: 'high' | 'medium' | 'low'
-  affectedCount: number
-  churnMultiplier: number
+export interface InstallationIndicatorSummary {
+  key: InstallationIndicatorKey
+  label: string
+  mode: FinancialIndicatorMode
+  totalIndices: number
+  configuredCount: number
 }
 
 export interface InstallationEngineData {
   scores: InstallationEngineScore[]
-  avgInstallationScore: number
+  avgHealthScore: number
+  avgChurnRisk: number
+  totalRevenueRisk: number
   criticalCount: number
   highRiskCount: number
-  avgWarrantyTickets: number
-  avgInstallDelay: number
-  totalReturns: number
-  insights: InstallationEngineInsight[]
-  installerBreakdown: { name: string; count: number; avgScore: number; warrantyRate: number; returnRate: number; avgDelay: number }[]
-  ucTypeBreakdown: { label: string; key: string; count: number; avgScore: number; warrantyRate: number }[]
-  ontBreakdown: { brand: string; count: number; avgScore: number; warrantyRate: number }[]
-  warrantyBreakdown: { label: string; count: number; pct: number }[]
-  cityBreakdown: { city: string; avgScore: number; count: number }[]
-  scoreHistory: { month: string; avgScore: number }[]
+  withInstall: number
+  indicatorSummary: InstallationIndicatorSummary[]
+  cityBreakdown: { city: string; avgScore: number; avgRisk: number; count: number }[]
+  technicianBreakdown: { technician: string; count: number; avgScore: number }[]
 }
 
 // ─── Cancellation Management ───────────────────────────────────
@@ -930,12 +994,34 @@ export interface CompetitorData {
   insights: CompetitorInsight[]
 }
 
-// ─── Relationship Engine ───────────────────────────────────────
+// ─── Relationship Engine (100% real + config) ──────────────────
 export interface RelationshipScoreFactor {
   label: string
   points: number
   impact: 'positive' | 'negative'
-  category: 'tickets' | 'nps' | 'sentiment' | 'scrapping' | 'threats' | 'billing'
+}
+
+// Indicadores configuráveis na engine de relacionamento
+export type RelationshipIndicatorKey =
+  | 'protocolCount'    // Qtd. de protocolos abertos (faixas)
+  | 'recurrence'       // Recorrência venda → abertura (faixas)
+  | 'protocolType'     // Tipo de protocolo — dinâmico
+  | 'cancelThreats'    // Ameaças de cancelamento (faixas)
+  | 'attendant'        // Atendente — dinâmico
+  | 'slaSatisfaction'  // Satisfação via SLA (atraso médio, faixas)
+
+export interface RelationshipIndicatorConfig {
+  key: RelationshipIndicatorKey
+  label: string
+  description: string
+  mode: FinancialIndicatorMode
+  indices: FinancialIndicatorIndex[]
+  dynamic: boolean
+  query: string
+}
+
+export interface RelationshipEngineConfig {
+  indicators: Record<RelationshipIndicatorKey, RelationshipIndicatorConfig>
 }
 
 export interface RelationshipEngineScore {
@@ -944,56 +1030,41 @@ export interface RelationshipEngineScore {
   city: string
   plan: string
   monthlyValue: number
-  relationshipScore: number
+  protocolCount: number
+  recurrenceDays: number
+  avgOverageHours: number
+  cancelThreats: number
+  protocolTypes: string[]
+  attendants: string[]
+  healthScore: number
+  churnRisk: number
+  revenueRisk: number
   classification: HealthClassification
-  trend: Trend
-  trendValue: number
   factors: RelationshipScoreFactor[]
   positiveFactors: RelationshipScoreFactor[]
   negativeFactors: RelationshipScoreFactor[]
-  totalTickets: number
-  recurrentTickets: number
-  slaBreaches: number
-  avgSlaHours: number
-  secondCopyRequests: number
-  planDowngrade: boolean
-  attendant: string
-  npsScore: number
-  sentimentScore: number
-  nativeContacts: number
-  matrixContacts: number
-  cancellationThreats: number
+  indicators: EngineIndicatorBreakdown[]
 }
 
-export interface RelationshipEngineInsight {
-  finding: string
-  confidence: number
-  factor: string
-  impact: 'high' | 'medium' | 'low'
-  affectedCount: number
-  churnMultiplier: number
+export interface RelationshipIndicatorSummary {
+  key: RelationshipIndicatorKey
+  label: string
+  mode: FinancialIndicatorMode
+  totalIndices: number
+  configuredCount: number
 }
 
 export interface RelationshipEngineData {
   scores: RelationshipEngineScore[]
-  avgRelationshipScore: number
+  avgHealthScore: number
+  avgChurnRisk: number
+  totalRevenueRisk: number
   criticalCount: number
   highRiskCount: number
-  avgNps: number
-  avgSentiment: number
-  totalSlaBreaches: number
-  totalNativeContacts: number
-  totalMatrixContacts: number
-  insights: RelationshipEngineInsight[]
-  ticketAreaBreakdown: { area: string; count: number; avgSlaHours: number; slaBreachRate: number; recurrenceRate: number }[]
-  npsBreakdown: { label: string; scoreRange: string; count: number; pct: number; color: string }[]
-  sentimentBreakdown: { label: string; count: number; pct: number; avgScore: number; color: string }[]
-  attendantBreakdown: { name: string; count: number; avgScore: number; avgNps: number; slaBreaches: number; avgSentiment: number }[]
-  nativeReasonBreakdown: { label: string; count: number; pct: number }[]
-  matrixReasonBreakdown: { label: string; count: number; pct: number }[]
-  scoreHistory: { month: string; avgScore: number; avgNps: number }[]
-  npsScoreDistribution: { score: number; count: number }[]
-  totalNpsSurveysAnswered: number
-  totalSecondCopyRequests: number
-  totalPlanDowngrades: number
+  withProtocols: number
+  totalCancelThreats: number
+  indicatorSummary: RelationshipIndicatorSummary[]
+  cityBreakdown: { city: string; avgScore: number; avgRisk: number; count: number }[]
+  typeBreakdown: { type: string; count: number; avgScore: number }[]
+  attendantBreakdown: { attendant: string; count: number; avgScore: number }[]
 }

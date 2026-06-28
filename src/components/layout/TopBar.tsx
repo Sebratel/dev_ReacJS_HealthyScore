@@ -1,23 +1,23 @@
-import { Bell, Search, Settings, AlertTriangle, LogOut } from 'lucide-react'
-import { useState } from 'react'
+import { Bell, Settings, AlertTriangle, LogOut } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
-  '/': { title: 'Dashboard Executivo', subtitle: 'Health Score · Riscos Derivados · Visão Operacional' },
-  '/clientes': { title: 'Clientes — Health Score', subtitle: 'Análise preditiva multimodular por cliente' },
-  '/cliente360': { title: 'Cliente 360°', subtitle: 'Health Score · 6 Módulos · 3 Riscos · Timeline' },
+  '/': { title: 'Dashboard Executivo', subtitle: 'Resumo dos Health Scores por módulo' },
   '/financeiro': { title: 'Financeiro', subtitle: 'Inadimplência, aging e receita em risco' },
-  '/rede': { title: 'Rede & Massivas', subtitle: 'Eventos de rede e impacto no churn' },
-  '/manutencao': { title: 'Manutenção', subtitle: 'Protocolos, SLA e reincidência técnica' },
-  '/comercial': { title: 'Comercial', subtitle: 'Performance de vendedores e qualidade de aquisição' },
-  '/ia': { title: 'IA Preditiva', subtitle: 'Health Score Engine · Previsões · Alertas automáticos' },
+  '/engine-comercial': { title: 'Comercial', subtitle: 'Performance de vendedores e qualidade de aquisição' },
+  '/engine-conexao': { title: 'Conexão', subtitle: 'Qualidade de CPE e equipamentos' },
+  '/engine-rede': { title: 'Rede', subtitle: 'Infraestrutura, massivas e impacto no churn' },
+  '/manutencao': { title: 'Campo', subtitle: 'Protocolos, SLA e reincidência técnica' },
+  '/engine-instalacao': { title: 'Instalação', subtitle: 'Qualidade e SLA de instalação' },
+  '/engine-relacionamento': { title: 'Relacionamento', subtitle: 'NPS, sentimento e ameaças de cancelamento' },
+  '/ia': { title: 'IA Preditiva', subtitle: 'Health Score combinado · Previsões · Alertas automáticos' },
+  '/configuracoes': { title: 'Configurações', subtitle: 'Limiares de Health Score e parâmetros globais' },
 }
 
 export function TopBar() {
   const location = useLocation()
   const navigate = useNavigate()
-  const [searchVal, setSearchVal] = useState('')
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const handleLogout = () => { logout(); navigate('/login', { replace: true }) }
@@ -32,17 +32,6 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="relative hidden md:flex items-center">
-          <Search size={13} className="absolute left-2.5 text-gray-500 pointer-events-none" />
-          <input
-            value={searchVal}
-            onChange={(e) => setSearchVal(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && searchVal.trim()) { navigate('/clientes'); setSearchVal('') } }}
-            placeholder="Buscar cliente, cidade..."
-            className="pl-8 pr-3 h-7 w-52 text-xs bg-app-card border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50 focus:bg-app-cardHover transition-all"
-          />
-        </div>
-
         <button className="relative h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all">
           <Bell size={13} />
           <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-risk-critical animate-pulse-slow" />
@@ -56,7 +45,7 @@ export function TopBar() {
           </span>
         </div>
 
-        <button className="h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all" aria-label="Configurações">
+        <button onClick={() => navigate('/configuracoes')} className="h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all" aria-label="Configurações">
           <Settings size={13} />
         </button>
 

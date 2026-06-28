@@ -1,25 +1,23 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, Wifi, Wrench,
-  Brain, ChevronLeft, ChevronRight, Zap, UserSquare2, Cpu, Briefcase, Network, PackageOpen,
-  XCircle, Building2, MessageSquare,
+  LayoutDashboard, Wifi, Wrench, Brain, ChevronLeft, ChevronRight, Zap,
+  DollarSign, Briefcase, Network, PackageOpen, MessageSquare, Settings,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
+import { realTotals } from '@/data/realClients'
 import { cn } from '@/utils/cn'
 
 const NAV_ITEMS = [
-  { path: '/',                 icon: LayoutDashboard, label: 'Dashboard',         sublabel: 'Executivo' },
-  { path: '/cliente360',       icon: UserSquare2,     label: 'Timeline',          sublabel: 'Jornada Operacional' },
-  { path: '/financeiro',       icon: Cpu,             label: 'Financial Engine',  sublabel: 'Score Financeiro' },
-  { path: '/engine-comercial', icon: Briefcase,       label: 'Commercial Engine', sublabel: 'Score Comercial' },
-  { path: '/engine-conexao',   icon: Wifi,            label: 'Connection Engine', sublabel: 'Qualidade CPE' },
-  { path: '/engine-rede',      icon: Network,         label: 'Network Engine',    sublabel: 'Infraestrutura' },
-  { path: '/manutencao',       icon: Wrench,          label: 'Field Engine',      sublabel: 'Atendimento a Campo' },
-  { path: '/engine-instalacao',     icon: PackageOpen,    label: 'Installation Engine',  sublabel: 'Qualidade de Instalação' },
-  { path: '/cancelamentos',         icon: XCircle,        label: 'Cancelamento Engine',  sublabel: 'Score de Cancelamento' },
-  { path: '/concorrencia',          icon: Building2,      label: 'Competidores',         sublabel: 'Mapeamento Competitivo' },
-  { path: '/engine-relacionamento', icon: MessageSquare,  label: 'Relationship Engine',  sublabel: 'NPS · Sentimento' },
-  { path: '/ia',                    icon: Brain,          label: 'IA Preditiva',         sublabel: 'Previsões' },
+  { path: '/',                      icon: LayoutDashboard, label: 'Dashboard',       sublabel: 'Executivo' },
+  { path: '/financeiro',            icon: DollarSign,      label: 'Financeiro',      sublabel: 'Inadimplência e receita' },
+  { path: '/engine-comercial',      icon: Briefcase,       label: 'Comercial',       sublabel: 'Aquisição e vendedores' },
+  { path: '/engine-conexao',        icon: Wifi,            label: 'Conexão',         sublabel: 'Qualidade CPE' },
+  { path: '/engine-rede',           icon: Network,         label: 'Rede',            sublabel: 'Infraestrutura' },
+  { path: '/manutencao',            icon: Wrench,          label: 'Campo',           sublabel: 'Atendimento a campo' },
+  { path: '/engine-instalacao',     icon: PackageOpen,     label: 'Instalação',      sublabel: 'Qualidade de instalação' },
+  { path: '/engine-relacionamento', icon: MessageSquare,   label: 'Relacionamento',  sublabel: 'NPS · Sentimento' },
+  { path: '/ia',                    icon: Brain,           label: 'IA Preditiva',    sublabel: 'Previsões' },
+  { path: '/configuracoes',         icon: Settings,        label: 'Configurações',   sublabel: 'Limiares e parâmetros' },
 ]
 
 export function Sidebar() {
@@ -76,11 +74,11 @@ export function Sidebar() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
-            <span className="text-[10px] text-gray-400">Health Engine ativo</span>
+            <span className="text-[10px] text-gray-400">Monitoramento ativo</span>
           </div>
           <div className="mt-1 flex items-center gap-1">
             <Zap size={9} className="text-brand-cyan" />
-            <span className="text-[10px] text-brand-cyan font-mono">500 clientes · 12 módulos</span>
+            <span className="text-[10px] text-brand-cyan font-mono">{realTotals.clients.toLocaleString('pt-BR')} clientes · 7 módulos</span>
           </div>
         </div>
       )}

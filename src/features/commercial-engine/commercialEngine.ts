@@ -1,6 +1,6 @@
 import { differenceInMonths, differenceInYears } from 'date-fns'
 import type {
-  RealClient, HealthClassification,
+  RealClient,
   CommercialEngineScore, CommercialEngineData, CommercialScoreFactor,
   CommercialEngineConfig, CommercialIndicatorSummary, CommercialIndicatorKey,
 } from '@/types'
@@ -8,14 +8,7 @@ import {
   DEFAULT_COMMERCIAL_CONFIG, COMMERCIAL_INDICATOR_ORDER,
   contractAgeBucket, personAgeBucket, sellerTenureBucket, genderLabel,
 } from './commercialConfig'
-
-function scoreToHealthClass(v: number): HealthClassification {
-  if (v >= 81) return 'excellent'
-  if (v >= 61) return 'healthy'
-  if (v >= 41) return 'attention'
-  if (v >= 21) return 'high_risk'
-  return 'critical'
-}
+import { scoreToHealthClass } from '@/utils/health'
 const clamp = (v: number, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(v)))
 
 function monthsSince(dateStr: string | null): number {
