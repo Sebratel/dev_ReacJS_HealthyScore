@@ -58,6 +58,7 @@ export default function LoginPage() {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
   const navigate = useNavigate()
   const setUser = useAuthStore((s) => s.setUser)
+  const setAccessToken = useAuthStore((s) => s.setAccessToken)
   const reduced = !!useReducedMotion()
   const tokenClientRef = useRef<any>(null)
   const [busy, setBusy] = useState(false)
@@ -80,6 +81,8 @@ export default function LoginPage() {
             })
             const p = await r.json()
             setUser({ name: p.name ?? p.email, email: p.email, picture: p.picture })
+            // Guarda o token para autenticar as chamadas ao backend (/api).
+            setAccessToken(resp.access_token)
             navigate('/', { replace: true })
           } catch {
             setError('Falha ao obter os dados da conta Google.')
@@ -98,7 +101,7 @@ export default function LoginPage() {
     script.onload = init
     script.onerror = () => setError('Não foi possível carregar o Google Sign-In.')
     document.head.appendChild(script)
-  }, [clientId, navigate, setUser])
+  }, [clientId, navigate, setUser, setAccessToken])
 
   const handleGoogle = () => {
     if (!tokenClientRef.current) { setError('Google Sign-In ainda não carregou. Tente novamente.'); return }

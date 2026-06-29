@@ -1,6 +1,7 @@
-# Healthy Score Sebratel — stack de produção (SPA estática via nginx).
+# Healthy Score Sebratel — stack de produção (SPA estática via nginx + API de queries).
 # Deploy no Portainer: Stacks → Add stack → Repository → branch main.
-# Defina VITE_GOOGLE_CLIENT_ID nas "Environment variables" da stack.
+# Defina VITE_GOOGLE_CLIENT_ID (e, se quiser, QUERY_EDITOR_EMAILS) nas
+# "Environment variables" da stack.
 services:
   web:
     build:
@@ -12,11 +13,39 @@ services:
     image: healthyscore-web:latest
     container_name: healthyscore-web
     restart: unless-stopped
+    depends_on:
+      - api
     ports:
       # Porta do host (esquerda) configurável; 80 é a porta interna do nginx.
       - "${WEB_PORT:-8080}:80"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Backend de queries — serve/edita o catálogo de queries do ETL. O nginx do
+  # `web` faz proxy de /api/ para cá. Os overrides ficam em ./data (volume),
+  # compartilhado com a máquina/job que roda o ETL (fetch-clients.mjs).
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: churniq-api:latest
+    container_name: churniq-api
+    restart: unless-stopped
+    environment:
+      API_PORT: 8787
+      # Domínio de e-mail permitido para acessar o catálogo.
+      ALLOWED_DOMAIN: ${ALLOWED_DOMAIN:-sebratel.com.br}
+      # Allowlist (CSV) de quem pode EDITAR queries. Vazio → qualquer conta do domínio.
+      QUERY_EDITOR_EMAILS: ${QUERY_EDITOR_EMAILS:-}
+      QUERY_OVERRIDES_PATH: /app/data/query-overrides.json
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8787/api/health"]
       interval: 30s
       timeout: 3s
       retries: 3

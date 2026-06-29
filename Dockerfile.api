@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1
+# ─────────────────────────────────────────────────────────────
+# Backend de queries (server/index.mjs). Imagem Node enxuta que serve a API
+# /api/* e lê/grava os overrides em /app/data (volume compartilhado com o ETL).
+# ─────────────────────────────────────────────────────────────
+FROM node:20-alpine
+WORKDIR /app
+
+# Dependências de runtime (lockfile → build reprodutível). Sem devDependencies.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Código do backend + registro de queries (única fonte das queries).
+COPY server ./server
+COPY scripts ./scripts
+
+ENV NODE_ENV=production
+ENV API_PORT=8787
+ENV QUERY_OVERRIDES_PATH=/app/data/query-overrides.json
+
+EXPOSE 8787
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:8787/api/health >/dev/null 2>&1 || exit 1
+
+CMD ["node", "server/index.mjs"]
