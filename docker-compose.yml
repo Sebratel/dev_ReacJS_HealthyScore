@@ -11,6 +11,9 @@ services:
         # Client ID público do Google OAuth (variável de build do Vite).
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
     image: healthyscore-web:latest
+    # Imagem construída localmente (não existe em registry) → sempre buildar,
+    # nunca puxar. Evita o 'pull access denied' no redeploy do Portainer.
+    pull_policy: build
     container_name: healthyscore-web
     restart: unless-stopped
     networks:
@@ -38,6 +41,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     image: churniq-api:latest
+    pull_policy: build
     container_name: churniq-api
     restart: unless-stopped
     networks:
@@ -79,6 +83,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     image: churniq-api:latest
+    pull_policy: build
     container_name: churniq-etl
     restart: unless-stopped
     networks:
