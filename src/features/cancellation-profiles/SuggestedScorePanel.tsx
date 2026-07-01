@@ -384,6 +384,34 @@ export default function SuggestedScorePanel() {
   useEffect(() => { load(from, to) /* carga inicial */ // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Quando os coortes chegam, mescla as categorias que só aparecem entre
+  // CANCELADOS (ex.: vendedor/modelo descontinuado) nas listas da store — senão
+  // o "Aplicar" nesses índices seria no-op (a chave não existiria em indices).
+  useEffect(() => {
+    if (state.status !== 'ready') return
+    const L = deriveLists([...state.data.active, ...state.data.cancelled])
+    const snap = (arr: { value: string | number }[]) => arr.map((e) => ({ key: String(e.value), label: String(e.value) }))
+    const merge = (base: { key: string; label: string }[], extra: { key: string; label: string }[]) => {
+      const seen = new Set(base.map((b) => b.key))
+      return [...base, ...extra.filter((e) => !seen.has(e.key))]
+    }
+    store.syncPaymentForms([...new Set([...realPaymentForms, ...L.paymentForms.map((x) => x.key)])])
+    store.syncCommercialLists({
+      seller: merge(snap(realCommercial.sellers), L.sellers),
+      plan: merge(snap(realCommercial.plans), L.plans),
+      planValue: merge(realCommercial.values.map((e) => ({ key: String(e.value), label: formatCurrency(e.value) })), L.planValues),
+      city: merge(snap(realCommercial.cities), L.cities),
+      neighborhood: merge(snap(realCommercial.neighborhoods), L.neighborhoods),
+      clientGender: merge(realCommercial.clientGenders.map((e) => ({ key: e.value, label: genderLabel(e.value) })), L.clientGenders),
+      sellerGender: merge(realCommercial.sellerGenders.map((e) => ({ key: e.value, label: genderLabel(e.value) })), L.sellerGenders),
+    })
+    store.syncConnectionLists({ equipment: merge(snap(realConnection.models), L.models) })
+    store.syncFieldLists({ reasons: merge(snap(realField.reasons), L.reasons), technician: merge(snap(realField.technicians), L.fieldTechnicians) })
+    store.syncInstallationLists({ technician: merge(snap(realInstallation.technicians), L.installTechnicians) })
+    store.syncRelationshipLists({ protocolType: merge(snap(realRelationship.types), L.relTypes), attendant: merge(snap(realRelationship.attendants), L.attendants) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state])
+
   function applyPreset(days: number) {
     const t = todayISO(); const f = daysAgoISO(days)
     setFrom(f); setTo(t); load(f, t)

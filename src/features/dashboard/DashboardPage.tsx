@@ -96,6 +96,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-slide-up">
+      {loading && <div className="flex items-center justify-end gap-1.5 text-[11px] text-gray-500 -mb-3"><Loader2 size={11} className="animate-spin" /> atualizando…</div>}
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Clientes Ativos" value={(totals?.clients ?? 0).toLocaleString('pt-BR')} subtitle={`${(totals?.contracts ?? 0).toLocaleString('pt-BR')} contratos`} icon={<Users size={14} />} variant="brand" />

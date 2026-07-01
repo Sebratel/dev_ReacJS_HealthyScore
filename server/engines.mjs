@@ -151,6 +151,10 @@ export function runDashboard(clients, opts = {}) {
     }
   }
 
+  // Contrato por cliente (base deduplicada por client_id → 1 contrato/cliente)
+  // — anexado ao ranking p/ o filtro por nº de contrato funcionar.
+  const clientById = new Map(clients.map((c) => [c.clientId, c]))
+
   // Ranking combinado (health médio dos módulos em que o cliente aparece).
   const ranking = []
   for (const e of byClient.values()) {
@@ -158,6 +162,7 @@ export function runDashboard(clients, opts = {}) {
     const overallChurnRisk = 100 - overallHealth
     ranking.push({
       customerId: e.customerId, customerName: e.customerName, city: e.city, plan: e.plan, monthlyValue: e.monthlyValue,
+      contractNumber: clientById.get(e.customerId)?.contractNumber || '',
       overallHealth, overallChurnRisk, classification: scoreToHealthClass(overallHealth),
       revenueRisk: (overallChurnRisk / 100) * e.monthlyValue, enginesPresent: e.count, byEngine: e.byEngine,
     })
@@ -187,12 +192,11 @@ export function runDashboard(clients, opts = {}) {
   const ct = String(contract || '').trim().toLowerCase()
   let visible = ranking
   if (nm) visible = visible.filter((r) => r.customerName && r.customerName.toLowerCase().includes(nm))
-  if (ct) visible = visible.filter((r) => String(r.customerId).toLowerCase().includes(ct))
+  if (ct) visible = visible.filter((r) => String(r.customerId).toLowerCase().includes(ct) || String(r.contractNumber).toLowerCase().includes(ct))
   if (city) visible = visible.filter((r) => r.city === city)
   const top = visible.slice(0, topN)
 
   // Sinais brutos por cliente do topo (para a explicação de IA).
-  const clientById = new Map(clients.map((c) => [c.clientId, c]))
   const topWithSignals = top.map((r) => {
     const c = clientById.get(r.customerId)
     return {

@@ -386,8 +386,12 @@ function liftToPoints(lift: number): number {
   return Math.round(Math.max(-50, Math.min(25, raw)))
 }
 
-// Mínimo de clientes ativos no índice para arriscar uma sugestão.
+// Mínimos de amostra para arriscar uma sugestão: ao menos MIN_ACTIVE clientes
+// ativos com o atributo, e — quando o atributo aparece entre cancelados — ao
+// menos MIN_CANCELLED (evita sugestão forte tirada de 1-2 cancelados). Ausência
+// total nos cancelados (cCount=0) é sinal protetor legítimo e é permitida.
 const MIN_ACTIVE = 5
+const MIN_CANCELLED = 3
 
 // Conta, por chave de índice, quantos clientes relevantes batem (dedup p/ multi),
 // e o tamanho da população relevante (denominador).
@@ -454,7 +458,7 @@ export function buildSuggestions(
       const cCount = C.byKey.get(idx.key) ?? 0
       const aRate = A.denom ? aCount / A.denom : 0
       const cRate = C.denom ? cCount / C.denom : 0
-      const enough = aCount >= MIN_ACTIVE && aRate > 0
+      const enough = aCount >= MIN_ACTIVE && aRate > 0 && (cCount === 0 || cCount >= MIN_CANCELLED)
       const lift = enough ? cRate / aRate : null
       const suggestedPoints = lift === null ? null : liftToPoints(lift)
       if (lift !== null) {

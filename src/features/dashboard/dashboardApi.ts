@@ -23,6 +23,7 @@ export interface DashboardSummary {
 export interface RankedClient {
   customerId: string
   customerName: string
+  contractNumber: string
   city: string
   plan: string
   monthlyValue: number

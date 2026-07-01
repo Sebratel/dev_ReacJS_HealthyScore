@@ -131,6 +131,7 @@ export default function AiPredictivePage() {
 
   return (
     <div className="space-y-5 animate-slide-up">
+      {loading && <div className="flex items-center justify-end gap-1.5 text-[11px] text-gray-500 -mb-3"><Loader2 size={11} className="animate-spin" /> atualizando…</div>}
       {/* AI Banner */}
       <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-brand-violet/20 via-brand-blue/10 to-brand-cyan/10 border border-brand-violet/30 p-5">
         <div className="absolute inset-0 bg-gradient-radial from-brand-violet/10 via-transparent to-transparent" />

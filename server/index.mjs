@@ -187,8 +187,9 @@ function isoDaysAgo(days) {
 // Devolve os dois coortes (ativos amostrados + cancelados na janela) no shape
 // RealClient. O front calcula o lift/sugestões com buildSuggestions.
 app.get('/api/cancellation-suggestions', requireAuth(), async (req, res) => {
-  const to = DATE_RE.test(req.query.to) ? req.query.to : new Date().toISOString().slice(0, 10)
-  const from = DATE_RE.test(req.query.from) ? req.query.from : isoDaysAgo(365)
+  const q = req.query
+  const to = (typeof q.to === 'string' && DATE_RE.test(q.to)) ? q.to : new Date().toISOString().slice(0, 10)
+  const from = (typeof q.from === 'string' && DATE_RE.test(q.from)) ? q.from : isoDaysAgo(365)
   if (from > to) return res.status(400).json({ error: 'Intervalo inválido: "from" é posterior a "to".' })
   const sampleLimit = Math.min(30000, Math.max(1000, Number(req.query.sample) || 15000))
 

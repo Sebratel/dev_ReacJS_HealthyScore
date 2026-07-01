@@ -40,8 +40,9 @@ async function ensureClient(): Promise<void> {
     scope: 'openid email profile',
     callback: (resp: { access_token?: string }) => {
       const p = pending; pending = null
-      if (resp.access_token) { useAuthStore.getState().setAccessToken(resp.access_token); p?.resolve(resp.access_token) }
-      else p?.reject(new Error('Sem access_token na resposta do Google'))
+      if (!p) return // callback tardio/duplicado do GSI → ignora (não sobrescreve um token mais novo)
+      if (resp.access_token) { useAuthStore.getState().setAccessToken(resp.access_token); p.resolve(resp.access_token) }
+      else p.reject(new Error('Sem access_token na resposta do Google'))
     },
     error_callback: (err: unknown) => { const p = pending; pending = null; p?.reject(err) },
   })
@@ -54,9 +55,18 @@ export function refreshGoogleToken(): Promise<string> {
   refreshInFlight = (async () => {
     await ensureClient()
     return new Promise<string>((resolve, reject) => {
-      pending = { resolve, reject }
+      // Timeout: se o GSI não chamar callback nem error_callback (cookies de
+      // terceiros bloqueados/ITP), rejeita e libera — senão a renovação travaria
+      // para sempre (refreshInFlight nunca voltaria a null).
+      const timer = setTimeout(() => {
+        if (pending) { pending = null; reject(new Error('Tempo esgotado ao renovar o token do Google')) }
+      }, 15000)
+      pending = {
+        resolve: (t) => { clearTimeout(timer); resolve(t) },
+        reject: (e) => { clearTimeout(timer); reject(e) },
+      }
       try { tokenClient.requestAccessToken({ prompt: 'none' }) }
-      catch (e) { pending = null; reject(e) }
+      catch (e) { clearTimeout(timer); pending = null; reject(e) }
     })
   })().finally(() => { refreshInFlight = null })
   return refreshInFlight
