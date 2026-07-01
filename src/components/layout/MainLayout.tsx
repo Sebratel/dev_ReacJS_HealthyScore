@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Sidebar } from './Sidebar'
@@ -19,8 +19,8 @@ function DataGate({ status, error, onRetry }: { status: LoadStatus; error: strin
           <>
             <Loader2 size={22} className="text-brand-blue animate-spin" />
             <div>
-              <p className="text-sm font-semibold text-gray-100">Carregando base completa de clientes…</p>
-              <p className="text-[11px] text-gray-500 mt-1">Pode levar alguns segundos no primeiro acesso.</p>
+              <p className="text-sm font-semibold text-gray-100">Conectando ao servidor…</p>
+              <p className="text-[11px] text-gray-500 mt-1">Carregando os metadados da base.</p>
             </div>
           </>
         ) : (
@@ -58,6 +58,17 @@ export function MainLayout() {
       .catch((e) => { if (alive) { setError(String(e?.message ?? e)); setStatus('error') } })
     return () => { alive = false }
   }, [attempt])
+
+  // Auto-retry enquanto a base materializa (ex.: no primeiro deploy o ETL ainda
+  // está rodando e /api/dataset/lists responde 503). Tenta de novo a cada 4s,
+  // até ~1 min, antes de deixar o usuário no botão manual.
+  const autoRetries = useRef(0)
+  useEffect(() => {
+    if (status === 'ready') { autoRetries.current = 0; return }
+    if (status !== 'error' || autoRetries.current >= 15) return
+    const t = setTimeout(() => { autoRetries.current += 1; setAttempt((a) => a + 1) }, 4000)
+    return () => clearTimeout(t)
+  }, [status, attempt])
 
   if (status !== 'ready') {
     return <DataGate status={status} error={error} onRetry={() => setAttempt((a) => a + 1)} />

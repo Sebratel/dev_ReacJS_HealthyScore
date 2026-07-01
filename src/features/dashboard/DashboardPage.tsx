@@ -1,20 +1,18 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Activity, AlertTriangle, DollarSign, Users, Gauge as GaugeIcon, ChevronRight, Brain } from 'lucide-react'
+import { Activity, AlertTriangle, DollarSign, Users, Gauge as GaugeIcon, ChevronRight, Brain, Loader2, Lock, RefreshCw } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { realTotals, realMeta } from '@/data/realClients'
-import { useEngineSummaries, buildClientRiskRanking } from './engineSummaries'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { HealthGauge, HEALTH_COLORS, HEALTH_LABELS, scoreToHealthClass } from '@/components/ui/HealthGauge'
 import { formatCurrency, cn } from '@/utils/cn'
+import { useAppStore } from '@/store/appStore'
+import { coverageLabelFromMeta } from '@/features/engines/engineApi'
+import { fetchDashboard, ApiError, type DashboardResponse } from './dashboardApi'
 import type { HealthClassification } from '@/types'
 
 const DIST_ORDER: HealthClassification[] = ['critical', 'high_risk', 'attention', 'healthy', 'excellent']
-
-function scoreColor(v: number) {
-  return HEALTH_COLORS[scoreToHealthClass(v)]
-}
+const scoreColor = (v: number) => HEALTH_COLORS[scoreToHealthClass(v)]
 
 const CompTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null
@@ -26,7 +24,6 @@ const CompTooltip = ({ active, payload, label }: any) => {
   )
 }
 
-// Mini barra de distribuição (críticos → excelentes)
 function DistBar({ dist, total }: { dist: Record<HealthClassification, number>; total: number }) {
   if (!total) return <div className="h-1.5 rounded-full bg-app-border" />
   return (
@@ -42,37 +39,70 @@ function DistBar({ dist, total }: { dist: Record<HealthClassification, number>; 
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const engines = useEngineSummaries()
+  const financialConfig = useAppStore((s) => s.financialConfig)
+  const commercialConfig = useAppStore((s) => s.commercialConfig)
+  const connectionConfig = useAppStore((s) => s.connectionConfig)
+  const networkConfig = useAppStore((s) => s.networkConfig)
+  const fieldConfig = useAppStore((s) => s.fieldConfig)
+  const installationConfig = useAppStore((s) => s.installationConfig)
+  const relationshipConfig = useAppStore((s) => s.relationshipConfig)
+  const thresholds = useAppStore((s) => s.healthThresholds)
 
-  const globalHealth = useMemo(
-    () => Math.round(engines.reduce((a, e) => a + e.avgHealthScore, 0) / Math.max(1, engines.length)),
-    [engines],
-  )
-  const enginesAtRisk = engines.filter((e) => e.avgHealthScore < 60).length
+  const [data, setData] = useState<DashboardResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<ApiError | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
-  const ranking = useMemo(() => buildClientRiskRanking(engines), [engines])
-  const criticalClients = ranking.filter((r) => r.classification === 'critical' || r.classification === 'high_risk').length
-  const revenueAtRisk = useMemo(
-    () => ranking.filter((r) => r.classification === 'critical' || r.classification === 'high_risk').reduce((a, r) => a + r.revenueRisk, 0),
-    [ranking],
-  )
-  const topRisk = ranking.slice(0, 8)
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    const configs = { financial: financialConfig, commercial: commercialConfig, connection: connectionConfig, network: networkConfig, field: fieldConfig, installation: installationConfig, relationship: relationshipConfig }
+    fetchDashboard({ configs, thresholds, topN: 8 })
+      .then((d) => { if (alive) { setData(d); setError(null) } })
+      .catch((e) => { if (alive) setError(e instanceof ApiError ? e : new ApiError(0, 'Erro inesperado.')) })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [financialConfig, commercialConfig, connectionConfig, networkConfig, fieldConfig, installationConfig, relationshipConfig, thresholds, reloadKey])
 
   const compData = useMemo(
-    () => engines.map((e) => ({ name: e.label, score: e.avgHealthScore })).sort((a, b) => a.score - b.score),
-    [engines],
+    () => (data ? data.summaries.map((e) => ({ name: e.label, score: e.avgHealthScore })).sort((a, b) => a.score - b.score) : []),
+    [data],
   )
 
-  const globalColor = scoreColor(globalHealth)
+  if (loading && !data) {
+    return <div className="flex items-center gap-2 rounded-xl border border-app-border bg-app-card px-5 py-16 text-sm text-gray-400 animate-slide-up"><Loader2 size={16} className="animate-spin" /> Calculando os scores no servidor…</div>
+  }
+  if (error && !data) {
+    return (
+      <div className="rounded-xl border border-app-border bg-app-card px-5 py-6 space-y-3 animate-slide-up">
+        <div className="flex items-start gap-2.5 text-sm text-rose-300">
+          {error.status === 401 ? <Lock size={16} className="mt-0.5 shrink-0" /> : <AlertTriangle size={16} className="mt-0.5 shrink-0" />}
+          <div>
+            <p className="font-medium text-gray-100">{error.status === 0 ? 'Servidor indisponível' : error.status === 401 ? 'Sessão expirada' : 'Não foi possível carregar o dashboard'}</p>
+            <p className="mt-0.5 text-[12px] text-gray-400">{error.message}</p>
+            {error.status === 0 && <p className="mt-1.5 text-[11px] text-gray-500">Depende do backend (<span className="font-mono">/api</span>). Suba com <span className="font-mono">npm run api</span>.</p>}
+          </div>
+        </div>
+        <button onClick={() => setReloadKey((k) => k + 1)} className="flex items-center gap-1.5 rounded-md border border-app-border px-3 py-1.5 text-[12px] text-gray-300 hover:border-app-borderLight hover:text-gray-100 transition-colors"><RefreshCw size={13} /> Tentar novamente</button>
+      </div>
+    )
+  }
+  if (!data) return null
+
+  const totals = data.meta.totals
+  const globalHealth = data.globalHealth
+  const enginesAtRisk = data.summaries.filter((e) => e.avgHealthScore < 60).length
+  const rk = data.ranking
 
   return (
     <div className="space-y-6 animate-slide-up">
-      {/* KPIs — 100% dados reais */}
+      {loading && <div className="flex items-center justify-end gap-1.5 text-[11px] text-gray-500 -mb-3"><Loader2 size={11} className="animate-spin" /> atualizando…</div>}
+      {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Clientes Ativos" value={realTotals.clients.toLocaleString('pt-BR')} subtitle={`${realTotals.contracts.toLocaleString('pt-BR')} contratos`} icon={<Users size={14} />} variant="brand" />
-        <KpiCard label="MRR (Base Ativa)" value={formatCurrency(realTotals.mrr)} subtitle="Receita recorrente mensal" icon={<DollarSign size={14} />} variant="success" iconColor="text-risk-low" />
+        <KpiCard label="Clientes Ativos" value={(totals?.clients ?? 0).toLocaleString('pt-BR')} subtitle={`${(totals?.contracts ?? 0).toLocaleString('pt-BR')} contratos`} icon={<Users size={14} />} variant="brand" />
+        <KpiCard label="MRR (Base Ativa)" value={formatCurrency(totals?.mrr ?? 0)} subtitle="Receita recorrente mensal" icon={<DollarSign size={14} />} variant="success" iconColor="text-risk-low" />
         <KpiCard label="Health Score Global" value={`${globalHealth}/100`} subtitle="Média dos 7 módulos" icon={<Activity size={14} />} variant={globalHealth < 50 ? 'danger' : globalHealth < 70 ? 'warning' : 'success'} iconColor={globalHealth < 50 ? 'text-risk-critical' : 'text-risk-low'} />
-        <KpiCard label="Clientes em Risco" value={criticalClients.toLocaleString('pt-BR')} subtitle={`Receita em risco: ${formatCurrency(revenueAtRisk)}/mês`} icon={<AlertTriangle size={14} />} variant="danger" iconColor="text-risk-critical" />
+        <KpiCard label="Clientes em Risco" value={rk.atRiskCount.toLocaleString('pt-BR')} subtitle={`Receita em risco: ${formatCurrency(rk.revenueAtRiskMonthly)}/mês`} icon={<AlertTriangle size={14} />} variant="danger" iconColor="text-risk-critical" />
       </div>
 
       {/* Resumo por engine */}
@@ -82,14 +112,10 @@ export default function DashboardPage() {
           <h2 className="text-sm font-bold text-white">Resumo dos Health Scores por Módulo</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {engines.map((e) => {
+          {data.summaries.map((e) => {
             const cls = scoreToHealthClass(e.avgHealthScore)
             return (
-              <button
-                key={e.key}
-                onClick={() => navigate(e.route)}
-                className="text-left bg-app-card border border-app-border rounded-2xl p-4 shadow-card hover:shadow-card-md hover:border-app-borderLight hover:-translate-y-0.5 transition-all duration-200 group"
-              >
+              <button key={e.key} onClick={() => navigate(e.route)} className="text-left bg-app-card border border-app-border rounded-2xl p-4 shadow-card hover:shadow-card-md hover:border-app-borderLight hover:-translate-y-0.5 transition-all duration-200 group">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-gray-200">{e.label}</span>
                   <ChevronRight size={13} className="text-gray-600 group-hover:text-brand-blue transition-colors" />
@@ -110,16 +136,15 @@ export default function DashboardPage() {
             )
           })}
 
-          {/* Card de score global */}
           <div className="bg-gradient-to-br from-brand-blue/10 to-brand-violet/10 border border-brand-blue/25 rounded-2xl p-4 flex flex-col items-center justify-center">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Health Global</p>
             <HealthGauge score={globalHealth} size={96} />
-            <p className="text-[10px] text-gray-500 mt-1">{enginesAtRisk} de {engines.length} módulos abaixo de 60</p>
+            <p className="text-[10px] text-gray-500 mt-1">{enginesAtRisk} de {data.summaries.length} módulos abaixo de 60</p>
           </div>
         </div>
       </div>
 
-      {/* Comparação entre engines + maiores riscos */}
+      {/* Comparação + maiores riscos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <CardHeader title="Comparação de Health Score por Módulo" subtitle="Média do score de cada módulo" icon={<GaugeIcon size={14} />} />
@@ -146,26 +171,19 @@ export default function DashboardPage() {
             action={<button onClick={() => navigate('/ia')} className="text-[11px] text-brand-blue hover:text-brand-blueLight flex items-center gap-1"><Brain size={11} /> Análise de IA →</button>}
           />
           <div className="divide-y divide-app-border">
-            {topRisk.map((c, i) => {
+            {rk.top.map((c, i) => {
               const color = HEALTH_COLORS[c.classification]
               return (
                 <div key={c.customerId} className="flex items-center gap-3 px-5 py-2.5">
                   <span className="text-[10px] font-mono text-gray-600 w-4">{i + 1}</span>
-                  <div className="w-8 h-8 rounded-full border flex items-center justify-center text-[11px] font-bold shrink-0" style={{ backgroundColor: color + '15', borderColor: color + '30', color }}>
-                    {c.customerName[0]}
-                  </div>
+                  <div className="w-8 h-8 rounded-full border flex items-center justify-center text-[11px] font-bold shrink-0" style={{ backgroundColor: color + '15', borderColor: color + '30', color }}>{c.customerName[0]}</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-gray-100 truncate">{c.customerName}</p>
                     <p className="text-[10px] text-gray-500">{c.city} · {c.plan}</p>
                   </div>
-                  <div className="hidden sm:flex flex-col items-center">
-                    <span className="text-[9px] text-gray-600">{c.enginesPresent} módulos</span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span style={{ color }} className="text-sm font-bold tabular-nums leading-none">{c.overallHealth}</span>
-                    <span className="text-[9px] text-gray-600">health</span>
-                  </div>
-                  <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded')} style={{ color, background: `${color}15` }}>{HEALTH_LABELS[c.classification]}</span>
+                  <div className="hidden sm:flex flex-col items-center"><span className="text-[9px] text-gray-600">{c.enginesPresent} módulos</span></div>
+                  <div className="flex flex-col items-end"><span style={{ color }} className="text-sm font-bold tabular-nums leading-none">{c.overallHealth}</span><span className="text-[9px] text-gray-600">health</span></div>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color, background: `${color}15` }}>{HEALTH_LABELS[c.classification]}</span>
                 </div>
               )
             })}
@@ -174,7 +192,7 @@ export default function DashboardPage() {
       </div>
 
       <p className="text-[10px] text-gray-500 text-center">
-        {realTotals.clients.toLocaleString('pt-BR')} clientes ativos · {realMeta.coverage === 'full' ? 'base completa analisada' : `amostra de ${realMeta.sampleSize.toLocaleString('pt-BR')}`} · atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR')}
+        {coverageLabelFromMeta(data.meta)} · pontuado no servidor · atualizado em {data.meta.generatedAt ? new Date(data.meta.generatedAt).toLocaleString('pt-BR') : '—'}
       </p>
     </div>
   )

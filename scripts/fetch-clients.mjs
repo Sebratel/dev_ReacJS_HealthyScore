@@ -7,376 +7,46 @@
 //   - série mensal real de adimplência + totais reais (clientes, contratos, MRR)
 // Uso: node scripts/fetch-clients.mjs [sampleSize=2000 | full]
 //   sem argumento → amostra de 2000 | 'full'/'all'/'0' → BASE COMPLETA
+//
+// As queries SQL ficam no registro central scripts/queries/ (editáveis pela
+// tela de Configurações). Aqui obtemos o SQL EFETIVO de cada uma (override do
+// usuário, se houver, senão o default) via buildEffectiveQueries().
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { makePool } from './db.mjs'
 import { makeMariaPool } from './db-maria.mjs'
+import { buildEffectiveQueries } from './queries/index.mjs'
+import { FROM_DATE } from './queries/registry.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-// Snapshot gzipado, servido como asset estático e baixado pelo front no boot.
-const OUT = resolve(__dirname, '../public/realClients.data')
+// Snapshot gzipado. Caminho configurável por SNAPSHOT_OUT (o job noturno grava
+// no volume compartilhado); sem a env, cai no asset estático servido no dev.
+const OUT = process.env.SNAPSHOT_OUT
+  ? resolve(process.env.SNAPSHOT_OUT)
+  : resolve(__dirname, '../public/realClients.data')
 const ARG = (process.argv[2] || '').toLowerCase()
 const FULL = ARG === 'full' || ARG === 'all' || ARG === '0'
 const SAMPLE_SIZE = FULL ? Infinity : (Number(process.argv[2]) || 2000)
-const FROM_DATE = '2026-01-01'
 // PII/geo não usados no front — removidos do snapshot (privacidade + tamanho).
 const STRIP_FIELDS = ['cpfCnpj', 'phone', 'email', 'lat', 'lng', 'state']
 
-// ─── Base (clientes/contratos ativos) ──────────────────────────
-const BASE_FROM = `
-from authentication_contracts ac
-left join contracts c on c.id = ac.contract_id
-left join contract_service_tags cst on cst.id = ac.service_tag_id
-left join service_products sp on sp.id = ac.service_product_id
-left join contract_service_tags_catalog_services cst2 on cst2.contract_service_tag_id = cst.id
-left join catalog_services cs on cs.id = cst2.catalog_service_id
-left join payment_forms pf on pf.id = c.payment_form_id
-left join people p on p.id = c.client_id
-left join people p2 on p2.id = c.seller_1_id
-where cst2.deleted is not true
-`
-
-const Q_TOTALS = `
-select count(distinct p.id) clients, count(distinct c.id) contracts,
-       coalesce(sum(sp.selling_price::numeric),0) mrr
-${BASE_FROM}
-`
-
-const Q_BY_CITY = `
-select ac.city, count(distinct c.id) contracts, coalesce(sum(sp.selling_price::numeric),0) mrr
-${BASE_FROM}
-group by ac.city order by contracts desc limit 30
-`
-
-const Q_PAYFORMS = `select title from payment_forms where active is true order by title`
-
-const Q_SAMPLE = `
-select
-  p.id client_id, p.name client_name, p.gender client_gender, p.birth_date client_birth,
-  p2.name seller_name, p2.gender seller_gender, p2.birth_date seller_birth, p2.created seller_admitted,
-  c.contract_number, c.created created_contract,
-  pf.title payment_form,
-  sp.title plan_name, sp.selling_price,
-  ac.city, ac.neighborhood, ac.street, ac.street_number, ac.state,
-  p.tx_id cpf_cnpj, p.phone, p.email, ac.lat, ac.lng
-${BASE_FROM}
-${FULL ? '' : 'order by random()'}
-${FULL ? '' : 'limit $1'}
-`
-
-// Listas distinct para o config comercial (base inteira, com contagem)
-const Q_COMM_SELLERS = `select coalesce(p2.name,'(sem vendedor)') v, count(distinct c.id) n ${BASE_FROM} group by 1 order by n desc`
-const Q_COMM_PLANS   = `select coalesce(sp.title,'(sem plano)') v, count(distinct c.id) n ${BASE_FROM} group by 1 order by n desc`
-const Q_COMM_VALUES  = `select coalesce(sp.selling_price::numeric,0) v, count(distinct c.id) n ${BASE_FROM} group by 1 order by n desc`
-const Q_COMM_CITIES  = `select coalesce(ac.city,'(s/ cidade)') v, count(distinct c.id) n ${BASE_FROM} group by 1 order by n desc`
-const Q_COMM_HOODS   = `select coalesce(ac.neighborhood,'(s/ bairro)') v, count(distinct c.id) n ${BASE_FROM} group by 1 order by n desc`
-const Q_COMM_CGENDER = `select coalesce(p.gender::text,'(sem gênero)') v, count(distinct c.id) n ${BASE_FROM} group by 1 order by n desc`
-const Q_COMM_SGENDER = `select coalesce(p2.gender::text,'(sem gênero)') v, count(distinct c.id) n ${BASE_FROM} group by 1 order by n desc`
-
-// ─── Connection Engine — equipamentos alocados ────────────────
-const EQUIP_FROM = `
-from patrimony_packing_list_items plis
-left join patrimony_packing_lists ppl on ppl.id = plis.patrimony_packing_list_id
-left join assignments a on a.id = ppl.assignment_id
-left join assignment_incidents ai on ai.assignment_id = a.id
-left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
-left join contracts c on c.id = cst.contract_id
-left join patrimonies p on p.id = plis.patrimony_id
-where c.v_status <> 'Cancelado' and p.title is not null
-`
-// Modelos distintos por contrato (filtrado à amostra)
-const Q_CONN_AGG = `
-select c.contract_number, array_agg(distinct p.title) models
-${EQUIP_FROM} and c.contract_number::text = any($1::text[])
-group by c.contract_number
-`
-// Lista de modelos distintos (base inteira) para config
-const Q_CONN_MODELS = `select p.title v, count(*) n ${EQUIP_FROM} group by p.title order by n desc`
-
-// ─── Field Engine — protocolos de manutenção ──────────────────
-// FROM/JOINs base (sem WHERE) + cláusula WHERE separada (joins extras entram ANTES do where)
-const FIELD_FROM = `
-from assignment_incidents ai
-left join assignments a on a.id = ai.assignment_id
-left join incident_types it on it.id = ai.incident_type_id
-left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
-left join contracts c on c.id = cst.contract_id
-left join catalog_services cs on cs.id = ai.catalog_service_id
-`
-const FIELD_CAT_JOIN = `
-left join solicitation_category_matrices scm on scm.id = ai.solicitation_category_matrix_id
-left join solicitation_service_categories ssc1 on ssc1.id = scm.service_category_id_1
-left join solicitation_service_categories ssc2 on ssc2.id = scm.service_category_id_2
-left join solicitation_service_categories ssc3 on ssc3.id = scm.service_category_id_3
-left join solicitation_service_categories ssc4 on ssc4.id = scm.service_category_id_4
-`
-const FIELD_SCHED_JOIN = `
-left join service_desk_slots sds on sds.pre_reserved_assignment_id = a.id
-left join people p2 on p2.id = sds.resource_id
-`
-const FIELD_WHERE = `
-where (it.active is true or cs.title in ('Equipe reparo','Equipe tecnologia'))
-  and a.created >= '${FROM_DATE}'
-  and c.v_status <> 'Cancelado'
-`
-
-// Protocolos / SLA por contrato (nível protocolo, filtrado à amostra)
-const Q_FIELD_PROT = `
-select contract_number,
-  count(*) protocol_count,
-  count(*) filter (where late) sla_late_count,
-  round(avg(sla_days) filter (where sla_days is not null)::numeric, 2) avg_sla_days
-from (
-  select a.id pid, c.contract_number,
-    (max(a.conclusion_date) > max(ai.responsible_final_date))
-      or (max(a.conclusion_date) is null and max(ai.responsible_final_date) < now()) late,
-    case when max(a.conclusion_date) is not null
-      then extract(epoch from (max(a.conclusion_date) - max(a.created))) / 86400.0 end sla_days
-  ${FIELD_FROM} ${FIELD_WHERE}
-    and c.contract_number::text = any($1::text[])
-  group by a.id, c.contract_number
-) q
-group by contract_number
-`
-
-// Agendamentos + técnicos por contrato
-const Q_FIELD_SCHED = `
-select c.contract_number,
-  count(distinct sds.id) schedule_count,
-  array_remove(array_agg(distinct p2.name), null) technicians
-${FIELD_FROM} ${FIELD_SCHED_JOIN} ${FIELD_WHERE}
-  and c.contract_number::text = any($1::text[])
-group by c.contract_number
-`
-
-// Motivos (categorias 1-4) por contrato
-const Q_FIELD_REASONS = `
-select contract_number, array_remove(array_agg(distinct cat), null) reasons
-from (
-  select c.contract_number, unnest(array[ssc1.title, ssc2.title, ssc3.title, ssc4.title]) cat
-  ${FIELD_FROM} ${FIELD_CAT_JOIN} ${FIELD_WHERE}
-    and c.contract_number::text = any($1::text[])
-) q
-where cat is not null and cat <> ''
-group by contract_number
-`
-
-// Listas distintas (base inteira) para config
-const Q_FIELD_REASON_LIST = `
-select cat v, count(distinct pid) n from (
-  select a.id pid, unnest(array[ssc1.title, ssc2.title, ssc3.title, ssc4.title]) cat
-  ${FIELD_FROM} ${FIELD_CAT_JOIN} ${FIELD_WHERE}
-) q where cat is not null and cat <> '' group by cat order by n desc
-`
-const Q_FIELD_TECH_LIST = `
-select p2.name v, count(distinct a.id) n
-${FIELD_FROM} ${FIELD_SCHED_JOIN} ${FIELD_WHERE} and p2.id is not null
-group by p2.name order by n desc
-`
-
-// ─── Installation Engine — protocolos de instalação (ATV) ─────
-// Mesma estrutura da field, filtro it.code like 'ATV%'. contract_created = data da venda.
-const INST_WHERE = `
-where it.active is true and it.code like 'ATV%'
-  and a.created >= '${FROM_DATE}'
-  and c.v_status <> 'Cancelado'
-`
-// Protocolo / SLA / venda→agenda por contrato (nível protocolo + sds p/ 1ª agenda)
-const Q_INST_PROT = `
-select contract_number,
-  count(*) protocol_count,
-  count(*) filter (where late) sla_late_count,
-  round(avg(sla_days) filter (where sla_days is not null)::numeric, 2) avg_sla_days,
-  round(avg(s2a_days) filter (where s2a_days is not null)::numeric, 2) sale_to_schedule_days
-from (
-  select a.id pid, c.contract_number,
-    (max(a.conclusion_date) > max(ai.responsible_final_date))
-      or (max(a.conclusion_date) is null and max(ai.responsible_final_date) < now()) late,
-    case when max(a.conclusion_date) is not null
-      then extract(epoch from (max(a.conclusion_date) - max(a.created))) / 86400.0 end sla_days,
-    case when min(sds.begin_date) is not null
-      then extract(epoch from (min(sds.begin_date) - max(c.created))) / 86400.0 end s2a_days
-  ${FIELD_FROM} ${FIELD_SCHED_JOIN} ${INST_WHERE}
-    and c.contract_number::text = any($1::text[])
-  group by a.id, c.contract_number
-) q
-group by contract_number
-`
-// Agendamentos + técnicos por contrato
-const Q_INST_SCHED = `
-select c.contract_number,
-  count(distinct sds.id) schedule_count,
-  array_remove(array_agg(distinct p2.name), null) technicians
-${FIELD_FROM} ${FIELD_SCHED_JOIN} ${INST_WHERE}
-  and c.contract_number::text = any($1::text[])
-group by c.contract_number
-`
-const Q_INST_TECH_LIST = `
-select p2.name v, count(distinct a.id) n
-${FIELD_FROM} ${FIELD_SCHED_JOIN} ${INST_WHERE} and p2.id is not null
-group by p2.name order by n desc
-`
-
-// ─── Relationship Engine — protocolos de relacionamento ───────
-const REL_FROM = `
-from assignment_incidents ai
-left join assignments a on a.id = ai.assignment_id
-left join incident_types it on it.id = ai.incident_type_id
-left join people p2 on p2.id = a.responsible_id
-left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
-left join contracts c on c.id = cst.contract_id
-`
-const REL_WHERE = `
-where it.active is true
-  and not (it.code like 'ATV%' or it.code like 'MNT%')
-  and a.created >= '${FROM_DATE}' and c.v_status <> 'Cancelado'
-`
-const CANCEL_IDS = '(1142,1131,1021,1143,1154)'
-
-// Protocolo / recorrência / atraso SLA / ameaças por contrato (nível protocolo)
-const Q_REL_PROT = `
-select contract_number,
-  count(*) protocol_count,
-  round(avg(rec_days)::numeric, 1) recurrence_days,
-  round(avg(overage_h)::numeric, 2) avg_overage_hours,
-  count(*) filter (where is_threat) cancel_threats
-from (
-  select a.id pid, c.contract_number,
-    extract(epoch from (max(a.created) - max(c.created))) / 86400.0 rec_days,
-    greatest(0, extract(epoch from (max(a.conclusion_date) - max(ai.responsible_final_date))) / 3600.0) overage_h,
-    bool_or(it.id in ${CANCEL_IDS}) is_threat
-  ${REL_FROM} ${REL_WHERE}
-    and c.contract_number::text = any($1::text[])
-  group by a.id, c.contract_number
-) q
-group by contract_number
-`
-// Tipos de protocolo + atendentes por contrato
-const Q_REL_DIM = `
-select c.contract_number,
-  array_remove(array_agg(distinct it.title), null) protocol_types,
-  array_remove(array_agg(distinct p2.name), null) attendant_names
-${REL_FROM} ${REL_WHERE}
-  and c.contract_number::text = any($1::text[])
-group by c.contract_number
-`
-// Listas distintas (base inteira) para config
-const Q_REL_TYPE_LIST = `select it.title v, count(distinct a.id) n ${REL_FROM} ${REL_WHERE} and it.title is not null group by it.title order by n desc`
-const Q_REL_ATT_LIST = `select p2.name v, count(distinct a.id) n ${REL_FROM} ${REL_WHERE} and p2.id is not null group by p2.name order by n desc`
-
-// ─── Network Engine — massivas (MariaDB) × infra (PostgreSQL) ──
-// Agregado de massivas por splitter_code (MariaDB)
-const Q_MARIA_SPLITTER = `
-select mhs.splitter_code,
-  count(*) massive_count,
-  round(avg(timestampdiff(minute, coalesce(mh.event_identified_at, mh.opened_at), mh.closed_at)), 2) avg_offline_min,
-  round(avg(case when mh.closed_at > mh.expected_close_at then timestampdiff(minute, mh.expected_close_at, mh.closed_at) end), 2) avg_overage_min
-from DB_Massives.massiva_history mh
-left join DB_Massives.massiva_history_splitters mhs on mhs.massiva_history_id = mh.id
-where mhs.splitter_code is not null and mh.closed_at is not null
-group by mhs.splitter_code
-`
-// Infra dos clientes da amostra que estão em splitters afetados (PostgreSQL)
-const Q_NET_INFRA = `
-select p.id::text client_id, as3.code splitter_code,
-  as2.title site, ac2.title concentrator, aap.title access_point, as3.title splitter,
-  ac.slot_olt slot, ac.port_olt pon
-from authentication_contracts ac
-left join authentication_concentrators ac2 on ac2.id = ac.authentication_concentrator_id
-left join authentication_access_points aap on aap.id = ac.authentication_access_point_id
-left join contracts c on c.id = ac.contract_id
-left join authentication_sites as2 on as2.id = ac2.authentication_site_id
-left join authentication_splitter_ports asp on asp.authentication_contract_id = ac.id
-left join authentication_splitters as3 on as3.id = asp.authentication_splitter_id
-left join people p on p.id = c.client_id
-where p.id::text = any($1::text[]) and as3.code = any($2::text[])
-`
-
-// Status de cada fatura (definição refinada da regra do usuário):
-//   on_time = paga até o vencimento | late = paga após o vencimento
-//   overdue = sem pagamento e já vencida | open = sem pagamento e a vencer
-const INV_STATUS = `
-  case
-    when frt2.client_paid_date is null and frt.expiration_date < now() then 'overdue'
-    when frt2.client_paid_date is null then 'open'
-    when frt2.client_paid_date > frt.expiration_date then 'late'
-    else 'on_time'
-  end
-`
-const INV_BASE = (extraWhere) => `
-  from contracts c
-  join financial_receivable_titles frt on frt.contract_id = c.id
-  left join financial_receipt_titles frt2 on frt2.financial_receivable_title_id = frt.id
-  left join financers_natures fn on fn.id = frt2.financer_nature_id
-  where c.v_status <> 'Cancelado'
-    and frt.title like '%FAT%'
-    and frt.deleted = 'False'
-    and frt.renegotiated = 'False'
-    and frt.bill_title_id is null
-    and (fn.title is null or fn.title <> 'DF - TARIFA BAIXA DE TÍTULO')
-    and date(frt.issue_date) >= '${FROM_DATE}'
-    ${extraWhere}
-`
-
-// Faturas por contrato (filtrado à amostra)
-const Q_INV_AGG = `
-select contract_number,
-  count(*) filter (where st = 'on_time') on_time_invoices,
-  count(*) filter (where st = 'late')    late_invoices,
-  count(*) filter (where st = 'overdue') overdue_invoices,
-  count(*) total_invoices
-from (
-  select c.contract_number, ${INV_STATUS} st
-  ${INV_BASE('and c.contract_number::text = any($1::text[])')}
-) q
-group by contract_number
-`
-
-// Renegociações por contrato (títulos FAT renegotiated=True)
-const Q_RENEG_AGG = `
-select c.contract_number, count(distinct frt.id) renegotiations
-from contracts c
-join financial_receivable_titles frt on frt.contract_id = c.id
-where c.v_status <> 'Cancelado'
-  and frt.title like '%FAT%' and frt.deleted = 'False' and frt.renegotiated = 'True'
-  and date(frt.issue_date) >= '${FROM_DATE}'
-  and c.contract_number::text = any($1::text[])
-group by c.contract_number
-`
-
-// Desbloqueios por confiança por contrato
-const Q_TRUST_AGG = `
-select c.contract_number, count(*) trust_releases
-from contracts c
-join contract_events ce on ce.contract_id = c.id
-where c.v_status <> 'Cancelado'
-  and ce.description in (
-    'Desbloqueio Financeiro realizado pelo cliente através do atendimento telefônico.',
-    'Desbloqueio Financeiro realizado pela tela de atendimento ao cliente.',
-    'Desbloqueio Financeiro realizado pelo usuário através do Portal de Relacionamento.'
-  )
-  and date(ce."date") >= '${FROM_DATE}'
-  and c.contract_number::text = any($1::text[])
-group by c.contract_number
-`
+// SQL efetivo de cada query (override do usuário ?? default), do registro
+// central. {{sampleClause}} é resolvido conforme amostra/base completa.
+const {
+  Q_TOTALS, Q_BY_CITY, Q_PAYFORMS, Q_SAMPLE, Q_MONTHLY_OK,
+  Q_COMM_SELLERS, Q_COMM_PLANS, Q_COMM_VALUES, Q_COMM_CITIES, Q_COMM_HOODS, Q_COMM_CGENDER, Q_COMM_SGENDER,
+  Q_CONN_AGG, Q_CONN_MODELS,
+  Q_FIELD_PROT, Q_FIELD_SCHED, Q_FIELD_REASONS, Q_FIELD_REASON_LIST, Q_FIELD_TECH_LIST,
+  Q_INST_PROT, Q_INST_SCHED, Q_INST_TECH_LIST,
+  Q_REL_PROT, Q_REL_DIM, Q_REL_TYPE_LIST, Q_REL_ATT_LIST,
+  Q_MARIA_SPLITTER, Q_NET_INFRA,
+  Q_INV_AGG, Q_RENEG_AGG, Q_TRUST_AGG,
+} = buildEffectiveQueries({ full: FULL })
 
 const pool = makePool()
 console.log(`Conectado em ${process.env.DB_ELLEVEN_HOST}/${process.env.DB_ELLEVEN_DATABASE}. Coletando…`)
-
-// Série mensal real de adimplência (base inteira)
-const Q_MONTHLY_OK = `
-select ym,
-  count(*) filter (where st = 'on_time') on_time,
-  count(*) filter (where st = 'late')    late,
-  count(*) filter (where st = 'overdue') overdue
-from (
-  select to_char(date_trunc('month', frt.issue_date), 'YYYY-MM') ym, ${INV_STATUS} st
-  ${INV_BASE('')}
-) q
-group by ym order by ym
-`
 
 try {
   const [totals, byCity, payforms, sample, commSellers, commPlans, commValues, commCities, commHoods, commCGender, commSGender, connModels, fieldReasonList, fieldTechList, instTechList, relTypeList, relAttList] = await Promise.all([

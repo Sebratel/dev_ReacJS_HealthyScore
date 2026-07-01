@@ -1,9 +1,12 @@
-import { SlidersHorizontal, RotateCcw, Info } from 'lucide-react'
+import { useState } from 'react'
+import { SlidersHorizontal, RotateCcw, Info, Database } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { HEALTH_COLORS, HEALTH_LABELS } from '@/components/ui/HealthGauge'
 import { useAppStore } from '@/store/appStore'
 import type { HealthThresholds } from '@/utils/health'
 import { DEFAULT_HEALTH_THRESHOLDS } from '@/utils/health'
+import { cn } from '@/utils/cn'
+import { QueriesPanel } from './queries/QueriesPanel'
 
 // Chaves editáveis (limite inferior de cada faixa), de cima para baixo.
 const EDITABLE: { key: keyof HealthThresholds; cls: keyof typeof HEALTH_COLORS }[] = [
@@ -31,7 +34,40 @@ function PreviewBar({ t }: { t: HealthThresholds }) {
   )
 }
 
+type Tab = 'health' | 'queries'
+
+const TABS: { key: Tab; label: string; icon: typeof SlidersHorizontal }[] = [
+  { key: 'health', label: 'Health Score', icon: SlidersHorizontal },
+  { key: 'queries', label: 'Queries do Sistema', icon: Database },
+]
+
 export default function SettingsPage() {
+  const [tab, setTab] = useState<Tab>('health')
+  return (
+    <div className={cn('space-y-5', tab === 'queries' ? 'max-w-5xl' : 'max-w-3xl')}>
+      {/* Seletor de abas */}
+      <div className="inline-flex gap-1 rounded-xl border border-app-border bg-app-card p-1">
+        {TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
+              tab === key ? 'bg-brand-blue/15 text-brand-blue' : 'text-gray-400 hover:text-gray-200',
+            )}
+          >
+            <Icon size={14} />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'health' ? <HealthThresholdsTab /> : <QueriesPanel />}
+    </div>
+  )
+}
+
+function HealthThresholdsTab() {
   const t = useAppStore((s) => s.healthThresholds)
   const updateHealthThresholds = useAppStore((s) => s.updateHealthThresholds)
   const resetHealthThresholds = useAppStore((s) => s.resetHealthThresholds)
@@ -60,10 +96,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-5">
-      <Card>
-        <CardHeader
-          title="Faixas de Health Score"
+    <Card>
+      <CardHeader
+        title="Faixas de Health Score"
           subtitle="Define como o score de cada cliente é classificado em todo o sistema"
           icon={<SlidersHorizontal size={16} />}
           action={
@@ -128,6 +163,5 @@ export default function SettingsPage() {
           </div>
         </div>
       </Card>
-    </div>
   )
 }

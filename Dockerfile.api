@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+# ─────────────────────────────────────────────────────────────
+# Backend de queries (server/index.mjs). Imagem Node enxuta que serve a API
+# /api/* e lê/grava os overrides em /app/data (volume compartilhado com o ETL).
+# ─────────────────────────────────────────────────────────────
+FROM node:20-alpine
+WORKDIR /app
+
+# Dependências de runtime (lockfile → build reprodutível). Sem devDependencies.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Código do backend + registro de queries + engines do front (reusadas para
+# pontuar a base materializada). O backend roda sob `tsx`, então precisa do
+# `src` (engines/configs/utils/types) e do tsconfig.json (resolução do alias @/).
+COPY server ./server
+COPY scripts ./scripts
+COPY src ./src
+COPY tsconfig.json ./
+
+ENV NODE_ENV=production
+ENV API_PORT=8787
+ENV QUERY_OVERRIDES_PATH=/app/data/query-overrides.json
+
+EXPOSE 8787
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:8787/api/health >/dev/null 2>&1 || exit 1
+
+# tsx transpila os imports .ts (engines do front) em runtime, sem build step.
+CMD ["npx", "tsx", "server/index.mjs"]
