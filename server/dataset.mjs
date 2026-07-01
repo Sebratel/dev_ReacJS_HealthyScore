@@ -40,6 +40,9 @@ function ensureFresh() {
 
 export function getDataset() { ensureFresh(); return cache }
 export function getClients() { ensureFresh(); return cache?.clients ?? [] }
+// Versão da base carregada (mtime do arquivo) — usada como chave de invalidação
+// do cache de score: muda quando o ETL noturno grava um snapshot novo.
+export function getVersion() { ensureFresh(); return cacheMtime }
 
 export function getStatus() {
   ensureFresh()

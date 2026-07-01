@@ -1,8 +1,8 @@
 // Cliente do endpoint /api/dashboard — roda as 7 engines + ranking combinado no
 // backend (config/limiares do usuário viajam na requisição). Substitui o cálculo
 // client-side (useEngineSummaries + buildClientRiskRanking).
-import { useAuthStore } from '@/store/authStore'
 import type { HealthClassification } from '@/types'
+import { apiFetch } from '@/lib/apiClient'
 import { ApiError, type EngineMeta } from '@/features/engines/engineApi'
 
 export { ApiError }
@@ -65,19 +65,14 @@ export interface DashboardParams {
 }
 
 export async function fetchDashboard(params: DashboardParams): Promise<DashboardResponse> {
-  const token = useAuthStore.getState().accessToken
-  const headers: HeadersInit = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-  let res: Response
-  try {
-    res = await fetch('/api/dashboard', { method: 'POST', headers, body: JSON.stringify(params) })
-  } catch {
-    throw new ApiError(0, 'Não foi possível falar com o servidor (backend offline?).')
-  }
+  const res = await apiFetch('/api/dashboard', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
+  })
   let body: unknown = null
   try { body = await res.json() } catch { /* sem corpo */ }
   if (!res.ok) {
     const msg = (body as { error?: string })?.error
-    if (res.status === 401) throw new ApiError(401, msg || 'Sessão expirada. Entre novamente.')
+    if (res.status === 503) throw new ApiError(503, msg || 'Base ainda não materializada no backend.')
     throw new ApiError(res.status, msg || `Erro ${res.status} no servidor.`)
   }
   return body as DashboardResponse

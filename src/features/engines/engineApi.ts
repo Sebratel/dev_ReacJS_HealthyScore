@@ -1,17 +1,10 @@
 // Cliente dos endpoints paginados por engine (POST /api/engine/:key).
 // O backend pontua a base COMPLETA materializada usando a config + limiares que
 // mandamos (ficam no navegador, por-usuário) e devolve só a página + agregados.
-import { useAuthStore } from '@/store/authStore'
 import type { HealthClassification } from '@/types'
+import { apiFetch, ApiError } from '@/lib/apiClient'
 
-export class ApiError extends Error {
-  status: number
-  constructor(status: number, message: string) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-  }
-}
+export { ApiError }
 
 export interface EngineFetchParams {
   config: unknown
@@ -49,19 +42,13 @@ export async function fetchEngine<Agg = unknown, Score = unknown>(
   key: string,
   params: EngineFetchParams,
 ): Promise<EngineResponse<Agg, Score>> {
-  const token = useAuthStore.getState().accessToken
-  const headers: HeadersInit = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-  let res: Response
-  try {
-    res = await fetch(`/api/engine/${key}`, { method: 'POST', headers, body: JSON.stringify(params) })
-  } catch {
-    throw new ApiError(0, 'Não foi possível falar com o servidor (backend offline?).')
-  }
+  const res = await apiFetch(`/api/engine/${key}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
+  })
   let body: unknown = null
   try { body = await res.json() } catch { /* sem corpo */ }
   if (!res.ok) {
     const msg = (body as { error?: string })?.error
-    if (res.status === 401) throw new ApiError(401, msg || 'Sessão expirada. Entre novamente.')
     if (res.status === 503) throw new ApiError(503, msg || 'Base ainda não materializada no backend.')
     throw new ApiError(res.status, msg || `Erro ${res.status} no servidor.`)
   }

@@ -16,6 +16,7 @@ import { buildFieldEngineData } from '../src/features/field-engine/fieldEngine.t
 import { buildInstallationEngineData } from '../src/features/installation-engine/installationEngine.ts'
 import { buildRelationshipEngineData } from '../src/features/relationship-engine/relationshipEngine.ts'
 import { applyHealthThresholds, DEFAULT_HEALTH_THRESHOLDS, scoreToHealthClass } from '../src/utils/health.ts'
+import { getVersion } from './dataset.mjs'
 
 const ENGINES = {
   financial:    { base: (c) => c.totalInvoices > 0 || c.trustReleases > 0 || c.renegotiations > 0, build: buildFinancialEngineData, wantsMonthly: true },
@@ -28,6 +29,33 @@ const ENGINES = {
 }
 
 export const ENGINE_KEYS = Object.keys(ENGINES)
+
+// ─── Cache de score (em memória) ───────────────────────────────
+// Pontua a base UMA vez por (engine + config + limiares + versão do snapshot).
+// Paginar/filtrar/trocar aba reusa o array pontuado (barato). Invalida sozinho
+// quando a config muda (hash) ou entra o snapshot novo da madrugada (mtime).
+const scoreCache = new Map()
+const SCORE_CACHE_LIMIT = 24
+function fnv1a(str) {
+  let h = 0x811c9dc5
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) }
+  return (h >>> 0).toString(36)
+}
+function scoredEngineData(key, clients, config, thresholds, monthly) {
+  const eng = ENGINES[key]
+  const cacheK = `${key}:${fnv1a(JSON.stringify(config))}:${fnv1a(JSON.stringify(thresholds || {}))}:${getVersion()}:${clients.length}`
+  const hit = scoreCache.get(cacheK)
+  if (hit) return hit
+  // Miss: pontua a população inteira da engine (parte cara) e guarda.
+  applyHealthThresholds(thresholds && typeof thresholds === 'object' ? thresholds : DEFAULT_HEALTH_THRESHOLDS)
+  const population = clients.filter(eng.base)
+  const cities = Array.from(new Set(population.map((c) => c.city).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  const data = eng.wantsMonthly ? eng.build(population, config, monthly) : eng.build(population, config)
+  const entry = { population, data, cities }
+  if (scoreCache.size >= SCORE_CACHE_LIMIT) scoreCache.delete(scoreCache.keys().next().value)
+  scoreCache.set(cacheK, entry)
+  return entry
+}
 
 // Rótulo + rota de cada engine (para o Dashboard/IA).
 const ENGINE_META = {
@@ -52,37 +80,39 @@ export function runEngine(key, opts = {}) {
   if (!eng) throw new Error(`Engine desconhecida: ${key}`)
   if (!opts.config || typeof opts.config !== 'object') throw new Error('Campo "config" (objeto) é obrigatório.')
 
-  // Sempre define os limiares (sync → sem interleaving entre requisições).
-  applyHealthThresholds(opts.thresholds && typeof opts.thresholds === 'object' ? opts.thresholds : DEFAULT_HEALTH_THRESHOLDS)
+  // Pontua a população inteira (do cache) — filtros/paginação vêm depois.
+  const { population, data, cities } = scoredEngineData(key, opts.clients || [], opts.config, opts.thresholds, opts.monthly || [])
 
-  // População da engine (base filter) — lista de cidades derivada dela, estável
-  // independentemente dos filtros de busca (para o dropdown do front).
-  const population = (opts.clients || []).filter(eng.base)
-  const cities = Array.from(new Set(population.map((c) => c.city).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'))
-
-  // Filtros da requisição (mesmo shape do ContractFilters): nome, contrato, cidade.
-  let clients = population
+  // Filtros da requisição (mesmo shape do ContractFilters) sobre a POPULAÇÃO →
+  // conjunto de ids permitidos; aplicado nos scores já pontuados (barato).
   const name = String(opts.name || '').trim().toLowerCase()
   const contract = String(opts.contract || '').trim().toLowerCase()
-  if (name) clients = clients.filter((c) => c.name && c.name.toLowerCase().includes(name))
-  if (contract) clients = clients.filter((c) => String(c.contractNumber).toLowerCase().includes(contract) || String(c.clientId).toLowerCase().includes(contract))
-  if (opts.city) clients = clients.filter((c) => c.city === opts.city)
+  const city = opts.city
+  let allowIds = null
+  if (name || contract || city) {
+    allowIds = new Set()
+    for (const c of population) {
+      if (name && !(c.name && c.name.toLowerCase().includes(name))) continue
+      if (contract && !(String(c.contractNumber).toLowerCase().includes(contract) || String(c.clientId).toLowerCase().includes(contract))) continue
+      if (city && c.city !== city) continue
+      allowIds.add(c.clientId)
+    }
+  }
+  let scores = allowIds ? data.scores.filter((s) => allowIds.has(s.customerId)) : data.scores
 
-  const analyzed = clients.length
-  const data = eng.wantsMonthly ? eng.build(clients, opts.config, opts.monthly || []) : eng.build(clients, opts.config)
+  // Distribuição sobre o conjunto filtrado (pré-filtro de classificação).
+  const analyzed = scores.length
+  const distribution = { excellent: 0, healthy: 0, attention: 0, high_risk: 0, critical: 0 }
+  for (const s of scores) distribution[s.classification]++
 
-  // Filtro por classificação (depende do score) + ordenação por risco (pior 1º).
-  let scores = data.scores.slice().sort((a, b) => a.healthScore - b.healthScore)
+  // Filtro por classificação + ordenação por risco (pior 1º) + página.
   if (opts.classification) scores = scores.filter((s) => s.classification === opts.classification)
+  scores = scores.slice().sort((a, b) => a.healthScore - b.healthScore)
 
   const total = scores.length
   const pageSize = Math.min(200, Math.max(1, Number(opts.pageSize) || 25))
   const page = Math.max(0, Number(opts.page) || 0)
   const pageScores = scores.slice(page * pageSize, page * pageSize + pageSize)
-
-  // Distribuição por classificação (sobre a população, pré-filtro de classe).
-  const distribution = { excellent: 0, healthy: 0, attention: 0, high_risk: 0, critical: 0 }
-  for (const s of data.scores) distribution[s.classification]++
 
   const { scores: _omit, ...aggregates } = data
   return { aggregates, distribution, cities, scores: pageScores, total, analyzed, populationTotal: population.length, page, pageSize }
@@ -101,9 +131,7 @@ export function runDashboard(clients, opts = {}) {
   for (const key of ENGINE_KEYS) {
     const cfg = configs[key]
     if (!cfg) continue // sem config para a engine → pula
-    const eng = ENGINES[key]
-    const population = clients.filter(eng.base)
-    const data = eng.wantsMonthly ? eng.build(population, cfg, monthly) : eng.build(population, cfg)
+    const { data } = scoredEngineData(key, clients, cfg, thresholds, monthly) // reusa o cache
 
     const distribution = { excellent: 0, healthy: 0, attention: 0, high_risk: 0, critical: 0 }
     for (const s of data.scores) distribution[s.classification]++
