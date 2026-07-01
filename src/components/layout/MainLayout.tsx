@@ -19,8 +19,8 @@ function DataGate({ status, error, onRetry }: { status: LoadStatus; error: strin
           <>
             <Loader2 size={22} className="text-brand-blue animate-spin" />
             <div>
-              <p className="text-sm font-semibold text-gray-100">Carregando base completa de clientes…</p>
-              <p className="text-[11px] text-gray-500 mt-1">Pode levar alguns segundos no primeiro acesso.</p>
+              <p className="text-sm font-semibold text-gray-100">Conectando ao servidor…</p>
+              <p className="text-[11px] text-gray-500 mt-1">Carregando os metadados da base.</p>
             </div>
           </>
         ) : (

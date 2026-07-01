@@ -17,6 +17,10 @@ import express from 'express'
 import { getCatalog, ENGINE_LABELS } from '../scripts/queries/index.mjs'
 import { writeOverride, deleteOverride, OVERRIDES_PATH } from '../scripts/queries/overrides.mjs'
 import { getQueryDef } from '../scripts/queries/registry.mjs'
+import { makePool } from '../scripts/db.mjs'
+import { buildCohort } from '../scripts/queries/cohort.mjs'
+import { getStatus as datasetStatus, getClients, getDataset } from './dataset.mjs'
+import { runEngine, runDashboard, ENGINE_KEYS } from './engines.mjs'
 
 const PORT = Number(process.env.API_PORT) || 8787
 const ALLOWED_DOMAIN = (process.env.ALLOWED_DOMAIN || 'sebratel.com.br').toLowerCase()
@@ -82,6 +86,63 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'churniq-api', overridesPath: OVERRIDES_PATH })
 })
 
+// Status da base materializada (snapshot completo carregado em memória pelo
+// backend). Fundação dos endpoints paginados por engine.
+app.get('/api/dataset/status', requireAuth(), (_req, res) => {
+  res.json(datasetStatus())
+})
+
+// Metadados leves da base (tudo menos o array pesado de clientes) — o front
+// carrega isto no boot no lugar do snapshot de ~9 MB. Sem auth: são apenas
+// listas distintas/totais (o snapshot antigo já era um asset público).
+app.get('/api/dataset/lists', (_req, res) => {
+  const ds = getDataset()
+  if (!ds) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
+  const { clients, ...lists } = ds
+  res.json(lists)
+})
+
+// Dashboard + IA — 7 engines + ranking combinado por cliente, no servidor.
+// POST /api/dashboard { configs:{financial,...}, thresholds?, name?, contract?, city?, topN? }
+app.post('/api/dashboard', requireAuth(), (req, res) => {
+  const clients = getClients()
+  if (!clients.length) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
+  try {
+    const b = req.body || {}
+    const result = runDashboard(clients, {
+      configs: b.configs, thresholds: b.thresholds, monthly: getDataset()?.monthly || [],
+      name: b.name, contract: b.contract, city: b.city, topN: b.topN,
+    })
+    res.json({ ...result, meta: datasetStatus(), monthly: getDataset()?.monthly || [] })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+// Pontuação de uma engine sobre a base materializada, paginada.
+// POST /api/engine/:key  { config, thresholds?, page?, pageSize?, search?, city?, classification? }
+// A config/limiares vêm por-usuário (ficam no navegador) e viajam na requisição.
+app.post('/api/engine/:key', requireAuth(), (req, res) => {
+  const { key } = req.params
+  if (!ENGINE_KEYS.includes(key)) return res.status(404).json({ error: `Engine desconhecida: ${key}` })
+  const clients = getClients()
+  if (!clients.length) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
+  try {
+    const b = req.body || {}
+    const result = runEngine(key, {
+      clients,
+      config: b.config,
+      thresholds: b.thresholds,
+      monthly: getDataset()?.monthly || [],
+      page: b.page, pageSize: b.pageSize,
+      name: b.name, contract: b.contract, city: b.city, classification: b.classification,
+    })
+    res.json({ ...result, meta: datasetStatus() })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
 app.get('/api/queries', requireAuth(), (req, res) => {
   // canEdit informa ao front se deve mostrar os controles de edição.
   const canEdit = !EDITORS.length || EDITORS.includes(req.user.email)
@@ -106,6 +167,53 @@ app.delete('/api/queries/:id', requireAuth({ editor: true }), (req, res) => {
   if (!getQueryDef(id)) return res.status(404).json({ error: `Query desconhecida: ${id}` })
   const removed = deleteOverride(id)
   res.json({ ok: true, id, removed })
+})
+
+// ─── Pontuação sugerida (coortes ativos × cancelados ao vivo) ──
+// Pool PostgreSQL criado sob demanda e reaproveitado entre requisições.
+let pgPool = null
+function getPool() {
+  if (!pgPool) pgPool = makePool() // lança se faltar env do banco
+  return pgPool
+}
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+function isoDaysAgo(days) {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return d.toISOString().slice(0, 10)
+}
+
+// GET /api/cancellation-suggestions?from=YYYY-MM-DD&to=YYYY-MM-DD[&sample=N]
+// Devolve os dois coortes (ativos amostrados + cancelados na janela) no shape
+// RealClient. O front calcula o lift/sugestões com buildSuggestions.
+app.get('/api/cancellation-suggestions', requireAuth(), async (req, res) => {
+  const to = DATE_RE.test(req.query.to) ? req.query.to : new Date().toISOString().slice(0, 10)
+  const from = DATE_RE.test(req.query.from) ? req.query.from : isoDaysAgo(365)
+  if (from > to) return res.status(400).json({ error: 'Intervalo inválido: "from" é posterior a "to".' })
+  const sampleLimit = Math.min(30000, Math.max(1000, Number(req.query.sample) || 15000))
+
+  let pool
+  try { pool = getPool() } catch (e) {
+    return res.status(500).json({ error: `Backend sem acesso ao banco: ${e.message}` })
+  }
+  try {
+    const [active, cancelled] = await Promise.all([
+      buildCohort(pool, { cancelled: false, from, to, sampleLimit }),
+      buildCohort(pool, { cancelled: true, from, to }),
+    ])
+    res.json({
+      active: active.clients,
+      cancelled: cancelled.clients,
+      meta: {
+        from, to, sampleLimit,
+        activeCount: active.clients.length,
+        cancelledCount: cancelled.clients.length,
+        warnings: [...new Set([...active.warnings, ...cancelled.warnings])],
+      },
+    })
+  } catch (e) {
+    res.status(500).json({ error: `Falha ao consultar o banco: ${e.message}` })
+  }
 })
 
 app.listen(PORT, () => {

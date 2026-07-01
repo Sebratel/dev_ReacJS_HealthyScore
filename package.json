@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "api": "node server/index.mjs",
+    "api": "tsx server/index.mjs",
     "fetch:clients": "node scripts/fetch-clients.mjs",
     "fetch:clients:full": "node scripts/fetch-clients.mjs full",
     "check:queries": "node scripts/queries/check-parity.mjs"
@@ -29,6 +29,7 @@
     "react-router-dom": "^6.23.1",
     "recharts": "^2.12.7",
     "tailwind-merge": "^2.3.0",
+    "tsx": "^4.22.4",
     "zustand": "^4.5.4"
   },
   "devDependencies": {

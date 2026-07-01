@@ -108,23 +108,25 @@ export function loadRealData(): Promise<void> {
   if (loadingPromise) return loadingPromise
 
   loadingPromise = (async () => {
-    const res = await fetch(DATA_URL, { cache: 'no-cache' })
-    if (!res.ok) throw new Error(`Não foi possível carregar a base de clientes (HTTP ${res.status})`)
-    const text = await decompressGzip(res)
-    const data = JSON.parse(text) as RealClientsFile
+    // Carrega apenas os METADADOS/listas (sem o array pesado de clientes) do
+    // backend. As telas de ranking/dashboard/IA buscam os clientes pontuados
+    // sob demanda em /api/engine/* e /api/dashboard. Boot leve e ágil.
+    const res = await fetch('/api/dataset/lists', { cache: 'no-cache' })
+    if (!res.ok) throw new Error(`Não foi possível carregar os metadados da base (HTTP ${res.status}). O backend (/api) está no ar?`)
+    const data = JSON.parse(await res.text()) as Partial<RealClientsFile>
 
-    realMeta = data.meta
-    realTotals = data.totals
-    realPaymentForms = data.paymentForms
-    realByCity = data.byCity
-    realMonthly = data.monthly
-    realCommercial = data.commercial
-    realConnection = data.connection
-    realField = data.field
-    realInstallation = data.installation
-    realRelationship = data.relationship
-    realNetwork = data.network
-    realClients = data.clients
+    realMeta = data.meta ?? realMeta
+    realTotals = data.totals ?? realTotals
+    realPaymentForms = data.paymentForms ?? []
+    realByCity = data.byCity ?? []
+    realMonthly = data.monthly ?? []
+    realCommercial = data.commercial ?? realCommercial
+    realConnection = data.connection ?? realConnection
+    realField = data.field ?? realField
+    realInstallation = data.installation ?? realInstallation
+    realRelationship = data.relationship ?? realRelationship
+    realNetwork = data.network ?? realNetwork
+    realClients = [] // não baixamos mais a base inteira no navegador
     loaded = true
   })()
 

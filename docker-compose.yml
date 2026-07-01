@@ -13,8 +13,13 @@ services:
     image: healthyscore-web:latest
     container_name: healthyscore-web
     restart: unless-stopped
+    networks:
+      - churniq
+    # Só entra no ar depois que o backend responde ao healthcheck — assim o
+    # proxy /api/ do nginx nunca sobe apontando para uma API ainda indisponível.
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       # Porta do host (esquerda) configurável; 80 é a porta interna do nginx.
       - "${WEB_PORT:-8080}:80"
@@ -35,6 +40,8 @@ services:
     image: churniq-api:latest
     container_name: churniq-api
     restart: unless-stopped
+    networks:
+      - churniq
     environment:
       API_PORT: 8787
       # Domínio de e-mail permitido para acessar o catálogo.
@@ -42,11 +49,73 @@ services:
       # Allowlist (CSV) de quem pode EDITAR queries. Vazio → qualquer conta do domínio.
       QUERY_EDITOR_EMAILS: ${QUERY_EDITOR_EMAILS:-}
       QUERY_OVERRIDES_PATH: /app/data/query-overrides.json
+      # ── Banco ELLEVEN (PostgreSQL) — necessário para a Pontuação Sugerida ao
+      #    vivo (endpoint /api/cancellation-suggestions consulta os coortes).
+      #    Preencha nas Environment variables da stack (Portainer).
+      DB_ELLEVEN_HOST: ${DB_ELLEVEN_HOST:-}
+      DB_ELLEVEN_DATABASE: ${DB_ELLEVEN_DATABASE:-}
+      DB_ELLEVEN_USER: ${DB_ELLEVEN_USER:-}
+      DB_ELLEVEN_PASSWORD: ${DB_ELLEVEN_PASSWORD:-}
+      DB_ELLEVEN_PORT: ${DB_ELLEVEN_PORT:-5432}
+      DB_ELLEVEN_SSL: ${DB_ELLEVEN_SSL:-}
+      # Base materializada (snapshot completo gerado pelo `etl`) que o backend
+      # carrega em memória para os endpoints paginados por engine.
+      SNAPSHOT_PATH: /snapshot/realClients.data
     volumes:
       - ./data:/app/data
+      - snapshot:/snapshot:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8787/api/health"]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 5s
+
+  # Job do ETL — gera o snapshot COMPLETO da base 1x por dia de madrugada
+  # (fetch-clients.mjs full) e grava no volume `snapshot`, compartilhado com a
+  # `api`. Bootstrap: se o volume estiver vazio, roda uma vez ao subir.
+  etl:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: churniq-api:latest
+    container_name: churniq-etl
+    restart: unless-stopped
+    networks:
+      - churniq
+    command: ["node", "scripts/etl-scheduler.mjs"]
+    environment:
+      SNAPSHOT_OUT: /snapshot/realClients.data
+      QUERY_OVERRIDES_PATH: /app/data/query-overrides.json
+      # Hora local da execução diária (0-23). Force uma execução ao subir com
+      # ETL_RUN_ON_START=true (além do bootstrap quando o volume está vazio).
+      ETL_HOUR: ${ETL_HOUR:-3}
+      ETL_RUN_ON_START: ${ETL_RUN_ON_START:-}
+      # Bancos usados pelo ETL (read-only recomendado). Preencha na stack.
+      DB_ELLEVEN_HOST: ${DB_ELLEVEN_HOST:-}
+      DB_ELLEVEN_DATABASE: ${DB_ELLEVEN_DATABASE:-}
+      DB_ELLEVEN_USER: ${DB_ELLEVEN_USER:-}
+      DB_ELLEVEN_PASSWORD: ${DB_ELLEVEN_PASSWORD:-}
+      DB_ELLEVEN_PORT: ${DB_ELLEVEN_PORT:-5432}
+      DB_ELLEVEN_SSL: ${DB_ELLEVEN_SSL:-}
+      DB_MARIA_HOST: ${DB_MARIA_HOST:-}
+      DB_MARIA_DATABASE: ${DB_MARIA_DATABASE:-}
+      DB_MARIA_USER: ${DB_MARIA_USER:-}
+      DB_MARIA_PASSWORD: ${DB_MARIA_PASSWORD:-}
+      DB_MARIA_PORT: ${DB_MARIA_PORT:-3306}
+    volumes:
+      - ./data:/app/data
+      - snapshot:/snapshot
+
+# Rede interna dedicada da stack. O nginx do `web` resolve o backend pelo nome
+# do serviço (`api`) dentro dela — é isso que faz o proxy /api/ funcionar.
+# Subir a stack inteira (front + backend) é um comando só:
+#   docker compose up -d --build
+networks:
+  churniq:
+    driver: bridge
+
+# Volume do snapshot completo: o `etl` grava, a `api` lê (materialização em
+# memória). Sobrevive a redeploys — os dados atualizam sozinhos de madrugada.
+volumes:
+  snapshot:

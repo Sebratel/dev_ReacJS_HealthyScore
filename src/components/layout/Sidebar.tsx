@@ -16,7 +16,7 @@ const NAV_ITEMS = [
   { path: '/manutencao',            icon: Wrench,          label: 'Campo',           sublabel: 'Atendimento a campo' },
   { path: '/engine-instalacao',     icon: PackageOpen,     label: 'Instalação',      sublabel: 'Qualidade de instalação' },
   { path: '/engine-relacionamento', icon: MessageSquare,   label: 'Relacionamento',  sublabel: 'NPS · Sentimento' },
-  { path: '/perfis-cancelados',     icon: UserMinus,       label: 'Cancelados',      sublabel: 'Perfis & pontuação' },
+  { path: '/perfis-cancelados',     icon: UserMinus,       label: 'Cancelados',      sublabel: 'Pontuação sugerida (IA)' },
   { path: '/ia',                    icon: Brain,           label: 'IA Preditiva',    sublabel: 'Previsões' },
   { path: '/configuracoes',         icon: Settings,        label: 'Configurações',   sublabel: 'Limiares e parâmetros' },
 ]

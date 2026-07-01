@@ -21,8 +21,11 @@ import { buildEffectiveQueries } from './queries/index.mjs'
 import { FROM_DATE } from './queries/registry.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-// Snapshot gzipado, servido como asset estático e baixado pelo front no boot.
-const OUT = resolve(__dirname, '../public/realClients.data')
+// Snapshot gzipado. Caminho configurável por SNAPSHOT_OUT (o job noturno grava
+// no volume compartilhado); sem a env, cai no asset estático servido no dev.
+const OUT = process.env.SNAPSHOT_OUT
+  ? resolve(process.env.SNAPSHOT_OUT)
+  : resolve(__dirname, '../public/realClients.data')
 const ARG = (process.argv[2] || '').toLowerCase()
 const FULL = ARG === 'full' || ARG === 'all' || ARG === '0'
 const SAMPLE_SIZE = FULL ? Infinity : (Number(process.argv[2]) || 2000)
