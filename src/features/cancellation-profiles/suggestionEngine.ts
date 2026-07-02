@@ -16,8 +16,9 @@ import { differenceInMonths, differenceInYears } from 'date-fns'
 import type { RealClient } from '@/types'
 import {
   CONTRACT_AGE_RANGES, PERSON_AGE_RANGES, SELLER_TENURE_RANGES,
-  contractAgeBucket, personAgeBucket, sellerTenureBucket,
+  contractAgeBucket, personAgeBucket, sellerTenureBucket, genderLabel,
 } from '@/features/commercial-engine/commercialConfig'
+import { formatCurrency } from '@/utils/cn'
 import {
   bucketByMax, MASSIVE_RANGES, OFFLINE_RANGES, OVERAGE_RANGES,
 } from '@/features/network-engine/networkConfig'
@@ -497,4 +498,41 @@ export function buildSuggestions(
   }).filter((g) => g.indicators.length > 0)
 
   return { groups, flat, indicatorCount: flat.length, indexCount, riskCount }
+}
+
+// ─── Listas dinâmicas a partir dos clientes (ativos ∪ cancelados) ──────────
+// Fornece as categorias canônicas (vendedor/plano/modelo/…) que os indicadores
+// dinâmicos usam. Rodado no servidor (base completa) e reusado no front p/ o
+// "Aplicar" enxergar as chaves.
+const distinctStr = (values: string[]): { key: string; label: string }[] => {
+  const seen = new Set<string>()
+  const out: { key: string; label: string }[] = []
+  for (const v of values) { if (!v || seen.has(v)) continue; seen.add(v); out.push({ key: v, label: v }) }
+  return out
+}
+export function deriveLists(clients: RealClient[]): DynamicLists {
+  const flat = (fn: (c: RealClient) => string[]) => clients.flatMap(fn).filter(Boolean)
+  const valSeen = new Set<string>()
+  const planValues: { key: string; label: string }[] = []
+  for (const c of clients) {
+    const k = String(c.monthlyValue)
+    if (c.monthlyValue > 0 && !valSeen.has(k)) { valSeen.add(k); planValues.push({ key: k, label: formatCurrency(c.monthlyValue) }) }
+  }
+  const genders = (vals: string[]) => distinctStr(vals).map((g) => ({ key: g.key, label: genderLabel(g.key) }))
+  return {
+    paymentForms: distinctStr(clients.map((c) => c.paymentForm)),
+    sellers: distinctStr(clients.map((c) => c.seller)),
+    plans: distinctStr(clients.map((c) => c.plan)),
+    planValues,
+    cities: distinctStr(clients.map((c) => c.city)),
+    neighborhoods: distinctStr(clients.map((c) => c.neighborhood)),
+    clientGenders: genders(clients.map((c) => c.clientGender)),
+    sellerGenders: genders(clients.map((c) => c.sellerGender)),
+    models: distinctStr(flat((c) => c.equipment)),
+    reasons: distinctStr(flat((c) => c.reasons)),
+    fieldTechnicians: distinctStr(flat((c) => c.technicians)),
+    installTechnicians: distinctStr(flat((c) => c.installTechnicians)),
+    relTypes: distinctStr(flat((c) => c.relTypes)),
+    attendants: distinctStr(flat((c) => c.relAttendants)),
+  }
 }
