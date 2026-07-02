@@ -384,6 +384,9 @@ export default function SuggestedScorePanel() {
 
   // O lift já vem calculado do servidor (base completa materializada).
   const built = state.status === 'ready' ? state.data : null
+  // Cobertura real da base: 'full' (ETL noturno completo) vs 'sample' (amostra
+  // de dev). Rotula o KPI com honestidade — em dev a base ativa é uma amostra.
+  const isFullBase = built?.meta?.coverage === 'full'
 
   // Dispatch por engine: lê a nota atual e grava a sugestão (acesso genérico → any localizado).
   const DISPATCH: Record<SuggestionEngineKey, { config: any; setIndicator: (k: any, p: any) => void; setIndex: (k: any, i: string, p: number) => void }> = {
@@ -491,7 +494,7 @@ export default function SuggestedScorePanel() {
         <>
           {/* KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi icon={<Users size={15} />} label="Base ativa (completa)" value={state.data.activeCount.toLocaleString('pt-BR')} sub="clientes analisados" />
+            <Kpi icon={<Users size={15} />} label={isFullBase ? 'Base ativa (completa)' : 'Base ativa (amostra)'} value={state.data.activeCount.toLocaleString('pt-BR')} sub={isFullBase ? 'clientes analisados' : 'amostra de dev — completa no servidor'} />
             <Kpi icon={<TrendingDown size={15} />} label="Cancelados no período" value={state.data.cancelledCount.toLocaleString('pt-BR')} sub={`${fmtDateBR(from)} – ${fmtDateBR(to)}`} color="#ef4444" />
             <Kpi icon={<Database size={15} />} label="Indicadores" value={String(built.indicatorCount)} sub={`${built.indexCount} índices avaliados`} />
             <Kpi icon={<TrendingDown size={15} />} label="Sinais de risco" value={String(built.riskCount)} sub="índices com lift > 1" color="#f97316" />
