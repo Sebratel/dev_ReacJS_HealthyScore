@@ -53,17 +53,8 @@ services:
       # Allowlist (CSV) de quem pode EDITAR queries. Vazio → qualquer conta do domínio.
       QUERY_EDITOR_EMAILS: ${QUERY_EDITOR_EMAILS:-}
       QUERY_OVERRIDES_PATH: /app/data/query-overrides.json
-      # ── Banco ELLEVEN (PostgreSQL) — necessário para a Pontuação Sugerida ao
-      #    vivo (endpoint /api/cancellation-suggestions consulta os coortes).
-      #    Preencha nas Environment variables da stack (Portainer).
-      DB_ELLEVEN_HOST: ${DB_ELLEVEN_HOST:-}
-      DB_ELLEVEN_DATABASE: ${DB_ELLEVEN_DATABASE:-}
-      DB_ELLEVEN_USER: ${DB_ELLEVEN_USER:-}
-      DB_ELLEVEN_PASSWORD: ${DB_ELLEVEN_PASSWORD:-}
-      DB_ELLEVEN_PORT: ${DB_ELLEVEN_PORT:-5432}
-      DB_ELLEVEN_SSL: ${DB_ELLEVEN_SSL:-}
-      # Base materializada (snapshot completo gerado pelo `etl`) que o backend
-      # carrega em memória para os endpoints paginados por engine.
+      # Base materializada (snapshot gerado pelo `etl`) que o backend carrega em
+      # memória. A `api` NÃO acessa mais o banco — tudo vem do snapshot.
       SNAPSHOT_PATH: /snapshot/realClients.data
     volumes:
       - ./data:/app/data

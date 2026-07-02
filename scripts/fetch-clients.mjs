@@ -19,6 +19,7 @@ import { makePool } from './db.mjs'
 import { makeMariaPool } from './db-maria.mjs'
 import { buildEffectiveQueries } from './queries/index.mjs'
 import { FROM_DATE } from './queries/registry.mjs'
+import { buildCohort } from './queries/cohort.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // Snapshot gzipado. Caminho configurável por SNAPSHOT_OUT (o job noturno grava
@@ -246,6 +247,19 @@ try {
   // Remove PII/geo de cada cliente antes de exportar (não usados no front).
   const clientsOut = clients.map((c) => { const o = { ...c }; for (const k of STRIP_FIELDS) delete o[k]; return o })
 
+  // Coorte de CANCELADOS materializada (janela ampla) — a tela de Pontuação
+  // Sugerida lê daqui, sem consultar o banco ao vivo. Mesmos campos do ativo
+  // (o cohort.mjs já não traz PII).
+  const CANCELLED_MONTHS = Number(process.env.CANCELLED_MONTHS) || 24
+  const _to = new Date(), _from = new Date(); _from.setMonth(_from.getMonth() - CANCELLED_MONTHS)
+  const cancelledFrom = _from.toISOString().slice(0, 10), cancelledTo = _to.toISOString().slice(0, 10)
+  let cancelledClients = []
+  try {
+    const cc = await buildCohort(pool, { cancelled: true, from: cancelledFrom, to: cancelledTo })
+    cancelledClients = cc.clients
+    console.log(`Cancelados: ${cancelledClients.length} em ${cancelledFrom}..${cancelledTo}${cc.warnings.length ? ` (avisos: ${cc.warnings.join('; ')})` : ''}`)
+  } catch (e) { console.warn('Cancelados: falha ao materializar —', e.message) }
+
   const payload = {
     meta: {
       generatedAt: new Date().toISOString(),
@@ -292,6 +306,9 @@ try {
       splittersAffected: massiveCodes.length,
     },
     clients: clientsOut,
+    // Coorte de cancelados (materializada) + a janela coberta.
+    cancelledClients,
+    cancelledMeta: { from: cancelledFrom, to: cancelledTo, months: CANCELLED_MONTHS, count: cancelledClients.length },
   }
 
   mkdirSync(dirname(OUT), { recursive: true })

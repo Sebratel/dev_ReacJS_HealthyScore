@@ -200,7 +200,7 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
             <div className="flex items-center gap-1.5 text-[11px] bg-app-surface border border-app-border px-3 py-2 rounded-xl">
               <Zap size={11} className="text-brand-cyan" />
               <span className="font-mono text-gray-600">
-                <span className="text-gray-900 font-semibold">{(data?.analyzed ?? 0).toLocaleString('pt-BR')}</span> {props.analyzedLabel}
+                <span className="text-gray-100 font-semibold">{(data?.analyzed ?? 0).toLocaleString('pt-BR')}</span> {props.analyzedLabel}
                 <span className="text-gray-400">{rightStat}</span>
               </span>
             </div>

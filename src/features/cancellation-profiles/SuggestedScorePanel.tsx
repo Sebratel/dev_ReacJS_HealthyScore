@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Sparkles, ChevronDown, ChevronRight, Check, Wand2, Info,
   TrendingDown, TrendingUp, Database, Users, Loader2, AlertTriangle, Lock, RefreshCw,
@@ -12,12 +12,8 @@ import {
   realPaymentForms, realCommercial, realConnection, realField,
   realInstallation, realRelationship,
 } from '@/data/realClients'
-import type { RealClient } from '@/types'
-import {
-  buildSuggestions, type DynamicLists, type SuggestionEngineKey,
-  type IndicatorSuggestion, type IndexSuggestion,
-} from './suggestionEngine'
-import { fetchCancellationSuggestions, ApiError, type SuggestionCohorts } from './suggestionsApi'
+import type { SuggestionEngineKey, IndicatorSuggestion, IndexSuggestion } from './suggestionEngine'
+import { fetchCancellationSuggestions, ApiError, type SuggestionResult } from './suggestionsApi'
 
 // ─── Datas ─────────────────────────────────────────────────────
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -299,44 +295,13 @@ function Kpi({ icon, label, value, sub, color }: { icon: React.ReactNode; label:
   )
 }
 
-// ─── Derivação das listas dinâmicas a partir dos coortes ───────
-const distinctStr = (values: string[]): { key: string; label: string }[] => {
-  const seen = new Set<string>()
-  const out: { key: string; label: string }[] = []
-  for (const v of values) { if (!v || seen.has(v)) continue; seen.add(v); out.push({ key: v, label: v }) }
-  return out
-}
-function deriveLists(clients: RealClient[]): DynamicLists {
-  const flat = (fn: (c: RealClient) => string[]) => clients.flatMap(fn).filter(Boolean)
-  const valSeen = new Set<string>()
-  const planValues: { key: string; label: string }[] = []
-  for (const c of clients) {
-    const k = String(c.monthlyValue)
-    if (c.monthlyValue > 0 && !valSeen.has(k)) { valSeen.add(k); planValues.push({ key: k, label: formatCurrency(c.monthlyValue) }) }
-  }
-  const genders = (vals: string[]) => distinctStr(vals).map((g) => ({ key: g.key, label: genderLabel(g.key) }))
-  return {
-    paymentForms: distinctStr(clients.map((c) => c.paymentForm)),
-    sellers: distinctStr(clients.map((c) => c.seller)),
-    plans: distinctStr(clients.map((c) => c.plan)),
-    planValues,
-    cities: distinctStr(clients.map((c) => c.city)),
-    neighborhoods: distinctStr(clients.map((c) => c.neighborhood)),
-    clientGenders: genders(clients.map((c) => c.clientGender)),
-    sellerGenders: genders(clients.map((c) => c.sellerGender)),
-    models: distinctStr(flat((c) => c.equipment)),
-    reasons: distinctStr(flat((c) => c.reasons)),
-    fieldTechnicians: distinctStr(flat((c) => c.technicians)),
-    installTechnicians: distinctStr(flat((c) => c.installTechnicians)),
-    relTypes: distinctStr(flat((c) => c.relTypes)),
-    attendants: distinctStr(flat((c) => c.relAttendants)),
-  }
-}
+// deriveLists agora roda no servidor (suggestionEngine.deriveLists sobre a base
+// completa) e vem no resultado como `lists`.
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; error: ApiError }
-  | { status: 'ready'; data: SuggestionCohorts }
+  | { status: 'ready'; data: SuggestionResult }
 
 // ─── Painel principal ──────────────────────────────────────────
 export default function SuggestedScorePanel() {
@@ -389,7 +354,7 @@ export default function SuggestedScorePanel() {
   // o "Aplicar" nesses índices seria no-op (a chave não existiria em indices).
   useEffect(() => {
     if (state.status !== 'ready') return
-    const L = deriveLists([...state.data.active, ...state.data.cancelled])
+    const L = state.data.lists // derivada no servidor (base completa ∪ cancelados)
     const snap = (arr: { value: string | number }[]) => arr.map((e) => ({ key: String(e.value), label: String(e.value) }))
     const merge = (base: { key: string; label: string }[], extra: { key: string; label: string }[]) => {
       const seen = new Set(base.map((b) => b.key))
@@ -417,12 +382,8 @@ export default function SuggestedScorePanel() {
     setFrom(f); setTo(t); load(f, t)
   }
 
-  const built = useMemo(() => {
-    if (state.status !== 'ready') return null
-    const { active, cancelled } = state.data
-    const lists = deriveLists([...active, ...cancelled])
-    return buildSuggestions(active, cancelled, lists, { skipEngines: ['network'] })
-  }, [state])
+  // O lift já vem calculado do servidor (base completa materializada).
+  const built = state.status === 'ready' ? state.data : null
 
   // Dispatch por engine: lê a nota atual e grava a sugestão (acesso genérico → any localizado).
   const DISPATCH: Record<SuggestionEngineKey, { config: any; setIndicator: (k: any, p: any) => void; setIndex: (k: any, i: string, p: number) => void }> = {
@@ -502,7 +463,7 @@ export default function SuggestedScorePanel() {
       {/* Estados */}
       {state.status === 'loading' && (
         <div className="flex items-center gap-2 rounded-xl border border-app-border bg-app-card px-5 py-10 text-sm text-gray-400">
-          <Loader2 size={16} className="animate-spin" /> Consultando o banco e calculando o lift…
+          <Loader2 size={16} className="animate-spin" /> Calculando o lift na base…
         </div>
       )}
 
@@ -530,22 +491,22 @@ export default function SuggestedScorePanel() {
         <>
           {/* KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi icon={<Users size={15} />} label="Base ativa (amostra)" value={state.data.meta.activeCount.toLocaleString('pt-BR')} sub="clientes analisados" />
-            <Kpi icon={<TrendingDown size={15} />} label="Cancelados no período" value={state.data.meta.cancelledCount.toLocaleString('pt-BR')} sub={`${fmtDateBR(from)} – ${fmtDateBR(to)}`} color="#ef4444" />
+            <Kpi icon={<Users size={15} />} label="Base ativa (completa)" value={state.data.activeCount.toLocaleString('pt-BR')} sub="clientes analisados" />
+            <Kpi icon={<TrendingDown size={15} />} label="Cancelados no período" value={state.data.cancelledCount.toLocaleString('pt-BR')} sub={`${fmtDateBR(from)} – ${fmtDateBR(to)}`} color="#ef4444" />
             <Kpi icon={<Database size={15} />} label="Indicadores" value={String(built.indicatorCount)} sub={`${built.indexCount} índices avaliados`} />
             <Kpi icon={<TrendingDown size={15} />} label="Sinais de risco" value={String(built.riskCount)} sub="índices com lift > 1" color="#f97316" />
           </div>
 
-          {/* Avisos de queries que falharam (útil pra validar o SQL no banco) */}
-          {state.data.meta.warnings.length > 0 && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-[11px] text-gray-400 leading-relaxed">
-              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-300" />
-              <div>
-                <p className="text-gray-300 font-semibold">Alguns sinais não puderam ser lidos (indicador fica sem dado):</p>
-                <ul className="mt-1 list-disc list-inside font-mono text-[10px] text-gray-500">
-                  {state.data.meta.warnings.map((w, i) => <li key={i}>{w}</li>)}
-                </ul>
-              </div>
+          {/* Janela materializada de madrugada — o filtro de data trabalha dentro dela */}
+          {state.data.materializedWindow && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-app-border bg-app-card/60 px-4 py-2.5 text-[11px] text-gray-500 leading-relaxed">
+              <Info size={14} className="mt-0.5 shrink-0 text-gray-500" />
+              <p>
+                Base atualizada de madrugada. Cancelados disponíveis de{' '}
+                <strong className="text-gray-400">{fmtDateBR(state.data.materializedWindow.from)}</strong> a{' '}
+                <strong className="text-gray-400">{fmtDateBR(state.data.materializedWindow.to)}</strong>{' '}
+                ({state.data.materializedWindow.count.toLocaleString('pt-BR')} contratos) — o filtro de data acima opera dentro dessa janela.
+              </p>
             </div>
           )}
 

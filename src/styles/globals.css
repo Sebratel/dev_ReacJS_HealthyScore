@@ -15,16 +15,21 @@
     /* Texto principal (near-black quente) */
     --color-white: 26 26 26;         /* #1a1a1a on-surface */
 
-    /* Escala de cinza — neutros quentes (claro → escuro) */
-    --gray-100: 235 231 219;
-    --gray-200: 214 210 198;
-    --gray-300: 168 168 158;
-    --gray-400: 138 138 130;
-    --gray-500: 107 107 102;
-    --gray-600: 93 93 93;            /* #5d5d5d on-surface-variant */
-    --gray-700: 58 58 58;
-    --gray-800: 38 38 38;            /* #262626 inverse-surface */
-    --gray-900: 26 26 26;            /* #1a1a1a */
+    /* Escala de cinza para TEXTO sobre o creme claro (escuro → claro).
+       Os componentes foram escritos para tema escuro, onde gray-100 é o texto
+       de destaque (mais claro). Aqui invertemos: gray-100 é o mais ESCURO
+       (near-black) e a legibilidade decresce suavemente até gray-900. Assim as
+       nomenclaturas ficam nítidas no fundo claro sem tocar em cada componente.
+       Uso quase exclusivo em texto — bg/border com gray são desprezíveis. */
+    --gray-100: 26 26 26;            /* #1a1a1a — destaque (near-black) */
+    --gray-200: 40 40 40;            /* #282828 */
+    --gray-300: 58 58 58;            /* #3a3a3a — secundário forte */
+    --gray-400: 75 75 73;            /* #4b4b49 */
+    --gray-500: 93 93 90;            /* #5d5d5a — rótulos/mutado (workhorse) ≈ on-surface-variant */
+    --gray-600: 110 110 106;         /* #6e6e6a */
+    --gray-700: 130 130 125;         /* #82827d */
+    --gray-800: 150 150 145;         /* #969691 */
+    --gray-900: 168 168 160;         /* #a8a8a0 — mutado mais claro */
   }
 
   * {
@@ -33,7 +38,10 @@
 
   html {
     font-family: 'Inter', system-ui, sans-serif;
-    font-size: 14px;
+    /* Base do rem = alavanca de densidade global. Como padding/gaps/alturas de
+       gráfico/texto do Tailwind são em rem, reduzir aqui deixa toda a UI mais
+       compacta e "clean" de forma proporcional, sem redesenhar componente. */
+    font-size: 13px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

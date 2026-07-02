@@ -17,10 +17,9 @@ import express from 'express'
 import { getCatalog, ENGINE_LABELS } from '../scripts/queries/index.mjs'
 import { writeOverride, deleteOverride, OVERRIDES_PATH } from '../scripts/queries/overrides.mjs'
 import { getQueryDef } from '../scripts/queries/registry.mjs'
-import { makePool } from '../scripts/db.mjs'
-import { buildCohort } from '../scripts/queries/cohort.mjs'
-import { getStatus as datasetStatus, getClients, getDataset } from './dataset.mjs'
+import { getStatus as datasetStatus, getClients, getCancelledClients, getDataset } from './dataset.mjs'
 import { runEngine, runDashboard, ENGINE_KEYS } from './engines.mjs'
+import { buildSuggestions, deriveLists } from '../src/features/cancellation-profiles/suggestionEngine.ts'
 
 const PORT = Number(process.env.API_PORT) || 8787
 const ALLOWED_DOMAIN = (process.env.ALLOWED_DOMAIN || 'sebratel.com.br').toLowerCase()
@@ -98,7 +97,7 @@ app.get('/api/dataset/status', requireAuth(), (_req, res) => {
 app.get('/api/dataset/lists', (_req, res) => {
   const ds = getDataset()
   if (!ds) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
-  const { clients, ...lists } = ds
+  const { clients, cancelledClients, ...lists } = ds // exclui os arrays pesados
   res.json(lists)
 })
 
@@ -169,52 +168,58 @@ app.delete('/api/queries/:id', requireAuth({ editor: true }), (req, res) => {
   res.json({ ok: true, id, removed })
 })
 
-// ─── Pontuação sugerida (coortes ativos × cancelados ao vivo) ──
-// Pool PostgreSQL criado sob demanda e reaproveitado entre requisições.
-let pgPool = null
-function getPool() {
-  if (!pgPool) pgPool = makePool() // lança se faltar env do banco
-  return pgPool
-}
+// ─── Pontuação sugerida (lift: ativos × cancelados, materializados) ──
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 function isoDaysAgo(days) {
   const d = new Date()
   d.setDate(d.getDate() - days)
   return d.toISOString().slice(0, 10)
 }
+// Cache por (versão do snapshot + janela) — buildSuggestions sobre a base
+// completa é caro; presets reusam a mesma entrada.
+const suggCache = new Map()
 
-// GET /api/cancellation-suggestions?from=YYYY-MM-DD&to=YYYY-MM-DD[&sample=N]
-// Devolve os dois coortes (ativos amostrados + cancelados na janela) no shape
-// RealClient. O front calcula o lift/sugestões com buildSuggestions.
-app.get('/api/cancellation-suggestions', requireAuth(), async (req, res) => {
+// GET /api/cancellation-suggestions?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Pontua o lift NO SERVIDOR a partir da base ATIVA completa (materializada) ×
+// CANCELADOS materializados filtrados pela janela. Não consulta o banco ao
+// vivo. Devolve o resultado compacto (grupos) + listas dinâmicas (p/ o Aplicar).
+app.get('/api/cancellation-suggestions', requireAuth(), (req, res) => {
+  const active = getClients()
+  if (!active.length) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
+  const cancelledAll = getCancelledClients()
+  const cw = getDataset()?.cancelledMeta || null
+  const winFrom = cw?.from || isoDaysAgo(365)
+  const winTo = cw?.to || new Date().toISOString().slice(0, 10)
+
+  // Filtro do usuário, limitado à janela materializada pelo ETL.
   const q = req.query
-  const to = (typeof q.to === 'string' && DATE_RE.test(q.to)) ? q.to : new Date().toISOString().slice(0, 10)
-  const from = (typeof q.from === 'string' && DATE_RE.test(q.from)) ? q.from : isoDaysAgo(365)
+  let to = (typeof q.to === 'string' && DATE_RE.test(q.to)) ? q.to : winTo
+  let from = (typeof q.from === 'string' && DATE_RE.test(q.from)) ? q.from : winFrom
   if (from > to) return res.status(400).json({ error: 'Intervalo inválido: "from" é posterior a "to".' })
-  const sampleLimit = Math.min(30000, Math.max(1000, Number(req.query.sample) || 15000))
+  if (from < winFrom) from = winFrom
+  if (to > winTo) to = winTo
 
-  let pool
-  try { pool = getPool() } catch (e) {
-    return res.status(500).json({ error: `Backend sem acesso ao banco: ${e.message}` })
+  const key = `${getDataset()?.meta?.generatedAt || ''}:${from}:${to}`
+  let payload = suggCache.get(key)
+  if (!payload) {
+    try {
+      const cancelled = cancelledAll.filter((c) => c.cancellationDate && c.cancellationDate >= from && c.cancellationDate <= to)
+      const lists = deriveLists([...active, ...cancelled])
+      const result = buildSuggestions(active, cancelled, lists, { skipEngines: ['network'] })
+      payload = {
+        groups: result.groups, indicatorCount: result.indicatorCount, indexCount: result.indexCount, riskCount: result.riskCount,
+        lists,
+        activeCount: active.length, cancelledCount: cancelled.length,
+        window: { from, to }, materializedWindow: cw,
+        meta: datasetStatus(),
+      }
+      if (suggCache.size >= 12) suggCache.delete(suggCache.keys().next().value)
+      suggCache.set(key, payload)
+    } catch (e) {
+      return res.status(400).json({ error: e.message })
+    }
   }
-  try {
-    const [active, cancelled] = await Promise.all([
-      buildCohort(pool, { cancelled: false, from, to, sampleLimit }),
-      buildCohort(pool, { cancelled: true, from, to }),
-    ])
-    res.json({
-      active: active.clients,
-      cancelled: cancelled.clients,
-      meta: {
-        from, to, sampleLimit,
-        activeCount: active.clients.length,
-        cancelledCount: cancelled.clients.length,
-        warnings: [...new Set([...active.warnings, ...cancelled.warnings])],
-      },
-    })
-  } catch (e) {
-    res.status(500).json({ error: `Falha ao consultar o banco: ${e.message}` })
-  }
+  res.json(payload)
 })
 
 app.listen(PORT, () => {
