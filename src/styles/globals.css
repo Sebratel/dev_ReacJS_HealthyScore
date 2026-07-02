@@ -38,7 +38,10 @@
 
   html {
     font-family: 'Inter', system-ui, sans-serif;
-    font-size: 14px;
+    /* Base do rem = alavanca de densidade global. Como padding/gaps/alturas de
+       gráfico/texto do Tailwind são em rem, reduzir aqui deixa toda a UI mais
+       compacta e "clean" de forma proporcional, sem redesenhar componente. */
+    font-size: 13px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

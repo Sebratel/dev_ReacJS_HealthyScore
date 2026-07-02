@@ -52,7 +52,7 @@ export function HealthGauge({ score, size = 160, showLabel = true, strokeWidth: 
         <circle
           cx={cx} cy={cy} r={r}
           fill="none"
-          stroke="#1a2236"
+          stroke="#e0dcd0"
           strokeWidth={strokeWidth}
           strokeDasharray={`${trackLength} ${C}`}
           strokeLinecap="round"

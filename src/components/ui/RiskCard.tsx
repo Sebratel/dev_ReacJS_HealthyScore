@@ -94,7 +94,7 @@ export function RiskCard({ type, risk, monthlyValue }: RiskCardProps) {
         {/* Circular mini gauge */}
         <div className="ml-auto">
           <svg width={52} height={52} viewBox="0 0 52 52">
-            <circle cx={26} cy={26} r={20} fill="none" stroke="#1a2236" strokeWidth={6} />
+            <circle cx={26} cy={26} r={20} fill="none" stroke="#e0dcd0" strokeWidth={6} />
             <circle
               cx={26} cy={26} r={20} fill="none"
               stroke={style.accent}

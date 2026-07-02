@@ -191,7 +191,7 @@ export default function AiPredictivePage() {
                   <linearGradient id="gLate" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f97316" stopOpacity={0.3} /><stop offset="95%" stopColor="#f97316" stopOpacity={0} /></linearGradient>
                   <linearGradient id="gOvd" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} /><stop offset="95%" stopColor="#ef4444" stopOpacity={0} /></linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1a2236" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--app-border))" />
                 <XAxis dataKey="month" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} />
@@ -208,7 +208,7 @@ export default function AiPredictivePage() {
           <div className="p-2 h-52">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={rk.radar}>
-                <PolarGrid stroke="#1a2236" />
+                <PolarGrid stroke="rgb(var(--app-border))" />
                 <PolarAngleAxis dataKey="metric" tick={{ fill: '#6b7280', fontSize: 9 }} />
                 <Radar name="Score médio" dataKey="value" stroke="#7c3aed" fill="#7c3aed" fillOpacity={0.2} strokeWidth={2} />
               </RadarChart>
