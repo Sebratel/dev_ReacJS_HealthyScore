@@ -19,6 +19,8 @@
     "dotenv": "^17.4.2",
     "express": "^4.21.2",
     "framer-motion": "^11.2.10",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.395.0",
     "mysql2": "^3.22.5",

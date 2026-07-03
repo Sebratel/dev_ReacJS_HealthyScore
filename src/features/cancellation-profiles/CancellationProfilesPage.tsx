@@ -1,5 +1,6 @@
 import { UserMinus } from 'lucide-react'
 import SuggestedScorePanel from './SuggestedScorePanel'
+import CancelledClientsPanel from './CancelledClientsPanel'
 
 // Tela de Cancelados — hoje concentra a Pontuação Sugerida pela IA: a partir
 // dos padrões de cancelamento, sugere a nota de cada indicador de todas as
@@ -30,6 +31,9 @@ export default function CancellationProfilesPage() {
       </div>
 
       <SuggestedScorePanel />
+
+      {/* Quem cancelou — perfil compacto por cliente (dados da coorte materializada) */}
+      <CancelledClientsPanel />
     </div>
   )
 }

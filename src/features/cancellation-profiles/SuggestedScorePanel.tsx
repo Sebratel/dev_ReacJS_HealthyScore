@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Sparkles, ChevronDown, ChevronRight, Check, Wand2, Info,
   TrendingDown, TrendingUp, Database, Users, Loader2, AlertTriangle, Lock, RefreshCw,
-  CalendarRange, Network,
+  CalendarRange, Network, ArrowUp, ArrowDown, ArrowUpDown, FileDown,
 } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { cn, formatCurrency } from '@/utils/cn'
@@ -162,6 +162,9 @@ function IndexRow({ ind, idx, current, onApply }: {
 }
 
 // ─── Bloco de um indicador ─────────────────────────────────────
+type SortCol = 'activeRate' | 'cancelledRate' | 'lift'
+type SortState = { col: SortCol; dir: 'asc' | 'desc' } | null
+
 function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
   ind: IndicatorSuggestion
   currentOf: (indexKey: string) => number
@@ -170,12 +173,30 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
 }) {
   const [open, setOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)
+  const [sort, setSort] = useState<SortState>(null)
 
   const valid = ind.indices.filter((i) => i.suggestedPoints !== null)
   const top = valid[0] ?? null
   const appliableCount = valid.filter((i) => currentOf(i.indexKey) !== i.suggestedPoints).length
   const LIMIT = 12
-  const visible = showAll ? ind.indices : ind.indices.slice(0, LIMIT)
+
+  // Ordenação clicável — linhas sem amostra suficiente ficam sempre no fim.
+  const sortedIndices = useMemo(() => {
+    if (!sort) return ind.indices
+    const val = (i: IndexSuggestion): number | null =>
+      !i.enough ? null : sort.col === 'lift' ? i.lift : sort.col === 'activeRate' ? i.activeRate : i.cancelledRate
+    return [...ind.indices].sort((a, b) => {
+      const va = val(a), vb = val(b)
+      if (va === null && vb === null) return 0
+      if (va === null) return 1
+      if (vb === null) return -1
+      return sort.dir === 'asc' ? va - vb : vb - va
+    })
+  }, [ind.indices, sort])
+  const visible = showAll ? sortedIndices : sortedIndices.slice(0, LIMIT)
+
+  const toggleSort = (col: SortCol) =>
+    setSort((s) => (s?.col !== col ? { col, dir: 'desc' } : s.dir === 'desc' ? { col, dir: 'asc' } : null))
 
   return (
     <div className="rounded-xl border border-app-border bg-app-card overflow-hidden">
@@ -216,16 +237,29 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-app-border bg-app-surface/20">
-                  {[
+                  {([
                     { h: ind.presence ? 'Condição' : 'Atributo', a: 'left' },
-                    { h: '% base ativa', a: 'right' },
-                    { h: '% cancelados', a: 'right' },
-                    { h: 'Lift', a: 'right' },
+                    { h: '% base ativa', a: 'right', col: 'activeRate' as SortCol },
+                    { h: '% cancelados', a: 'right', col: 'cancelledRate' as SortCol },
+                    { h: 'Lift', a: 'right', col: 'lift' as SortCol },
                     { h: 'Sugestão', a: 'right' },
                     { h: 'Atual', a: 'right' },
                     { h: '', a: 'right' },
-                  ].map(({ h, a }) => (
-                    <th key={h || 'apply'} className={cn('px-3 py-2 text-[9px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap', a === 'right' ? 'text-right' : 'text-left')}>{h}</th>
+                  ] as { h: string; a: string; col?: SortCol }[]).map(({ h, a, col }) => (
+                    <th key={h || 'apply'} className={cn('px-3 py-2 text-[9px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap', a === 'right' ? 'text-right' : 'text-left')}>
+                      {col ? (
+                        <button
+                          onClick={() => toggleSort(col)}
+                          title={`Ordenar por ${h}`}
+                          className={cn('inline-flex items-center gap-1 uppercase tracking-wider hover:text-gray-300 transition-colors', sort?.col === col ? 'text-brand-blue' : '')}
+                        >
+                          {h}
+                          {sort?.col === col
+                            ? (sort.dir === 'desc' ? <ArrowDown size={9} /> : <ArrowUp size={9} />)
+                            : <ArrowUpDown size={9} className="opacity-40" />}
+                        </button>
+                      ) : h}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -336,6 +370,19 @@ export default function SuggestedScorePanel() {
   const [from, setFrom] = useState(daysAgoISO(365))
   const [to, setTo] = useState(todayISO())
   const [state, setState] = useState<LoadState>({ status: 'loading' })
+  const [exporting, setExporting] = useState(false)
+
+  // Gera o PDF (KPIs + sugestões por módulo) — usa a janela efetiva do servidor.
+  async function exportPdf() {
+    if (state.status !== 'ready' || exporting) return
+    setExporting(true)
+    try {
+      const { exportSuggestionsPdf } = await import('./exportPdf')
+      await exportSuggestionsPdf(state.data, { from: state.data.window.from, to: state.data.window.to })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   async function load(f: string, t: string) {
     setState({ status: 'loading' })
@@ -459,6 +506,16 @@ export default function SuggestedScorePanel() {
                 {p.label}
               </button>
             ))}
+            <span className="w-px h-5 bg-app-border mx-1 hidden sm:block" />
+            <button
+              onClick={exportPdf}
+              disabled={state.status !== 'ready' || exporting}
+              title="Exporta os KPIs e as sugestões de pontuação em PDF"
+              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-brand-blue/15 text-brand-blue border border-brand-blue/30 hover:bg-brand-blue/25 transition-all font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {exporting ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
+              Exportar PDF
+            </button>
           </div>
         </div>
       </Card>

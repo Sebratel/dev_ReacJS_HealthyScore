@@ -11,7 +11,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/manutencao': { title: 'Campo', subtitle: 'Protocolos, SLA e reincidência técnica' },
   '/engine-instalacao': { title: 'Instalação', subtitle: 'Qualidade e SLA de instalação' },
   '/engine-relacionamento': { title: 'Relacionamento', subtitle: 'NPS, sentimento e ameaças de cancelamento' },
-  '/perfis-cancelados': { title: 'Perfis de Cancelamento', subtitle: 'Analise cancelados e crie perfis que ajustam a pontuação' },
+  '/perfis-cancelados': { title: 'Cancelados', subtitle: 'Pontuação sugerida pela IA · Perfil de quem cancelou' },
   '/ia': { title: 'IA Preditiva', subtitle: 'Health Score combinado · Previsões · Alertas automáticos' },
   '/configuracoes': { title: 'Configurações', subtitle: 'Limiares de Health Score e parâmetros globais' },
 }

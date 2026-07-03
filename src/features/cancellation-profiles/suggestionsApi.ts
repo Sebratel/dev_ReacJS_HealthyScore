@@ -48,3 +48,88 @@ export async function fetchCancellationSuggestions(from: string, to: string): Pr
   }
   return body as SuggestionResult
 }
+
+// ─── Clientes cancelados (perfil) ─────────────────────────────
+// Linha da coorte de cancelados materializada — identidade + contrato + todos
+// os sinais por cliente (rede vem zerada para cancelados; não exibir).
+export interface CancelledClient {
+  clientId: string
+  name: string
+  clientGender: string
+  clientBirth: string | null
+  seller: string
+  contractNumber: string
+  contractDate: string | null
+  cancellationDate: string | null
+  plan: string
+  monthlyValue: number
+  paymentForm: string
+  city: string
+  neighborhood: string
+  onTimeInvoices: number
+  lateInvoices: number
+  overdueInvoices: number
+  totalInvoices: number
+  renegotiations: number
+  trustReleases: number
+  equipment: string[]
+  protocolCount: number
+  scheduleCount: number
+  slaLateCount: number
+  avgSlaDays: number
+  reasons: string[]
+  technicians: string[]
+  installProtocols: number
+  installScheduleCount: number
+  installSlaLateCount: number
+  installAvgSlaDays: number
+  installSaleToScheduleDays: number
+  installTechnicians: string[]
+  relProtocolCount: number
+  relRecurrenceDays: number
+  relAvgOverageHours: number
+  relCancelThreats: number
+  relTypes: string[]
+  relAttendants: string[]
+}
+
+export interface CancelledClientsResult {
+  rows: CancelledClient[]
+  total: number
+  page: number
+  pageSize: number
+  cities: string[]
+  window: { from: string; to: string }
+  materializedWindow: MaterializedWindow | null
+  meta: SuggestionsMeta
+}
+
+export interface CancelledClientsQuery {
+  from?: string
+  to?: string
+  name?: string
+  contract?: string
+  city?: string
+  page?: number
+  pageSize?: number
+}
+
+export async function fetchCancelledClients(q: CancelledClientsQuery): Promise<CancelledClientsResult> {
+  const params = new URLSearchParams()
+  if (q.from) params.set('from', q.from)
+  if (q.to) params.set('to', q.to)
+  if (q.name) params.set('name', q.name)
+  if (q.contract) params.set('contract', q.contract)
+  if (q.city) params.set('city', q.city)
+  if (q.page !== undefined) params.set('page', String(q.page))
+  if (q.pageSize !== undefined) params.set('pageSize', String(q.pageSize))
+  const res = await apiFetch(`/api/cancelled-clients?${params.toString()}`)
+  let body: unknown = null
+  try { body = await res.json() } catch { /* sem corpo */ }
+  if (!res.ok) {
+    const msg = (body as { error?: string })?.error
+    if (res.status === 503) throw new ApiError(503, msg || 'Base ainda não materializada no backend.')
+    throw new ApiError(res.status, msg || `Erro ${res.status} ao listar cancelados.`)
+  }
+  return body as CancelledClientsResult
+}
