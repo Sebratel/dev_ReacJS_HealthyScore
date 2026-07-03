@@ -222,6 +222,48 @@ app.get('/api/cancellation-suggestions', requireAuth(), (req, res) => {
   res.json(payload)
 })
 
+// ─── Clientes cancelados (perfil) ─────────────────────────────
+// GET /api/cancelled-clients?from&to&name&contract&city&page&pageSize
+// Lista paginada da coorte de cancelados materializada — mesma convenção de
+// filtro do runEngine (nome/contrato por "includes", cidade exata) e a mesma
+// janela do endpoint de sugestões. Ordena por data de cancelamento (recente 1º).
+app.get('/api/cancelled-clients', requireAuth(), (req, res) => {
+  const all = getCancelledClients()
+  if (!all.length) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
+  const cw = getDataset()?.cancelledMeta || null
+  const winFrom = cw?.from || '1970-01-01'
+  const winTo = cw?.to || new Date().toISOString().slice(0, 10)
+
+  const q = req.query
+  let to = (typeof q.to === 'string' && DATE_RE.test(q.to)) ? q.to : winTo
+  let from = (typeof q.from === 'string' && DATE_RE.test(q.from)) ? q.from : winFrom
+  if (from > to) return res.status(400).json({ error: 'Intervalo inválido: "from" é posterior a "to".' })
+  if (from < winFrom) from = winFrom
+  if (to > winTo) to = winTo
+
+  const name = String(q.name || '').trim().toLowerCase()
+  const contract = String(q.contract || '').trim().toLowerCase()
+  const city = typeof q.city === 'string' ? q.city : ''
+
+  let rows = all.filter((c) => c.cancellationDate && c.cancellationDate >= from && c.cancellationDate <= to)
+  if (name) rows = rows.filter((c) => c.name && c.name.toLowerCase().includes(name))
+  if (contract) rows = rows.filter((c) => String(c.contractNumber).toLowerCase().includes(contract) || String(c.clientId).toLowerCase().includes(contract))
+  // Cidades calculadas ANTES do filtro de cidade — o dropdown mantém as opções.
+  const cities = Array.from(new Set(rows.map((c) => c.city).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  if (city) rows = rows.filter((c) => c.city === city)
+
+  rows = rows.slice().sort((a, b) => String(b.cancellationDate || '').localeCompare(String(a.cancellationDate || '')))
+  const total = rows.length
+  const pageSize = Math.min(200, Math.max(1, Number(q.pageSize) || 25))
+  const page = Math.max(0, Number(q.page) || 0)
+  res.json({
+    rows: rows.slice(page * pageSize, page * pageSize + pageSize),
+    total, page, pageSize, cities,
+    window: { from, to }, materializedWindow: cw,
+    meta: datasetStatus(),
+  })
+})
+
 app.listen(PORT, () => {
   console.log(`ChurnIQ API ouvindo em :${PORT}`)
   console.log(`  domínio permitido: @${ALLOWED_DOMAIN}`)
