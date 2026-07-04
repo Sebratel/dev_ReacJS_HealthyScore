@@ -42,7 +42,7 @@ const {
   Q_FIELD_PROT, Q_FIELD_SCHED, Q_FIELD_REASONS, Q_FIELD_REASON_LIST, Q_FIELD_TECH_LIST,
   Q_INST_PROT, Q_INST_SCHED, Q_INST_TECH_LIST,
   Q_REL_PROT, Q_REL_DIM, Q_REL_TYPE_LIST, Q_REL_ATT_LIST,
-  Q_MARIA_SPLITTER, Q_NET_INFRA,
+  Q_MARIA_SPLITTER, Q_NET_INFRA, Q_NET_INFRA_CANCELLED,
   Q_INV_AGG, Q_RENEG_AGG, Q_TRUST_AGG,
 } = buildEffectiveQueries({ full: FULL })
 
@@ -258,6 +258,47 @@ try {
     const cc = await buildCohort(pool, { cancelled: true, from: cancelledFrom, to: cancelledTo })
     cancelledClients = cc.clients
     console.log(`Cancelados: ${cancelledClients.length} em ${cancelledFrom}..${cancelledTo}${cc.warnings.length ? ` (avisos: ${cc.warnings.join('; ')})` : ''}`)
+
+    // Rede dos cancelados — infra via occurrences (histórico, sobrevive ao
+    // cancelamento) × massivas (MariaDB, já em memória). Mesma lógica do ativo,
+    // porém chaveada por contract_number (chave da coorte).
+    if (cancelledClients.length && massiveCodes.length) {
+      const byCancContract = new Map(cancelledClients.filter((c) => c.contractNumber).map((c) => [c.contractNumber, c]))
+      const cancContracts = [...byCancContract.keys()]
+      try {
+        const netC = await pool.query(Q_NET_INFRA_CANCELLED, [cancContracts, massiveCodes])
+        const acc = new Map()
+        for (const r of netC.rows) {
+          const c = byCancContract.get(String(r.contract_number)); if (!c) continue
+          const code = String(r.splitter_code)
+          const agg = massiveBySplitter.get(code); if (!agg) continue
+          let a = acc.get(c.contractNumber)
+          if (!a) {
+            a = { codes: new Set(), countSum: 0, offlineW: 0, overageSum: 0, overageN: 0 }
+            acc.set(c.contractNumber, a)
+            c.netSite = r.site?.trim() || ''
+            c.netConcentrator = r.concentrator?.trim() || ''
+            c.netAccessPoint = r.access_point?.trim() || ''
+            c.netSplitter = r.splitter?.trim() || ''
+            c.netSplitterCode = code
+            c.netSlot = r.slot != null ? String(r.slot) : ''
+            c.netPon = r.pon != null ? String(r.pon) : ''
+          }
+          if (a.codes.has(code)) continue
+          a.codes.add(code)
+          a.countSum += agg.count
+          a.offlineW += agg.offline * agg.count
+          if (agg.overage > 0) { a.overageSum += agg.overage; a.overageN++ }
+        }
+        for (const [contractNumber, a] of acc) {
+          const c = byCancContract.get(contractNumber); if (!c) continue
+          c.netMassiveCount = a.countSum
+          c.netAvgOfflineMin = a.countSum > 0 ? Math.round(a.offlineW / a.countSum) : 0
+          c.netAvgOverageMin = a.overageN > 0 ? Math.round(a.overageSum / a.overageN) : 0
+        }
+        console.log(`Cancelados/Rede: ${acc.size}/${cancelledClients.length} em splitters afetados.`)
+      } catch (e) { console.warn('Cancelados/Rede: falha —', e.message) }
+    }
   } catch (e) { console.warn('Cancelados: falha ao materializar —', e.message) }
 
   const payload = {
