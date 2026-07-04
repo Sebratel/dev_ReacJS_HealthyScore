@@ -570,11 +570,13 @@ export default function SuggestedScorePanel() {
             </div>
           )}
 
-          {/* Nota: Rede segurada */}
-          <div className="flex items-start gap-2.5 rounded-xl border border-app-border bg-app-card/60 px-4 py-3 text-[11px] text-gray-500 leading-relaxed">
-            <Network size={15} className="mt-0.5 shrink-0 text-gray-500" />
-            <p><strong className="text-gray-400">Rede</strong> não entra por enquanto — a infra depende de dados que não existem para cancelados. Entra quando a query de histórico de rede dos cancelados chegar.</p>
-          </div>
+          {/* Nota: Rede fora — só enquanto não houver sinal de massiva nos cancelados */}
+          {!built.groups.some((g) => g.engineKey === 'network') && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-app-border bg-app-card/60 px-4 py-3 text-[11px] text-gray-500 leading-relaxed">
+              <Network size={15} className="mt-0.5 shrink-0 text-gray-500" />
+              <p><strong className="text-gray-400">Rede</strong> ainda sem sinal de massiva nos cancelados do período — entra automaticamente assim que o ETL materializar a infra de rede dos cancelados (via histórico de conexão).</p>
+            </div>
+          )}
 
           {/* Grupos por engine */}
           <Card className="shadow-card-md">

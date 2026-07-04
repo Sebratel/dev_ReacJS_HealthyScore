@@ -205,7 +205,11 @@ app.get('/api/cancellation-suggestions', requireAuth(), (req, res) => {
     try {
       const cancelled = cancelledAll.filter((c) => c.cancellationDate && c.cancellationDate >= from && c.cancellationDate <= to)
       const lists = deriveLists([...active, ...cancelled])
-      const result = buildSuggestions(active, cancelled, lists, { skipEngines: ['network'] })
+      // Rede entra apenas quando há sinal de massiva nos DOIS grupos (ativos e
+      // cancelados). Enquanto o snapshot não trouxer rede p/ cancelados, o lift
+      // seria ruído — então a mantemos fora automaticamente.
+      const netReady = active.some((c) => (c.netMassiveCount || 0) > 0) && cancelled.some((c) => (c.netMassiveCount || 0) > 0)
+      const result = buildSuggestions(active, cancelled, lists, { skipEngines: netReady ? [] : ['network'] })
       payload = {
         groups: result.groups, indicatorCount: result.indicatorCount, indexCount: result.indexCount, riskCount: result.riskCount,
         lists,

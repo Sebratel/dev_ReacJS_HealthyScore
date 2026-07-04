@@ -485,6 +485,27 @@ left join people p on p.id = c.client_id
 where p.id::text = any($1::text[]) and as3.code = any($2::text[])
 `,
   },
+  {
+    id: 'Q_NET_INFRA_CANCELLED', engine: 'rede', db: 'postgres',
+    title: 'Infra de rede dos cancelados (histórico)',
+    description:
+      'Site/concentrador/AP/splitter/slot/pon dos contratos CANCELADOS via authentication_contract_connection_occurrences (histórico que sobrevive ao cancelamento, ao contrário de authentication_contracts). Filtrado aos splitters afetados por massiva.',
+    params: ['$1 = contract_numbers (text[])', '$2 = splitter_codes (text[])'],
+    sql: `
+select c.contract_number, as3.code splitter_code,
+  as2.title site, ac2.title concentrator, aap.title access_point, as3.title splitter,
+  (t.authentication_data::jsonb->>'slot_olt') slot, (t.authentication_data::jsonb->>'port_olt') pon
+from authentication_contract_connection_occurrences t
+left join authentication_concentrators ac2 on ac2.id = t.authentication_concentrator_id
+left join authentication_access_points aap on aap.id = t.authentication_access_point_id
+left join contracts c on c.id = t.contract_id
+left join authentication_sites as2 on as2.id = ac2.authentication_site_id
+left join authentication_splitter_ports asp on asp.authentication_contract_id = t.contract_id
+left join authentication_splitters as3 on as3.id = asp.authentication_splitter_id
+where as3.code = any($2::text[])
+  and c.contract_number::text = any($1::text[])
+`,
+  },
 
   // ── Financeiro — faturas / renegociações / desbloqueios ────
   {
