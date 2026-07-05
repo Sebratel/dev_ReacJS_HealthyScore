@@ -38,6 +38,13 @@ export interface RealRelationship {
 export interface RealNetwork {
   totalMassives: number
   splittersAffected: number
+  // Listas distintas de infra (site/concentrador/…) para os índices dinâmicos.
+  sites: RealDistinctEntry[]
+  concentrators: RealDistinctEntry[]
+  accessPoints: RealDistinctEntry[]
+  splitters: RealDistinctEntry[]
+  slots: RealDistinctEntry[]
+  pons: RealDistinctEntry[]
 }
 
 interface RealClientsFile {
@@ -73,7 +80,7 @@ export let realConnection: RealConnection = { models: [] }
 export let realField: RealField = { reasons: [], technicians: [] }
 export let realInstallation: RealInstallation = { technicians: [] }
 export let realRelationship: RealRelationship = { types: [], attendants: [] }
-export let realNetwork: RealNetwork = { totalMassives: 0, splittersAffected: 0 }
+export let realNetwork: RealNetwork = { totalMassives: 0, splittersAffected: 0, sites: [], concentrators: [], accessPoints: [], splitters: [], slots: [], pons: [] }
 export let realClients: RealClient[] = []
 
 let loaded = false
@@ -125,7 +132,9 @@ export function loadRealData(): Promise<void> {
     realField = data.field ?? realField
     realInstallation = data.installation ?? realInstallation
     realRelationship = data.relationship ?? realRelationship
-    realNetwork = data.network ?? realNetwork
+    // Merge com defaults: snapshot antigo (pré-infra) não traz as listas
+    // (sites/concentrators/…); mantê-las como [] evita `.map` de undefined.
+    realNetwork = { ...realNetwork, ...(data.network ?? {}) }
     realClients = [] // não baixamos mais a base inteira no navegador
     loaded = true
   })()

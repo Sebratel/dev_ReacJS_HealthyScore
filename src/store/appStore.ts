@@ -80,6 +80,7 @@ interface AppState {
   networkConfig: NetworkEngineConfig
   updateNetworkIndicator: (key: NetworkIndicatorKey, patch: Partial<NetworkIndicatorConfig>) => void
   updateNetworkIndex: (key: NetworkIndicatorKey, indexKey: string, points: number) => void
+  syncNetworkLists: (lists: Partial<Record<NetworkIndicatorKey, IndexEntry[]>>) => void
   resetNetworkConfig: () => void
 }
 
@@ -329,6 +330,25 @@ export const useAppStore = create<AppState>()(
           const indicator = s.networkConfig.indicators[key]
           const indices = indicator.indices.map((i) => (i.key === indexKey ? { ...i, points } : i))
           return { networkConfig: { indicators: { ...s.networkConfig.indicators, [key]: { ...indicator, indices } } } }
+        }),
+      // Reconcilia os índices dinâmicos de infra (site/concentrador/…) com as
+      // listas reais do snapshot, preservando as pontuações já configuradas.
+      syncNetworkLists: (lists) =>
+        set((s) => {
+          let changed = false
+          const indicators = { ...s.networkConfig.indicators }
+          for (const k of Object.keys(lists) as NetworkIndicatorKey[]) {
+            const entries = lists[k]!
+            const ind = indicators[k]
+            const current = ind.indices
+            const next = entries.map((e) => {
+              const existing = current.find((i) => i.key === e.key)
+              return { key: e.key, label: e.label, points: existing?.points ?? 0 }
+            })
+            const same = next.length === current.length && next.every((i, idx) => current[idx]?.key === i.key && current[idx]?.points === i.points)
+            if (!same) { indicators[k] = { ...ind, indices: next }; changed = true }
+          }
+          return changed ? { networkConfig: { indicators } } : s
         }),
       resetNetworkConfig: () => set({ networkConfig: cloneDefaultNetworkConfig() }),
     }),

@@ -56,6 +56,13 @@ export interface DynamicLists {
   installTechnicians: { key: string; label: string }[]
   relTypes: { key: string; label: string }[]
   attendants: { key: string; label: string }[]
+  // Infra de rede (site/concentrador/…) — índices dinâmicos.
+  netSites: { key: string; label: string }[]
+  netConcentrators: { key: string; label: string }[]
+  netAccessPoints: { key: string; label: string }[]
+  netSplitters: { key: string; label: string }[]
+  netSlots: { key: string; label: string }[]
+  netPons: { key: string; label: string }[]
 }
 
 export interface IndexSuggestion {
@@ -266,6 +273,43 @@ const DESCRIPTORS: Descriptor[] = [
     indicatorLabel: 'Atraso de SLA', description: 'Atraso médio da massiva além do previsto.',
     presence: false, multi: false, relevant: (c) => c.netMassiveCount > 0,
     classify: (c) => [bk(c.netAvgOverageMin, OVERAGE_RANGES)], indicesOf: () => rangeIndices(OVERAGE_RANGES),
+  },
+  // Infraestrutura (categóricos dinâmicos) — relevante quando há infra do cliente.
+  {
+    engineKey: 'network', engineLabel: 'Rede', indicatorKey: 'site',
+    indicatorLabel: 'Site / POP', description: 'Site (POP) que atende o contrato.',
+    presence: false, multi: false, relevant: (c) => !!c.netSite,
+    classify: (c) => (c.netSite ? [c.netSite] : []), indicesOf: (l) => l.netSites,
+  },
+  {
+    engineKey: 'network', engineLabel: 'Rede', indicatorKey: 'concentrator',
+    indicatorLabel: 'Concentrador (OLT)', description: 'Concentrador/OLT do contrato.',
+    presence: false, multi: false, relevant: (c) => !!c.netConcentrator,
+    classify: (c) => (c.netConcentrator ? [c.netConcentrator] : []), indicesOf: (l) => l.netConcentrators,
+  },
+  {
+    engineKey: 'network', engineLabel: 'Rede', indicatorKey: 'accessPoint',
+    indicatorLabel: 'Ponto de Acesso', description: 'Ponto de acesso (AP) do contrato.',
+    presence: false, multi: false, relevant: (c) => !!c.netAccessPoint,
+    classify: (c) => (c.netAccessPoint ? [c.netAccessPoint] : []), indicesOf: (l) => l.netAccessPoints,
+  },
+  {
+    engineKey: 'network', engineLabel: 'Rede', indicatorKey: 'splitter',
+    indicatorLabel: 'Splitter', description: 'Splitter que atende o contrato.',
+    presence: false, multi: false, relevant: (c) => !!c.netSplitter,
+    classify: (c) => (c.netSplitter ? [c.netSplitter] : []), indicesOf: (l) => l.netSplitters,
+  },
+  {
+    engineKey: 'network', engineLabel: 'Rede', indicatorKey: 'slot',
+    indicatorLabel: 'Slot (OLT)', description: 'Slot da OLT do contrato.',
+    presence: false, multi: false, relevant: (c) => !!c.netSlot,
+    classify: (c) => (c.netSlot ? [c.netSlot] : []), indicesOf: (l) => l.netSlots,
+  },
+  {
+    engineKey: 'network', engineLabel: 'Rede', indicatorKey: 'pon',
+    indicatorLabel: 'Porta PON', description: 'Porta PON do contrato.',
+    presence: false, multi: false, relevant: (c) => !!c.netPon,
+    classify: (c) => (c.netPon ? [c.netPon] : []), indicesOf: (l) => l.netPons,
   },
 
   // ── Campo (manutenção) ──
@@ -534,5 +578,11 @@ export function deriveLists(clients: RealClient[]): DynamicLists {
     installTechnicians: distinctStr(flat((c) => c.installTechnicians)),
     relTypes: distinctStr(flat((c) => c.relTypes)),
     attendants: distinctStr(flat((c) => c.relAttendants)),
+    netSites: distinctStr(clients.map((c) => c.netSite)),
+    netConcentrators: distinctStr(clients.map((c) => c.netConcentrator)),
+    netAccessPoints: distinctStr(clients.map((c) => c.netAccessPoint)),
+    netSplitters: distinctStr(clients.map((c) => c.netSplitter)),
+    netSlots: distinctStr(clients.map((c) => c.netSlot)),
+    netPons: distinctStr(clients.map((c) => c.netPon)),
   }
 }

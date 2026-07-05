@@ -674,11 +674,19 @@ export interface NetworkInfraScoreFactor {
   impact: 'positive' | 'negative'
 }
 
-// Indicadores configuráveis na engine de rede (todos por faixa)
+// Indicadores configuráveis na engine de rede. Os 3 primeiros são por faixa
+// (massivas); os 6 de infra são categóricos dinâmicos (site/concentrador/…),
+// sincronizados do snapshot em runtime (store.syncNetworkLists).
 export type NetworkIndicatorKey =
   | 'massiveCount'   // Qtd. de massivas por contrato
   | 'avgOffline'     // SLA médio offline (event_identified → closed)
   | 'slaOverage'     // Atraso de SLA (closed − expected)
+  | 'site'           // Site / POP
+  | 'concentrator'   // Concentrador (OLT)
+  | 'accessPoint'    // Ponto de acesso
+  | 'splitter'       // Splitter
+  | 'slot'           // Slot da OLT
+  | 'pon'            // Porta PON
 
 export interface NetworkIndicatorConfig {
   key: NetworkIndicatorKey

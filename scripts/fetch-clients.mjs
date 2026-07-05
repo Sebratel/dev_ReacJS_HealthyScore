@@ -33,6 +33,20 @@ const SAMPLE_SIZE = FULL ? Infinity : (Number(process.argv[2]) || 2000)
 // PII/geo não usados no front — removidos do snapshot (privacidade + tamanho).
 const STRIP_FIELDS = ['cpfCnpj', 'phone', 'email', 'lat', 'lng', 'state']
 
+// Lista distinta { value, count } de um atributo string dos clientes, ordenada
+// por frequência desc — mesmo shape das listas comerciais/conexão do payload.
+function distinctFromClients(clients, pick) {
+  const counts = new Map()
+  for (const c of clients) {
+    const v = (pick(c) || '').trim()
+    if (!v) continue
+    counts.set(v, (counts.get(v) || 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
 // SQL efetivo de cada query (override do usuário ?? default), do registro
 // central. {{sampleClause}} é resolvido conforme amostra/base completa.
 const {
@@ -152,15 +166,17 @@ try {
     pool.query(Q_INST_SCHED, [contractNumbers]),
     pool.query(Q_REL_PROT, [contractNumbers]),
     pool.query(Q_REL_DIM, [contractNumbers]),
-    pool.query(Q_NET_INFRA, [clientIds, massiveCodes]),
+    pool.query(Q_NET_INFRA, [clientIds]),
   ])
 
-  // Network — junta infra (PG) × massivas (Maria) por splitter_code, agrega por cliente
+  // Network — infra (PG) de TODA a base × massivas (Maria) por splitter_code.
+  // A infra (site/concentrador/…) é gravada para todos os clientes (1ª linha
+  // vista por cliente); as métricas de massiva só somam quando o splitter do
+  // cliente aparece entre os afetados (massiveBySplitter).
   const netAcc = new Map()
+  let withInfra = 0
   for (const r of netInfra.rows) {
     const c = byClientId.get(String(r.client_id)); if (!c) continue
-    const code = String(r.splitter_code)
-    const agg = massiveBySplitter.get(code); if (!agg) continue
     let a = netAcc.get(c.clientId)
     if (!a) {
       a = { codes: new Set(), countSum: 0, offlineW: 0, overageSum: 0, overageN: 0 }
@@ -169,23 +185,29 @@ try {
       c.netConcentrator = r.concentrator?.trim() || ''
       c.netAccessPoint = r.access_point?.trim() || ''
       c.netSplitter = r.splitter?.trim() || ''
-      c.netSplitterCode = code
+      c.netSplitterCode = r.splitter_code != null ? String(r.splitter_code) : ''
       c.netSlot = r.slot != null ? String(r.slot) : ''
       c.netPon = r.pon != null ? String(r.pon) : ''
+      if (c.netSite) withInfra++
     }
+    const code = r.splitter_code != null ? String(r.splitter_code) : ''
+    if (!code) continue
+    const agg = massiveBySplitter.get(code); if (!agg) continue
     if (a.codes.has(code)) continue
     a.codes.add(code)
     a.countSum += agg.count
     a.offlineW += agg.offline * agg.count
     if (agg.overage > 0) { a.overageSum += agg.overage; a.overageN++ }
   }
+  let withMassive = 0
   for (const [clientId, a] of netAcc) {
     const c = byClientId.get(clientId); if (!c) continue
     c.netMassiveCount = a.countSum
     c.netAvgOfflineMin = a.countSum > 0 ? Math.round(a.offlineW / a.countSum) : 0
     c.netAvgOverageMin = a.overageN > 0 ? Math.round(a.overageSum / a.overageN) : 0
+    if (a.countSum > 0) withMassive++
   }
-  console.log(`Network: ${netAcc.size}/${clients.length} clientes em splitters afetados.`)
+  console.log(`Network: ${withInfra}/${clients.length} clientes com infra · ${withMassive} em splitters afetados por massiva.`)
 
   for (const r of equip.rows) {
     const c = byContract.get(String(r.contract_number)); if (!c) continue
@@ -260,18 +282,17 @@ try {
     console.log(`Cancelados: ${cancelledClients.length} em ${cancelledFrom}..${cancelledTo}${cc.warnings.length ? ` (avisos: ${cc.warnings.join('; ')})` : ''}`)
 
     // Rede dos cancelados — infra via occurrences (histórico, sobrevive ao
-    // cancelamento) × massivas (MariaDB, já em memória). Mesma lógica do ativo,
-    // porém chaveada por contract_number (chave da coorte).
-    if (cancelledClients.length && massiveCodes.length) {
+    // cancelamento) para TODA a coorte × massivas (MariaDB, já em memória).
+    // Mesma lógica do ativo, porém chaveada por contract_number.
+    if (cancelledClients.length) {
       const byCancContract = new Map(cancelledClients.filter((c) => c.contractNumber).map((c) => [c.contractNumber, c]))
       const cancContracts = [...byCancContract.keys()]
       try {
-        const netC = await pool.query(Q_NET_INFRA_CANCELLED, [cancContracts, massiveCodes])
+        const netC = await pool.query(Q_NET_INFRA_CANCELLED, [cancContracts])
         const acc = new Map()
+        let cWithInfra = 0
         for (const r of netC.rows) {
           const c = byCancContract.get(String(r.contract_number)); if (!c) continue
-          const code = String(r.splitter_code)
-          const agg = massiveBySplitter.get(code); if (!agg) continue
           let a = acc.get(c.contractNumber)
           if (!a) {
             a = { codes: new Set(), countSum: 0, offlineW: 0, overageSum: 0, overageN: 0 }
@@ -280,10 +301,14 @@ try {
             c.netConcentrator = r.concentrator?.trim() || ''
             c.netAccessPoint = r.access_point?.trim() || ''
             c.netSplitter = r.splitter?.trim() || ''
-            c.netSplitterCode = code
+            c.netSplitterCode = r.splitter_code != null ? String(r.splitter_code) : ''
             c.netSlot = r.slot != null ? String(r.slot) : ''
             c.netPon = r.pon != null ? String(r.pon) : ''
+            if (c.netSite) cWithInfra++
           }
+          const code = r.splitter_code != null ? String(r.splitter_code) : ''
+          if (!code) continue
+          const agg = massiveBySplitter.get(code); if (!agg) continue
           if (a.codes.has(code)) continue
           a.codes.add(code)
           a.countSum += agg.count
@@ -296,7 +321,7 @@ try {
           c.netAvgOfflineMin = a.countSum > 0 ? Math.round(a.offlineW / a.countSum) : 0
           c.netAvgOverageMin = a.overageN > 0 ? Math.round(a.overageSum / a.overageN) : 0
         }
-        console.log(`Cancelados/Rede: ${acc.size}/${cancelledClients.length} em splitters afetados.`)
+        console.log(`Cancelados/Rede: ${cWithInfra}/${cancelledClients.length} com infra.`)
       } catch (e) { console.warn('Cancelados/Rede: falha —', e.message) }
     }
   } catch (e) { console.warn('Cancelados: falha ao materializar —', e.message) }
@@ -341,10 +366,17 @@ try {
       types: relTypeList.rows.map((r) => ({ value: String(r.v).trim(), count: Number(r.n) })),
       attendants: relAttList.rows.map((r) => ({ value: String(r.v).trim(), count: Number(r.n) })),
     },
-    // Network Engine — totais de massivas (MariaDB)
+    // Network Engine — totais de massivas (MariaDB) + listas distintas de infra
+    // (site/concentrador/…) para os índices dinâmicos, derivadas da base ativa.
     network: {
       totalMassives,
       splittersAffected: massiveCodes.length,
+      sites: distinctFromClients(clients, (c) => c.netSite),
+      concentrators: distinctFromClients(clients, (c) => c.netConcentrator),
+      accessPoints: distinctFromClients(clients, (c) => c.netAccessPoint),
+      splitters: distinctFromClients(clients, (c) => c.netSplitter),
+      slots: distinctFromClients(clients, (c) => c.netSlot),
+      pons: distinctFromClients(clients, (c) => c.netPon),
     },
     clients: clientsOut,
     // Coorte de cancelados (materializada) + a janela coberta.

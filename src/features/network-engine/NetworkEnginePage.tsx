@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Network } from 'lucide-react'
 import { realNetwork } from '@/data/realClients'
 import { useAppStore } from '@/store/appStore'
@@ -23,16 +24,28 @@ const DATA_COLUMNS: DataColumn[] = [
 export default function NetworkEnginePage() {
   const config = useAppStore((s) => s.networkConfig)
   const thresholds = useAppStore((s) => s.healthThresholds)
+  const sync = useAppStore((s) => s.syncNetworkLists)
+  useEffect(() => {
+    const toIdx = (arr: { value: string }[]) => arr.map((e) => ({ key: e.value, label: e.value }))
+    sync({
+      site: toIdx(realNetwork.sites),
+      concentrator: toIdx(realNetwork.concentrators),
+      accessPoint: toIdx(realNetwork.accessPoints),
+      splitter: toIdx(realNetwork.splitters),
+      slot: toIdx(realNetwork.slots),
+      pon: toIdx(realNetwork.pons),
+    })
+  }, [sync])
 
   return (
     <EngineScreen<NetworkEngineData, NetworkEngineScore>
       engineKey="network"
       icon={<Network size={18} className="text-[#fff]" />}
       title="Rede"
-      subtitle="Score de infraestrutura a partir das massivas e da infraestrutura do cliente, por splitter — pontuado no servidor."
+      subtitle="Score de infraestrutura a partir das massivas e da infra do cliente (site, concentrador, AP, splitter, slot, PON) — pontuado no servidor."
       config={config}
       thresholds={thresholds}
-      analyzedLabel="afetados"
+      analyzedLabel="com infra"
       rightStat={() => <> · {realNetwork.totalMassives.toLocaleString('pt-BR')} massivas</>}
       footerNote={`${realNetwork.splittersAffected.toLocaleString('pt-BR')} splitters com massiva`}
       rankingTitle="Ranking de Rede"
