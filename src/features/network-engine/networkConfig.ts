@@ -4,7 +4,10 @@ import type {
   NetworkIndicatorKey,
 } from '@/types'
 
-export const NET_INDICATOR_ORDER: NetworkIndicatorKey[] = ['massiveCount', 'avgOffline', 'slaOverage']
+export const NET_INDICATOR_ORDER: NetworkIndicatorKey[] = [
+  'massiveCount', 'avgOffline', 'slaOverage',
+  'site', 'concentrator', 'accessPoint', 'splitter', 'slot', 'pon',
+]
 
 interface Range { key: string; label: string; max: number; defaultPoints: number }
 
@@ -61,6 +64,39 @@ export const DEFAULT_NETWORK_CONFIG: NetworkEngineConfig = {
       description: 'Pontuação pelo atraso médio da massiva (closed_at − expected_close_at).',
       indices: rangeIndices(OVERAGE_RANGES),
       query: 'SELECT avg(closed_at − expected_close_at) WHERE closed_at > expected_close_at;',
+    },
+    // ── Infraestrutura (categóricos dinâmicos, sincronizados do snapshot) ──
+    // Começam vazios; store.syncNetworkLists preenche os índices com os valores
+    // reais da base, preservando as pontuações já configuradas.
+    site: {
+      key: 'site', label: 'Site / POP', dynamic: true, mode: 'manual', indices: [],
+      description: 'Pontuação por site (POP) que atende o contrato.',
+      query: 'SELECT as2.title site, count(*) FROM authentication_sites as2 GROUP BY as2.title;',
+    },
+    concentrator: {
+      key: 'concentrator', label: 'Concentrador (OLT)', dynamic: true, mode: 'manual', indices: [],
+      description: 'Pontuação por concentrador/OLT do contrato.',
+      query: 'SELECT ac2.title concentrator, count(*) FROM authentication_concentrators ac2 GROUP BY ac2.title;',
+    },
+    accessPoint: {
+      key: 'accessPoint', label: 'Ponto de Acesso', dynamic: true, mode: 'manual', indices: [],
+      description: 'Pontuação por ponto de acesso (AP) do contrato.',
+      query: 'SELECT aap.title access_point, count(*) FROM authentication_access_points aap GROUP BY aap.title;',
+    },
+    splitter: {
+      key: 'splitter', label: 'Splitter', dynamic: true, mode: 'manual', indices: [],
+      description: 'Pontuação por splitter que atende o contrato.',
+      query: 'SELECT as3.title splitter, count(*) FROM authentication_splitters as3 GROUP BY as3.title;',
+    },
+    slot: {
+      key: 'slot', label: 'Slot (OLT)', dynamic: true, mode: 'manual', indices: [],
+      description: 'Pontuação por slot da OLT do contrato.',
+      query: "SELECT ac.slot_olt slot, count(*) FROM authentication_contracts ac GROUP BY ac.slot_olt;",
+    },
+    pon: {
+      key: 'pon', label: 'Porta PON', dynamic: true, mode: 'manual', indices: [],
+      description: 'Pontuação por porta PON do contrato.',
+      query: "SELECT ac.port_olt pon, count(*) FROM authentication_contracts ac GROUP BY ac.port_olt;",
     },
   },
 }

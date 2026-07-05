@@ -10,7 +10,7 @@ import { useAppStore } from '@/store/appStore'
 import { genderLabel } from '@/features/commercial-engine/commercialConfig'
 import {
   realPaymentForms, realCommercial, realConnection, realField,
-  realInstallation, realRelationship,
+  realInstallation, realRelationship, realNetwork,
 } from '@/data/realClients'
 import type { SuggestionEngineKey, IndicatorSuggestion, IndexSuggestion } from './suggestionEngine'
 import { fetchCancellationSuggestions, ApiError, type SuggestionResult } from './suggestionsApi'
@@ -364,6 +364,14 @@ export default function SuggestedScorePanel() {
       protocolType: realRelationship.types.map((e) => ({ key: e.value, label: e.value })),
       attendant: realRelationship.attendants.map((e) => ({ key: e.value, label: e.value })),
     })
+    store.syncNetworkLists({
+      site: realNetwork.sites.map((e) => ({ key: e.value, label: e.value })),
+      concentrator: realNetwork.concentrators.map((e) => ({ key: e.value, label: e.value })),
+      accessPoint: realNetwork.accessPoints.map((e) => ({ key: e.value, label: e.value })),
+      splitter: realNetwork.splitters.map((e) => ({ key: e.value, label: e.value })),
+      slot: realNetwork.slots.map((e) => ({ key: e.value, label: e.value })),
+      pon: realNetwork.pons.map((e) => ({ key: e.value, label: e.value })),
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -421,6 +429,14 @@ export default function SuggestedScorePanel() {
     store.syncFieldLists({ reasons: merge(snap(realField.reasons), L.reasons), technician: merge(snap(realField.technicians), L.fieldTechnicians) })
     store.syncInstallationLists({ technician: merge(snap(realInstallation.technicians), L.installTechnicians) })
     store.syncRelationshipLists({ protocolType: merge(snap(realRelationship.types), L.relTypes), attendant: merge(snap(realRelationship.attendants), L.attendants) })
+    store.syncNetworkLists({
+      site: merge(snap(realNetwork.sites), L.netSites),
+      concentrator: merge(snap(realNetwork.concentrators), L.netConcentrators),
+      accessPoint: merge(snap(realNetwork.accessPoints), L.netAccessPoints),
+      splitter: merge(snap(realNetwork.splitters), L.netSplitters),
+      slot: merge(snap(realNetwork.slots), L.netSlots),
+      pon: merge(snap(realNetwork.pons), L.netPons),
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 

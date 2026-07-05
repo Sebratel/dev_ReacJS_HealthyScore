@@ -468,8 +468,8 @@ group by mhs.splitter_code
   {
     id: 'Q_NET_INFRA', engine: 'rede', db: 'postgres',
     title: 'Infra de rede dos clientes (PostgreSQL)',
-    description: 'Site/concentrador/AP/splitter/slot/pon dos clientes em splitters afetados.',
-    params: ['$1 = client_ids (text[])', '$2 = splitter_codes (text[])'],
+    description: 'Site/concentrador/AP/splitter/slot/pon dos clientes (TODA a base passada, não só splitters com massiva). O cruzamento com massivas é feito no ETL por splitter_code.',
+    params: ['$1 = client_ids (text[])'],
     sql: `
 select p.id::text client_id, as3.code splitter_code,
   as2.title site, ac2.title concentrator, aap.title access_point, as3.title splitter,
@@ -482,15 +482,15 @@ left join authentication_sites as2 on as2.id = ac2.authentication_site_id
 left join authentication_splitter_ports asp on asp.authentication_contract_id = ac.id
 left join authentication_splitters as3 on as3.id = asp.authentication_splitter_id
 left join people p on p.id = c.client_id
-where p.id::text = any($1::text[]) and as3.code = any($2::text[])
+where p.id::text = any($1::text[])
 `,
   },
   {
     id: 'Q_NET_INFRA_CANCELLED', engine: 'rede', db: 'postgres',
     title: 'Infra de rede dos cancelados (histórico)',
     description:
-      'Site/concentrador/AP/splitter/slot/pon dos contratos CANCELADOS via authentication_contract_connection_occurrences (histórico que sobrevive ao cancelamento, ao contrário de authentication_contracts). Filtrado aos splitters afetados por massiva.',
-    params: ['$1 = contract_numbers (text[])', '$2 = splitter_codes (text[])'],
+      'Site/concentrador/AP/splitter/slot/pon dos contratos CANCELADOS via authentication_contract_connection_occurrences (histórico que sobrevive ao cancelamento, ao contrário de authentication_contracts). Cobre TODOS os cancelados passados; o cruzamento com massivas é feito no ETL por splitter_code.',
+    params: ['$1 = contract_numbers (text[])'],
     sql: `
 select c.contract_number, as3.code splitter_code,
   as2.title site, ac2.title concentrator, aap.title access_point, as3.title splitter,
@@ -502,8 +502,7 @@ left join contracts c on c.id = t.contract_id
 left join authentication_sites as2 on as2.id = ac2.authentication_site_id
 left join authentication_splitter_ports asp on asp.authentication_contract_id = t.contract_id
 left join authentication_splitters as3 on as3.id = asp.authentication_splitter_id
-where as3.code = any($2::text[])
-  and c.contract_number::text = any($1::text[])
+where c.contract_number::text = any($1::text[])
 `,
   },
 

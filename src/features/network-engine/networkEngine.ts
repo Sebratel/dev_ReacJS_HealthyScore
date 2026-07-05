@@ -16,10 +16,12 @@ function scoreClient(c: RealClient, config: NetworkEngineConfig) {
   const ind = config.indicators
   const byKey: Partial<Record<NetworkIndicatorKey, number>> = {}
 
-  const range = (key: NetworkIndicatorKey, bucketKey: string, prefix: string) => {
+  // Faixa (massivas) e categórico (infra) compartilham a mesma mecânica: casam
+  // um índice por chave e somam a nota. matchKey vazio → sem dado, sem regra.
+  const apply = (key: NetworkIndicatorKey, matchKey: string, prefix: string) => {
     const indicator = ind[key]
-    if (!indicator || indicator.mode !== 'manual') return
-    const idx = indicator.indices.find((i) => i.key === bucketKey)
+    if (!indicator || indicator.mode !== 'manual' || !matchKey) return
+    const idx = indicator.indices.find((i) => i.key === matchKey)
     if (idx && idx.points) {
       factors.push({ label: `${prefix}: ${idx.label}`, points: idx.points, impact: idx.points >= 0 ? 'positive' : 'negative' })
       byKey[key] = (byKey[key] ?? 0) + idx.points
@@ -27,9 +29,16 @@ function scoreClient(c: RealClient, config: NetworkEngineConfig) {
     }
   }
 
-  range('massiveCount', bucketByMax(c.netMassiveCount, MASSIVE_RANGES).key, 'Massivas')
-  range('avgOffline', bucketByMax(c.netAvgOfflineMin, OFFLINE_RANGES).key, 'Offline')
-  range('slaOverage', bucketByMax(c.netAvgOverageMin, OVERAGE_RANGES).key, 'Atraso SLA')
+  apply('massiveCount', bucketByMax(c.netMassiveCount, MASSIVE_RANGES).key, 'Massivas')
+  apply('avgOffline', bucketByMax(c.netAvgOfflineMin, OFFLINE_RANGES).key, 'Offline')
+  apply('slaOverage', bucketByMax(c.netAvgOverageMin, OVERAGE_RANGES).key, 'Atraso SLA')
+  // Infraestrutura — categóricos dinâmicos (chave = próprio valor real).
+  apply('site', c.netSite, 'Site')
+  apply('concentrator', c.netConcentrator, 'Concentrador')
+  apply('accessPoint', c.netAccessPoint, 'Ponto de acesso')
+  apply('splitter', c.netSplitter, 'Splitter')
+  apply('slot', c.netSlot, 'Slot')
+  apply('pon', c.netPon, 'PON')
 
   const healthScore = clamp(v)
   const churnRisk = clamp(100 - healthScore)
@@ -54,6 +63,12 @@ export function buildEngineScores(clients: RealClient[], config: NetworkEngineCo
       massiveCount: `${c.netMassiveCount}`,
       avgOffline: fmtMin(c.netAvgOfflineMin),
       slaOverage: fmtMin(c.netAvgOverageMin),
+      site: c.netSite || '—',
+      concentrator: c.netConcentrator || '—',
+      accessPoint: c.netAccessPoint || '—',
+      splitter: c.netSplitter || '—',
+      slot: c.netSlot || '—',
+      pon: c.netPon || '—',
     }
     const indicators = NET_INDICATOR_ORDER.filter((k) => config.indicators[k]).map((key) => ({
       key, label: labelOf(key), value: realValue[key], points: s.byKey[key] ?? 0,
