@@ -29,7 +29,10 @@ const EDITORS = (process.env.QUERY_EDITOR_EMAILS || '')
   .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
 
 const app = express()
-app.use(express.json({ limit: '256kb' }))
+// Limite generoso: os configs das engines carregam os índices dinâmicos
+// (vendedor/bairro/valor/técnico…) reconciliados com a BASE COMPLETA — o corpo
+// do /api/dashboard e /api/engine escala com o nº de valores distintos.
+app.use(express.json({ limit: '12mb' }))
 
 // CORS — necessário em dev (Vite em outra porta). Em produção o nginx faz proxy
 // same-origin de /api/, então isto fica inócuo. Reflete a origem; sem cookies.
