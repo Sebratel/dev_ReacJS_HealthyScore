@@ -3,6 +3,7 @@
 // client-side (useEngineSummaries + buildClientRiskRanking).
 import type { HealthClassification } from '@/types'
 import { apiFetch } from '@/lib/apiClient'
+import { pruneEngineConfigs } from '@/lib/pruneConfig'
 import { ApiError, type EngineMeta } from '@/features/engines/engineApi'
 
 export { ApiError }
@@ -66,8 +67,10 @@ export interface DashboardParams {
 }
 
 export async function fetchDashboard(params: DashboardParams): Promise<DashboardResponse> {
+  // Poda índices zerados dos configs — corpo cai de MBs para KB (base completa).
+  const payload = { ...params, configs: pruneEngineConfigs(params.configs) }
   const res = await apiFetch('/api/dashboard', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
   })
   let body: unknown = null
   try { body = await res.json() } catch { /* sem corpo */ }
