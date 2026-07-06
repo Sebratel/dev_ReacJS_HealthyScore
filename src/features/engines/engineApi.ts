@@ -3,6 +3,7 @@
 // mandamos (ficam no navegador, por-usuário) e devolve só a página + agregados.
 import type { HealthClassification } from '@/types'
 import { apiFetch, ApiError } from '@/lib/apiClient'
+import { pruneEngineConfig } from '@/lib/pruneConfig'
 
 export { ApiError }
 
@@ -42,8 +43,10 @@ export async function fetchEngine<Agg = unknown, Score = unknown>(
   key: string,
   params: EngineFetchParams,
 ): Promise<EngineResponse<Agg, Score>> {
+  // Poda índices zerados do config — corpo menor por request (base completa).
+  const payload = { ...params, config: pruneEngineConfig(params.config) }
   const res = await apiFetch(`/api/engine/${key}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
   })
   let body: unknown = null
   try { body = await res.json() } catch { /* sem corpo */ }

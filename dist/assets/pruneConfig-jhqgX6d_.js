@@ -1,0 +1,1 @@
+function s(i){const n=i;if(!n||typeof n!="object"||!n.indicators)return i;const r={};for(const[e,t]of Object.entries(n.indicators))r[e]=Array.isArray(t==null?void 0:t.indices)?{...t,indices:t.indices.filter(o=>o&&o.points!==0)}:t;return{...n,indicators:r}}function c(i){const n={};for(const[r,e]of Object.entries(i))n[r]=s(e);return n}export{s as a,c as p};
