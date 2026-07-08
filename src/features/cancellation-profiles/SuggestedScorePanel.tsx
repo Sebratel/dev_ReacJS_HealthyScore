@@ -14,6 +14,7 @@ import {
 } from '@/data/realClients'
 import type { SuggestionEngineKey, IndicatorSuggestion, IndexSuggestion } from './suggestionEngine'
 import { fetchCancellationSuggestions, ApiError, type SuggestionResult } from './suggestionsApi'
+import { useIndicatorLabelMap, resolveIndicatorLabel } from '@/features/settings/indicatorCatalog'
 
 // ─── Datas ─────────────────────────────────────────────────────
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -380,13 +381,18 @@ export default function SuggestedScorePanel() {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [exporting, setExporting] = useState(false)
 
+  // Nomenclaturas vigentes dos indicadores (editáveis em /configuracoes).
+  // O servidor devolve os nomes de fábrica — aqui trocamos pelo nome atual
+  // para a tela (e o PDF) ficarem coerentes com o resto do sistema.
+  const labelMap = useIndicatorLabelMap()
+
   // Gera o PDF (KPIs + sugestões por módulo) — usa a janela efetiva do servidor.
   async function exportPdf() {
-    if (state.status !== 'ready' || exporting) return
+    if (!built || exporting) return
     setExporting(true)
     try {
       const { exportSuggestionsPdf } = await import('./exportPdf')
-      await exportSuggestionsPdf(state.data, { from: state.data.window.from, to: state.data.window.to })
+      await exportSuggestionsPdf(built, { from: built.window.from, to: built.window.to })
     } finally {
       setExporting(false)
     }
@@ -445,8 +451,19 @@ export default function SuggestedScorePanel() {
     setFrom(f); setTo(t); load(f, t)
   }
 
-  // O lift já vem calculado do servidor (base completa materializada).
-  const built = state.status === 'ready' ? state.data : null
+  // O lift já vem calculado do servidor (base completa materializada) — só
+  // renomeamos os indicadores conforme a nomenclatura configurada.
+  const built = useMemo<SuggestionResult | null>(() => {
+    if (state.status !== 'ready') return null
+    const rename = (ind: IndicatorSuggestion): IndicatorSuggestion => ({
+      ...ind,
+      indicatorLabel: resolveIndicatorLabel(labelMap, ind.engineKey, ind.indicatorKey, ind.indicatorLabel),
+    })
+    return {
+      ...state.data,
+      groups: state.data.groups.map((g) => ({ ...g, indicators: g.indicators.map(rename) })),
+    }
+  }, [state, labelMap])
   // Cobertura real da base: 'full' (ETL noturno completo) vs 'sample' (amostra
   // de dev). Rotula o KPI com honestidade — em dev a base ativa é uma amostra.
   const isFullBase = built?.meta?.coverage === 'full'
