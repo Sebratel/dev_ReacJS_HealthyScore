@@ -5,16 +5,17 @@ import { checkReadOnly } from './sqlGuard'
 import { saveQuery, resetQuery, ApiError, type QueryItem } from './queriesApi'
 
 function DbBadge({ db }: { db: QueryItem['db'] }) {
-  const isPg = db === 'postgres'
+  const meta = {
+    postgres: { cls: 'bg-sky-500/15 text-sky-300', title: 'PostgreSQL (ELLEVEN)', tag: 'PG' },
+    mariadb: { cls: 'bg-amber-500/15 text-amber-300', title: 'MariaDB (massivas)', tag: 'Maria' },
+    autoisp: { cls: 'bg-emerald-500/15 text-emerald-300', title: 'PostgreSQL (AutoISP — status ONU)', tag: 'AutoISP' },
+  }[db] ?? { cls: 'bg-gray-500/15 text-gray-300', title: db, tag: db }
   return (
     <span
-      className={cn(
-        'shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
-        isPg ? 'bg-sky-500/15 text-sky-300' : 'bg-amber-500/15 text-amber-300',
-      )}
-      title={isPg ? 'PostgreSQL (ELLEVEN)' : 'MariaDB (massivas)'}
+      className={cn('shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide', meta.cls)}
+      title={meta.title}
     >
-      {isPg ? 'PG' : 'Maria'}
+      {meta.tag}
     </span>
   )
 }

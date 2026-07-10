@@ -116,6 +116,7 @@ export function buildEngineScores(clients: RealClient[], config: CommercialEngin
       plan: c.plan,
       monthlyValue: c.monthlyValue,
       contractAgeLabel: bucket.label,
+      contractAgeMonths: cm < 0 ? 0 : cm,
       healthScore: s.healthScore,
       churnRisk: s.churnRisk,
       revenueRisk: s.revenueRisk,

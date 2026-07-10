@@ -561,6 +561,26 @@ where c.v_status <> 'Cancelado'
 group by c.contract_number
 `,
   },
+
+  // ── Conexão — quedas de PPPoE (status da ONU, banco AutoISP) ─
+  {
+    id: 'Q_AUTOISP_ONU_STATUS', engine: 'conexao', db: 'autoisp',
+    title: 'Quedas de PPPoE — mudanças de status da ONU (AutoISP)',
+    description:
+      'Mudanças de status da ONU (up / OK / warning / critical / power_fail / loss_signal) agregadas por contrato + status desde a data de corte. Roda no banco AutoISP (DB_AUTOISP_*); o cruzamento com a base é feito no ETL por contract_id/client_id.',
+    params: ['$1 = data inicial (FROM_DATE)'],
+    sql: `
+select c.contract_id::text contract_id, s.subsc_id::text client_id,
+  osc.new_status, count(*) qty
+from contracts c
+left join subscribers s on s.subsc_id = c.subscriber_id
+join contracted_services cs on cs.contract_id = c.contract_id
+join gpon_clients gc on gc.contracted_service_id = cs.id
+join onu_status_changes osc on osc.gpon_client_id = gc.id
+where osc.new_status_timestamp >= $1
+group by c.contract_id, s.subsc_id, osc.new_status
+`,
+  },
 ]
 
 // Rótulos amigáveis dos grupos (ordem de exibição no catálogo).

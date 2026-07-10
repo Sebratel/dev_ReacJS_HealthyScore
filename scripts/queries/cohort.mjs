@@ -303,6 +303,7 @@ function baseRow(r) {
     onTimeInvoices: 0, lateInvoices: 0, overdueInvoices: 0, totalInvoices: 0,
     renegotiations: 0, trustReleases: 0,
     equipment: [],
+    onuStatusCounts: {},
     protocolCount: 0, scheduleCount: 0, slaLateCount: 0, avgSlaDays: 0, reasons: [], technicians: [],
     installProtocols: 0, installScheduleCount: 0, installSlaLateCount: 0, installAvgSlaDays: 0,
     installSaleToScheduleDays: 0, installTechnicians: [],

@@ -97,7 +97,7 @@ function CancelledProfile({ c }: { c: CancelledClient }) {
         <Chips items={c.relTypes} />
       </ProfileGroup>
 
-      <ProfileGroup icon={<Wrench size={12} />} title="Atendimento em campo">
+      <ProfileGroup icon={<Wrench size={12} />} title="Manutenção">
         <div className="grid grid-cols-2 gap-1.5 mb-2">
           <Stat label="Protocolos" value={c.protocolCount} />
           <Stat label="Agendamentos" value={c.scheduleCount} />

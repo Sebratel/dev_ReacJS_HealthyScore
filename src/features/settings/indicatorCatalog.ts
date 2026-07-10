@@ -31,7 +31,7 @@ export const ENGINE_LABELS: Record<EngineKey, string> = {
   commercial: 'Comercial',
   connection: 'Conexão',
   network: 'Rede',
-  field: 'Campo',
+  field: 'Manutenção',
   installation: 'Instalação',
   relationship: 'Relacionamento',
 }

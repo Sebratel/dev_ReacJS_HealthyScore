@@ -26,13 +26,21 @@ function loadOriginalSql(argv2) {
   const original = execSync('git show HEAD:scripts/fetch-clients.mjs', { encoding: 'utf8' })
   // Pega tudo ANTES do bloco de execução `try {`.
   let head = original.split('\ntry {')[0]
+  // URL real do diretório scripts/ — o módulo extraído roda de um tmpdir, então
+  // os imports relativos do ETL precisam ser reapontados para cá.
+  const scriptsDir = new URL('..', import.meta.url).href
   head = head
     .replace(/import \{ makePool \} from '\.\/db\.mjs'\n?/, '')
     .replace(/import \{ makeMariaPool \} from '\.\/db-maria\.mjs'\n?/, '')
+    .replace(/import \{ makeAutoIspPool \} from '\.\/db-autoisp\.mjs'\n?/, '')
     .replace(/const pool = makePool\(\)/, 'const pool = null')
+    .replace(/from '\.\//g, `from '${scriptsDir}`)
   // Define process.argv ANTES do código (controla FULL/amostra).
   const preamble = `process.argv = ['node', 'etl'${argv2 ? `, ${JSON.stringify(argv2)}` : ''}]\n`
-  const exportLine = `\nexport { ${IDS.join(', ')} }\n`
+  // Exporta só as queries que EXISTEM no ETL do HEAD — queries recém-adicionadas
+  // ao registro (ainda sem uso committed) são puladas na paridade.
+  const definedIds = IDS.filter((id) => new RegExp(`\\b${id}\\b`).test(head))
+  const exportLine = `\nexport { ${definedIds.join(', ')} }\n`
   const dir = mkdtempSync(join(tmpdir(), 'qparity-'))
   const file = join(dir, `orig-${argv2 || 'sample'}.mjs`)
   writeFileSync(file, preamble + head + exportLine, 'utf8')
@@ -45,6 +53,10 @@ const fail = (msg) => { failures++; console.error(`  ✗ ${msg}`) }
 // 1) Paridade em modo AMOSTRA (full=false) para todas as queries.
 const origSample = await loadOriginalSql(null)
 for (const id of IDS) {
+  if (origSample[id] === undefined) {
+    console.log(`  • ${id}: sem original no HEAD (query nova) — paridade pulada; validada só no guard.`)
+    continue
+  }
   const a = norm(getDefaultSql(id, { full: false }))
   const b = norm(origSample[id])
   if (a !== b) {

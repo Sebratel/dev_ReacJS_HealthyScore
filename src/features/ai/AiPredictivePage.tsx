@@ -45,7 +45,7 @@ function explain(r: RankedClient): string {
     if (s.overdue > 0) parts.push(`${s.overdue} fatura(s) em atraso/aberto`)
     if (s.renegotiations > 0) parts.push(`${s.renegotiations} renegociação(ões)`)
     if (s.netMassiveCount > 0) parts.push(`${s.netMassiveCount} massiva(s) de rede`)
-    if (s.slaLateCount > 0) parts.push(`${s.slaLateCount} atendimento(s) de campo com SLA estourado`)
+    if (s.slaLateCount > 0) parts.push(`${s.slaLateCount} atendimento(s) de manutenção com SLA estourado`)
     if (s.trustReleases > 0) parts.push(`${s.trustReleases} desbloqueio(s) por confiança`)
   }
   const worst = [...r.byEngine].sort((a, b) => a.healthScore - b.healthScore)[0]
@@ -103,7 +103,7 @@ export default function AiPredictivePage() {
       { type: 'critical', message: `${data.ranking.criticalCount} clientes com health combinado crítico (<${criticalThreshold}) — ação imediata`, action: 'Ver financeiro', path: '/financeiro' },
       { type: 'critical', message: `${bc.cancelThreats} clientes com registro de "${cancelThreatsLabel}"`, action: 'Relacionamento', path: '/engine-relacionamento' },
       { type: 'high', message: `${bc.overdueClients} clientes com registro de "${resolveIndicatorLabel(labelMap, 'financial', 'overdueBills')}"`, action: 'Financeiro', path: '/financeiro' },
-      { type: 'medium', message: `${bc.slaLateClients} clientes com registro de "${resolveIndicatorLabel(labelMap, 'field', 'slaOverdue')}" no atendimento de campo`, action: 'Campo', path: '/manutencao' },
+      { type: 'medium', message: `${bc.slaLateClients} clientes com registro de "${resolveIndicatorLabel(labelMap, 'field', 'slaOverdue')}" na manutenção`, action: 'Manutenção', path: '/manutencao' },
       { type: 'info', message: `${bc.massiveClients} clientes impactados por massivas de rede no período`, action: 'Rede', path: '/engine-rede' },
     ]
   }, [data, criticalThreshold, labelMap, cancelThreatsLabel])

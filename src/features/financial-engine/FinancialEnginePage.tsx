@@ -42,8 +42,8 @@ export default function FinancialEnginePage() {
       rankingSubtitle="Clientes ordenados por Health Score financeiro (pior primeiro)"
       tableHeaders={['Revenue Risk', 'Faturas']}
       columns={[
-        { header: 'Revenue Risk', cell: (s) => <span className="text-xs font-mono text-gray-300">{formatCurrency(s.revenueRisk)}</span> },
-        { header: 'Faturas', cell: (s) => <span className="text-[10px] font-mono"><span className="text-risk-low">{s.signals.onTimeInvoices}✓</span> · <span className="text-risk-critical">{s.signals.lateInvoices + s.signals.overdueInvoices}⨯</span></span> },
+        { header: 'Revenue Risk', sortKey: 'revenueRisk', cell: (s) => <span className="text-xs font-mono text-gray-300">{formatCurrency(s.revenueRisk)}</span> },
+        { header: 'Faturas', sortKey: 'signals.lateInvoices', cell: (s) => <span className="text-[10px] font-mono"><span className="text-risk-low">{s.signals.onTimeInvoices}✓</span> · <span className="text-risk-critical">{s.signals.lateInvoices + s.signals.overdueInvoices}⨯</span></span> },
       ]}
       dataTitle="Dados — Financeiro"
       dataColumns={DATA_COLUMNS}

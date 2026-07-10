@@ -106,6 +106,17 @@ function Explanation({ ind, idx }: { ind: IndicatorSuggestion; idx: IndexSuggest
           sugestão de <strong style={{ color }}>{idx.suggestedPoints! > 0 ? '+' : ''}{idx.suggestedPoints} pts</strong>.
         </span>
       </p>
+      {ind.presence && (
+        <p className="text-[10px] text-gray-500 leading-relaxed flex items-start gap-1.5">
+          <Info size={11} className="mt-0.5 shrink-0" />
+          <span>
+            Percentual <strong className="text-gray-400">por cliente</strong>, não por fatura/evento: conta quem teve{' '}
+            <strong className="text-gray-400">ao menos uma</strong> ocorrência no histórico. Por isso indicadores de
+            presença não somam 100% entre si — o mesmo cliente pode ter, por exemplo, faturas atrasadas <em>e</em> faturas
+            pagas no prazo.
+          </span>
+        </p>
+      )}
     </div>
   )
 }
@@ -206,7 +217,7 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-100">{ind.indicatorLabel}</span>
-            {ind.presence && <span className="text-[9px] px-1.5 py-0.5 rounded bg-app-surface border border-app-border text-gray-500 uppercase tracking-wider">presença</span>}
+            {ind.presence && <span title="Indicador de presença: o % é por cliente (ao menos uma ocorrência no histórico). Não é excludente com outros indicadores — os percentuais não somam 100% entre si." className="text-[9px] px-1.5 py-0.5 rounded bg-app-surface border border-app-border text-gray-500 uppercase tracking-wider cursor-help">presença</span>}
             {ind.multi && <span className="text-[9px] px-1.5 py-0.5 rounded bg-app-surface border border-app-border text-gray-500 uppercase tracking-wider">multi</span>}
           </div>
           <p className="text-[11px] text-gray-500 mt-0.5 truncate">{ind.description}</p>
@@ -227,6 +238,7 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
           <div className="flex items-center justify-between px-4 py-2 bg-app-surface/30">
             <span className="text-[10px] text-gray-500">
               {valid.length} de {ind.indices.length} {ind.presence ? 'condição' : 'índices'} com amostra suficiente
+              {ind.presence && <span className="text-gray-600"> · % = clientes com ao menos uma ocorrência no histórico</span>}
             </span>
             {appliableCount > 0 && (
               <button onClick={() => onApplyAll(ind)} className="inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-md bg-gradient-brand text-white shadow-glow hover:-translate-y-0.5 transition-all">

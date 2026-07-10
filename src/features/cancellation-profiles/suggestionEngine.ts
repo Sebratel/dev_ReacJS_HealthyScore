@@ -23,6 +23,9 @@ import {
   bucketByMax, MASSIVE_RANGES, OFFLINE_RANGES, OVERAGE_RANGES,
 } from '@/features/network-engine/networkConfig'
 import {
+  DEFAULT_CONNECTION_CONFIG, ONU_INDICATOR_KEYS, ONU_STATUS_OF,
+} from '@/features/connection-engine/connectionConfig'
+import {
   PROTOCOL_RANGES as FIELD_PROTOCOL_RANGES, SCHEDULE_RANGES as FIELD_SCHEDULE_RANGES,
   SLA_OVERDUE_RANGES as FIELD_SLA_OVERDUE_RANGES, AVG_SLA_RANGES as FIELD_AVG_SLA_RANGES,
 } from '@/features/field-engine/fieldConfig'
@@ -122,10 +125,17 @@ interface Descriptor {
   description: string
   presence: boolean
   multi: boolean
+  // Depende do sinal de ONU (AutoISP): só entra quando AMBOS os coortes têm
+  // algum evento — evita lift espúrio enquanto o ETL não materializa o dado.
+  requiresOnu?: boolean
   relevant: (c: RealClient) => boolean
   classify: (c: RealClient) => string[]
   indicesOf: (lists: DynamicLists) => { key: string; label: string }[]
 }
+
+// Cliente tem algum evento de status de ONU materializado?
+const hasOnuSignal = (c: RealClient) =>
+  !!c.onuStatusCounts && Object.values(c.onuStatusCounts).some((n) => n > 0)
 
 const ALL = () => true
 const bk = (v: number, rs: any[]) => bucketByMax(v, rs).key
@@ -254,6 +264,20 @@ const DESCRIPTORS: Descriptor[] = [
     presence: false, multi: true, relevant: (c) => c.equipment.length > 0,
     classify: (c) => c.equipment, indicesOf: (l) => l.models,
   },
+  // Quedas de PPPoE — presença por status da ONU (AutoISP). Denominador =
+  // clientes com algum evento de ONU materializado (base monitorada).
+  ...ONU_INDICATOR_KEYS.map((key): Descriptor => {
+    const def = DEFAULT_CONNECTION_CONFIG.indicators[key]
+    const status = ONU_STATUS_OF[key]
+    return {
+      engineKey: 'connection', engineLabel: 'Conexão', indicatorKey: key,
+      indicatorLabel: def.label, description: def.description,
+      presence: true, multi: false, requiresOnu: true,
+      relevant: hasOnuSignal,
+      classify: (c) => ((c.onuStatusCounts?.[status] ?? 0) > 0 ? ['present'] : []),
+      indicesOf: () => PRESENCE_INDEX,
+    }
+  }),
 
   // ── Rede ──
   {
@@ -314,37 +338,37 @@ const DESCRIPTORS: Descriptor[] = [
 
   // ── Campo (manutenção) ──
   {
-    engineKey: 'field', engineLabel: 'Campo', indicatorKey: 'protocolCount',
+    engineKey: 'field', engineLabel: 'Manutenção', indicatorKey: 'protocolCount',
     indicatorLabel: 'Quantidade de Protocolos', description: 'Faixa de protocolos de manutenção.',
     presence: false, multi: false, relevant: (c) => c.protocolCount > 0,
     classify: (c) => [bk(c.protocolCount, FIELD_PROTOCOL_RANGES)], indicesOf: () => rangeIndices(FIELD_PROTOCOL_RANGES),
   },
   {
-    engineKey: 'field', engineLabel: 'Campo', indicatorKey: 'reasons',
+    engineKey: 'field', engineLabel: 'Manutenção', indicatorKey: 'reasons',
     indicatorLabel: 'Motivos', description: 'Motivo de abertura do protocolo (cliente soma cada motivo distinto).',
     presence: false, multi: true, relevant: (c) => c.protocolCount > 0,
     classify: (c) => c.reasons, indicesOf: (l) => l.reasons,
   },
   {
-    engineKey: 'field', engineLabel: 'Campo', indicatorKey: 'scheduleCount',
+    engineKey: 'field', engineLabel: 'Manutenção', indicatorKey: 'scheduleCount',
     indicatorLabel: 'Agendamentos', description: 'Tentativas de agendamento.',
     presence: false, multi: false, relevant: (c) => c.protocolCount > 0,
     classify: (c) => [bk(c.scheduleCount, FIELD_SCHEDULE_RANGES)], indicesOf: () => rangeIndices(FIELD_SCHEDULE_RANGES),
   },
   {
-    engineKey: 'field', engineLabel: 'Campo', indicatorKey: 'slaOverdue',
+    engineKey: 'field', engineLabel: 'Manutenção', indicatorKey: 'slaOverdue',
     indicatorLabel: 'SLAs Atrasados', description: 'Protocolos fora do prazo.',
     presence: false, multi: false, relevant: (c) => c.protocolCount > 0,
     classify: (c) => [bk(c.slaLateCount, FIELD_SLA_OVERDUE_RANGES)], indicesOf: () => rangeIndices(FIELD_SLA_OVERDUE_RANGES),
   },
   {
-    engineKey: 'field', engineLabel: 'Campo', indicatorKey: 'avgSla',
+    engineKey: 'field', engineLabel: 'Manutenção', indicatorKey: 'avgSla',
     indicatorLabel: 'Média de SLA', description: 'Tempo médio de conclusão (dias).',
     presence: false, multi: false, relevant: (c) => c.protocolCount > 0,
     classify: (c) => [bk(c.avgSlaDays, FIELD_AVG_SLA_RANGES)], indicesOf: () => rangeIndices(FIELD_AVG_SLA_RANGES),
   },
   {
-    engineKey: 'field', engineLabel: 'Campo', indicatorKey: 'technician',
+    engineKey: 'field', engineLabel: 'Manutenção', indicatorKey: 'technician',
     indicatorLabel: 'Técnicos', description: 'Técnico envolvido nos agendamentos (cliente soma cada técnico distinto).',
     presence: false, multi: true, relevant: (c) => c.protocolCount > 0,
     classify: (c) => c.technicians, indicesOf: (l) => l.fieldTechnicians,
@@ -492,8 +516,13 @@ export function buildSuggestions(
   let indexCount = 0
   let riskCount = 0
 
+  // ONU (AutoISP) só entra quando os DOIS coortes têm o sinal materializado —
+  // mesmo racional do gate de rede: lift sobre coorte sem dado seria espúrio.
+  const onuReady = active.some(hasOnuSignal) && cancelled.some(hasOnuSignal)
+
   for (const d of DESCRIPTORS) {
     if (skip.has(d.engineKey)) continue
+    if (d.requiresOnu && !onuReady) continue
     const A = tally(active, d)
     const C = tally(cancelled, d)
     const canonical = d.indicesOf(lists)
