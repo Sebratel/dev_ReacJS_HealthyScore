@@ -1,5 +1,5 @@
 import type {
-  RealClient,
+  RealClient, EngineIndicatorBreakdown,
   ConnectionEngineScore, ConnectionEngineData, ConnectionScoreFactor,
   ConnectionEngineConfig, ConnectionIndicatorKey, ConnectionIndicatorSummary,
 } from '@/types'
@@ -58,12 +58,16 @@ export function buildEngineScores(clients: RealClient[], config: ConnectionEngin
   return clients.map((c) => {
     const s = scoreClient(c, config)
     const counts = c.onuStatusCounts ?? {}
-    const indicators = CONNECTION_INDICATOR_ORDER.filter((key) => config.indicators[key]).map((key) => {
+    // Detalhamento: equipamento sempre; status de ONU só quando OCORREU no
+    // período — listar os 6 status zerados por cliente só polui a leitura.
+    const indicators = CONNECTION_INDICATOR_ORDER.filter((key) => config.indicators[key]).flatMap((key): EngineIndicatorBreakdown[] => {
       const ind = config.indicators[key]
-      const value = key === 'equipment'
-        ? (c.equipment.length ? c.equipment.join(', ') : 'Sem equipamento')
-        : (() => { const n = counts[ONU_STATUS_OF[key]] ?? 0; return n > 0 ? `${n} evento(s)` : 'Sem eventos' })()
-      return { key, label: ind.label, value, points: s.byKey[key] ?? 0 }
+      if (key === 'equipment') {
+        return [{ key, label: ind.label, value: c.equipment.length ? c.equipment.join(', ') : 'Sem equipamento', points: s.byKey[key] ?? 0 }]
+      }
+      const n = counts[ONU_STATUS_OF[key]] ?? 0
+      if (n === 0) return []
+      return [{ key, label: ind.label, value: `${n} evento(s)`, points: s.byKey[key] ?? 0 }]
     })
     return {
       customerId: c.clientId,

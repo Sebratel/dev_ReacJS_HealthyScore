@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Sparkles, ChevronDown, ChevronRight, Check, Wand2, Info,
   TrendingDown, TrendingUp, Database, Users, Loader2, AlertTriangle, Lock, RefreshCw,
-  CalendarRange, Network, ArrowUp, ArrowDown, ArrowUpDown, FileDown,
+  CalendarRange, Network, Wifi, ArrowUp, ArrowDown, ArrowUpDown, FileDown,
 } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { cn, formatCurrency } from '@/utils/cn'
@@ -620,6 +620,18 @@ export default function SuggestedScorePanel() {
             <div className="flex items-start gap-2.5 rounded-xl border border-app-border bg-app-card/60 px-4 py-3 text-[11px] text-gray-500 leading-relaxed">
               <Network size={15} className="mt-0.5 shrink-0 text-gray-500" />
               <p><strong className="text-gray-400">Rede</strong> ainda sem sinal de massiva nos cancelados do período — entra automaticamente assim que o ETL materializar a infra de rede dos cancelados (via histórico de conexão).</p>
+            </div>
+          )}
+
+          {/* Nota: Quedas de PPPoE fora — só enquanto os cancelados não tiverem sinal de ONU */}
+          {!built.groups.some((g) => g.indicators.some((i) => i.indicatorKey.startsWith('onu'))) && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-app-border bg-app-card/60 px-4 py-3 text-[11px] text-gray-500 leading-relaxed">
+              <Wifi size={15} className="mt-0.5 shrink-0 text-gray-500" />
+              <p>
+                <strong className="text-gray-400">Quedas de PPPoE (Conexão)</strong> ainda sem sinal de ONU materializado
+                nos cancelados — os indicadores por status (power_fail, loss_signal, …) entram automaticamente no lift
+                assim que o ETL casar eventos do AutoISP com a coorte de cancelados (linha <span className="font-mono">Cancelados/ONU</span> no log do ETL).
+              </p>
             </div>
           )}
 
