@@ -38,8 +38,8 @@ export default function InstallationEnginePage() {
       rankingSubtitle="Clientes ordenados por Health Score de instalação (pior primeiro)"
       tableHeaders={['Venda→Agenda', 'SLA']}
       columns={[
-        { header: 'Venda→Agenda', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.saleToScheduleDays.toFixed(1)}d</span> },
-        { header: 'SLA', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.avgSlaDays.toFixed(1)}d · <span className="text-risk-critical">{s.slaLateCount} atr.</span></span> },
+        { header: 'Venda→Agenda', sortKey: 'saleToScheduleDays', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.saleToScheduleDays.toFixed(1)}d</span> },
+        { header: 'SLA', sortKey: 'avgSlaDays', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.avgSlaDays.toFixed(1)}d · <span className="text-risk-critical">{s.slaLateCount} atr.</span></span> },
       ]}
       dataTitle="Dados — Instalação"
       dataColumns={DATA_COLUMNS}

@@ -401,6 +401,7 @@ export interface CommercialEngineScore {
   plan: string
   monthlyValue: number
   contractAgeLabel: string
+  contractAgeMonths: number
   healthScore: number
   churnRisk: number
   revenueRisk: number
@@ -481,6 +482,9 @@ export interface RealClient {
   renegotiations: number
   trustReleases: number
   equipment: string[]      // modelos de equipamento alocados no contrato
+  // Conexão — quedas de PPPoE: mudanças de status da ONU por status (AutoISP).
+  // Opcional para compatibilidade com snapshots antigos (sem o sinal).
+  onuStatusCounts?: Record<string, number>
   // Field Engine — protocolos de manutenção
   protocolCount: number
   scheduleCount: number
@@ -612,14 +616,19 @@ export interface ConnectionScoreFactor {
   impact: 'positive' | 'negative'
 }
 
-// Indicadores configuráveis na engine de conexão (por enquanto só equipamento)
-export type ConnectionIndicatorKey = 'equipment'
+// Indicadores configuráveis na engine de conexão: equipamento (dinâmico, por
+// modelo) + quedas de PPPoE (presença por status da ONU, banco AutoISP).
+export type ConnectionIndicatorKey =
+  | 'equipment'
+  | 'onuPowerFail' | 'onuLossSignal' | 'onuCritical' | 'onuWarning' | 'onuOk' | 'onuUp'
 
 export interface ConnectionIndicatorConfig {
   key: ConnectionIndicatorKey
   label: string
   description: string
   mode: FinancialIndicatorMode
+  // Presença (status ONU): pontos aplicados quando o status ocorreu no período.
+  points?: number
   indices: FinancialIndicatorIndex[]
   dynamic: boolean
   query: string
@@ -636,6 +645,8 @@ export interface ConnectionEngineScore {
   plan: string
   monthlyValue: number
   equipment: string[]
+  onuStatusCounts: Record<string, number>
+  onuDrops: number         // power_fail + loss_signal (quedas de PPPoE)
   healthScore: number
   churnRisk: number
   revenueRisk: number

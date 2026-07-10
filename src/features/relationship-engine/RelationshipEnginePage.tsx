@@ -43,8 +43,8 @@ export default function RelationshipEnginePage() {
       rankingSubtitle="Clientes ordenados por Health Score de relacionamento (pior primeiro)"
       tableHeaders={['Protocolos', 'Excedente']}
       columns={[
-        { header: 'Protocolos', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.protocolCount}p{s.cancelThreats > 0 && <span className="text-risk-critical"> · {s.cancelThreats}⚠</span>}</span> },
-        { header: 'Excedente', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.avgOverageHours.toFixed(1)}h</span> },
+        { header: 'Protocolos', sortKey: 'protocolCount', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.protocolCount}p{s.cancelThreats > 0 && <span className="text-risk-critical"> · {s.cancelThreats}⚠</span>}</span> },
+        { header: 'Excedente', sortKey: 'avgOverageHours', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.avgOverageHours.toFixed(1)}h</span> },
       ]}
       dataTitle="Dados — Relacionamento"
       dataColumns={DATA_COLUMNS}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SlidersHorizontal, RotateCcw, Info, Database } from 'lucide-react'
+import { SlidersHorizontal, RotateCcw, Info, Database, Tag } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { HEALTH_COLORS, HEALTH_LABELS } from '@/components/ui/HealthGauge'
 import { useAppStore } from '@/store/appStore'
@@ -7,6 +7,7 @@ import type { HealthThresholds } from '@/utils/health'
 import { DEFAULT_HEALTH_THRESHOLDS } from '@/utils/health'
 import { cn } from '@/utils/cn'
 import { QueriesPanel } from './queries/QueriesPanel'
+import { IndicatorNamesTab } from './IndicatorNamesTab'
 
 // Chaves editáveis (limite inferior de cada faixa), de cima para baixo.
 const EDITABLE: { key: keyof HealthThresholds; cls: keyof typeof HEALTH_COLORS }[] = [
@@ -34,10 +35,11 @@ function PreviewBar({ t }: { t: HealthThresholds }) {
   )
 }
 
-type Tab = 'health' | 'queries'
+type Tab = 'health' | 'names' | 'queries'
 
 const TABS: { key: Tab; label: string; icon: typeof SlidersHorizontal }[] = [
   { key: 'health', label: 'Health Score', icon: SlidersHorizontal },
+  { key: 'names', label: 'Nomenclaturas', icon: Tag },
   { key: 'queries', label: 'Queries do Sistema', icon: Database },
 ]
 
@@ -62,7 +64,7 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === 'health' ? <HealthThresholdsTab /> : <QueriesPanel />}
+      {tab === 'health' ? <HealthThresholdsTab /> : tab === 'names' ? <IndicatorNamesTab /> : <QueriesPanel />}
     </div>
   )
 }

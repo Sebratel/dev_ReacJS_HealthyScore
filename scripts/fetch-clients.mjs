@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { makePool } from './db.mjs'
 import { makeMariaPool } from './db-maria.mjs'
+import { makeAutoIspPool } from './db-autoisp.mjs'
 import { buildEffectiveQueries } from './queries/index.mjs'
 import { FROM_DATE } from './queries/registry.mjs'
 import { buildCohort } from './queries/cohort.mjs'
@@ -58,6 +59,7 @@ const {
   Q_REL_PROT, Q_REL_DIM, Q_REL_TYPE_LIST, Q_REL_ATT_LIST,
   Q_MARIA_SPLITTER, Q_NET_INFRA, Q_NET_INFRA_CANCELLED,
   Q_INV_AGG, Q_RENEG_AGG, Q_TRUST_AGG,
+  Q_AUTOISP_ONU_STATUS,
 } = buildEffectiveQueries({ full: FULL })
 
 const pool = makePool()
@@ -119,6 +121,7 @@ try {
       onTimeInvoices: 0, lateInvoices: 0, overdueInvoices: 0, totalInvoices: 0,
       renegotiations: 0, trustReleases: 0,
       equipment: [],
+      onuStatusCounts: {},
       protocolCount: 0, scheduleCount: 0, slaLateCount: 0, avgSlaDays: 0,
       reasons: [], technicians: [],
       installProtocols: 0, installScheduleCount: 0, installSlaLateCount: 0,
@@ -152,6 +155,42 @@ try {
   const massiveCodes = Array.from(massiveBySplitter.keys())
   const totalMassives = Array.from(massiveBySplitter.values()).reduce((a, v) => a + v.count, 0)
   console.log(`Massivas (MariaDB): ${totalMassives} em ${massiveCodes.length} splitters.`)
+
+  // AutoISP — quedas de PPPoE: mudanças de status da ONU agregadas por
+  // contrato + status (cross-DB). Banco opcional: sem DB_AUTOISP_* no .env o
+  // ETL segue sem o sinal (onuStatusCounts fica vazio). O casamento com a base
+  // é por contract_id (→ contract_number) com fallback em client_id.
+  const onuByContract = new Map()
+  const onuByClient = new Map()
+  if (process.env.DB_AUTOISP_HOST) {
+    try {
+      const autoisp = makeAutoIspPool()
+      try {
+        const res = await autoisp.query(Q_AUTOISP_ONU_STATUS, [FROM_DATE])
+        for (const r of res.rows) {
+          const status = (r.new_status || '').trim()
+          const qty = Number(r.qty) || 0
+          if (!status || !qty) continue
+          if (r.contract_id != null) {
+            const m = onuByContract.get(String(r.contract_id)) || {}
+            m[status] = (m[status] || 0) + qty
+            onuByContract.set(String(r.contract_id), m)
+          }
+          if (r.client_id != null) {
+            const m = onuByClient.get(String(r.client_id)) || {}
+            m[status] = (m[status] || 0) + qty
+            onuByClient.set(String(r.client_id), m)
+          }
+        }
+      } finally { await autoisp.end() }
+    } catch (e) { console.warn('ONU (AutoISP): falha —', e.message) }
+  } else {
+    console.log('ONU (AutoISP): DB_AUTOISP_* ausentes no .env — sinal pulado.')
+  }
+  const applyOnu = (c) => {
+    const m = (c.contractNumber && onuByContract.get(c.contractNumber)) || onuByClient.get(c.clientId)
+    if (m) c.onuStatusCounts = { ...m }
+  }
 
   const [inv, reneg, trust, monthly, equip, fieldProt, fieldSched, fieldReasons, instProt, instSched, relProt, relDim, netInfra] = await Promise.all([
     pool.query(Q_INV_AGG, [contractNumbers]),
@@ -263,6 +302,10 @@ try {
   for (const r of reneg.rows) { const c = byContract.get(String(r.contract_number)); if (c) c.renegotiations = Number(r.renegotiations) }
   for (const r of trust.rows) { const c = byContract.get(String(r.contract_number)); if (c) c.trustReleases = Number(r.trust_releases) }
 
+  for (const c of clients) applyOnu(c)
+  const withOnu = clients.filter((c) => Object.keys(c.onuStatusCounts).length > 0).length
+  if (onuByContract.size || onuByClient.size) console.log(`ONU (AutoISP): ${withOnu}/${clients.length} clientes com mudanças de status casadas na base.`)
+
   const withInv = clients.filter((c) => c.totalInvoices > 0).length
   console.log(`Sinais aplicados: ${withInv}/${clients.length} clientes com faturas no período.`)
 
@@ -280,6 +323,11 @@ try {
     const cc = await buildCohort(pool, { cancelled: true, from: cancelledFrom, to: cancelledTo })
     cancelledClients = cc.clients
     console.log(`Cancelados: ${cancelledClients.length} em ${cancelledFrom}..${cancelledTo}${cc.warnings.length ? ` (avisos: ${cc.warnings.join('; ')})` : ''}`)
+
+    // ONU dos cancelados — mesmo mapa do AutoISP, casado por contrato/cliente.
+    for (const c of cancelledClients) applyOnu(c)
+    const cancWithOnu = cancelledClients.filter((c) => Object.keys(c.onuStatusCounts || {}).length > 0).length
+    if (onuByContract.size || onuByClient.size) console.log(`Cancelados/ONU: ${cancWithOnu}/${cancelledClients.length} com mudanças de status.`)
 
     // Rede dos cancelados — infra via occurrences (histórico, sobrevive ao
     // cancelamento) para TODA a coorte × massivas (MariaDB, já em memória).

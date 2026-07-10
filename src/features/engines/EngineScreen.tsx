@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ShieldAlert, Zap, SlidersHorizontal, ChevronDown, ChevronUp, Table2,
-  Loader2, AlertTriangle, Lock, RefreshCw,
+  Loader2, AlertTriangle, Lock, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EngineDataModal, type DataColumn, type AggregateGroup } from '@/components/ui/EngineDataModal'
@@ -32,7 +32,9 @@ export interface EngineScoreBase {
   indicators: { key: string; label: string; value: string; points: number }[]
 }
 
-export interface EngineColumn<S> { header: string; cell: (s: S) => ReactNode }
+// sortKey: campo do objeto de score usado para ordenar no servidor quando o
+// cabeçalho desta coluna é clicado (omitir → coluna não ordenável).
+export interface EngineColumn<S> { header: string; cell: (s: S) => ReactNode; sortKey?: string }
 
 // Detalhamento padrão (indicador × pontuação) — usado no expandir da linha.
 export function IndicatorBreakdown({ indicators }: { indicators: EngineScoreBase['indicators'] }) {
@@ -117,6 +119,8 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
   const [filters, setFilters] = useState<ContractFilterState>({ contract: '', name: '', city: '' })
   const [tab, setTab] = useState<Tab>('all')
   const [page, setPage] = useState(0)
+  // Ordenação clicável — null = padrão do servidor (healthScore asc, pior 1º).
+  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -134,6 +138,7 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
           config, thresholds, page, pageSize: PAGE_SIZE,
           name: filters.name, contract: filters.contract, city: filters.city,
           classification: tab === 'all' ? undefined : tab,
+          sortKey: sort?.key, sortDir: sort?.dir,
         })
         if (alive) { setData(res); setError(null) }
       } catch (e) {
@@ -143,10 +148,15 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
       }
     }, 300)
     return () => { alive = false; clearTimeout(timer) }
-  }, [engineKey, config, thresholds, page, tab, filters.name, filters.contract, filters.city, reloadKey])
+  }, [engineKey, config, thresholds, page, tab, filters.name, filters.contract, filters.city, sort, reloadKey])
 
   const changeFilters = (f: ContractFilterState) => { setFilters(f); setPage(0) }
   const changeTab = (t: Tab) => { setTab(t); setPage(0) }
+  // 1º clique: desc (maior/pior impacto primeiro) → asc → volta ao padrão.
+  const changeSort = (key: string) => {
+    setSort((s) => (s?.key !== key ? { key, dir: 'desc' } : s.dir === 'desc' ? { key, dir: 'asc' } : null))
+    setPage(0)
+  }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1
   const dist = data?.distribution
@@ -251,8 +261,29 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-app-border bg-app-surface/50">
-                  {['#', 'Cliente', 'Health Score', 'Churn Risk', ...props.tableHeaders, 'Classificação', ''].map((h, i) => (
-                    <th key={`${h}-${i}`} className="px-4 py-2.5 text-left text-[10px] text-gray-500 uppercase tracking-wider font-medium">{h}</th>
+                  {([
+                    { label: '#' },
+                    { label: 'Cliente', sortKey: 'customerName' },
+                    { label: 'Health Score', sortKey: 'healthScore' },
+                    { label: 'Churn Risk', sortKey: 'churnRisk' },
+                    ...props.tableHeaders.map((h, i) => ({ label: h, sortKey: props.columns[i]?.sortKey })),
+                    { label: 'Classificação', sortKey: 'classification' },
+                    { label: '' },
+                  ] as { label: string; sortKey?: string }[]).map(({ label, sortKey }, i) => (
+                    <th key={`${label}-${i}`} className="px-4 py-2.5 text-left text-[10px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap">
+                      {sortKey ? (
+                        <button
+                          onClick={() => changeSort(sortKey)}
+                          title={`Ordenar por ${label}`}
+                          className={cn('inline-flex items-center gap-1 uppercase tracking-wider hover:text-gray-300 transition-colors', sort?.key === sortKey ? 'text-brand-blue' : '')}
+                        >
+                          {label}
+                          {sort?.key === sortKey
+                            ? (sort.dir === 'desc' ? <ArrowDown size={9} /> : <ArrowUp size={9} />)
+                            : <ArrowUpDown size={9} className="opacity-40" />}
+                        </button>
+                      ) : label}
+                    </th>
                   ))}
                 </tr>
               </thead>

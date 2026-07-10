@@ -5,7 +5,7 @@ import { apiFetch, ApiError } from '@/lib/apiClient'
 
 export { ApiError }
 
-export type QueryDb = 'postgres' | 'mariadb'
+export type QueryDb = 'postgres' | 'mariadb' | 'autoisp'
 
 export interface QueryItem {
   id: string

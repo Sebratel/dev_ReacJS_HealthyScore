@@ -21,7 +21,7 @@ import { getVersion } from './dataset.mjs'
 const ENGINES = {
   financial:    { base: (c) => c.totalInvoices > 0 || c.trustReleases > 0 || c.renegotiations > 0, build: buildFinancialEngineData, wantsMonthly: true },
   commercial:   { base: () => true, build: buildCommercialEngineData },
-  connection:   { base: (c) => c.equipment.length > 0, build: buildConnectionEngineData },
+  connection:   { base: (c) => c.equipment.length > 0 || Object.values(c.onuStatusCounts || {}).some((n) => n > 0), build: buildConnectionEngineData },
   network:      { base: (c) => c.netMassiveCount > 0 || !!c.netSite, build: buildNetworkEngineData },
   field:        { base: (c) => c.protocolCount > 0, build: buildFieldEngineData },
   installation: { base: (c) => c.installProtocols > 0, build: buildInstallationEngineData },
@@ -105,9 +105,34 @@ export function runEngine(key, opts = {}) {
   const distribution = { excellent: 0, healthy: 0, attention: 0, high_risk: 0, critical: 0 }
   for (const s of scores) distribution[s.classification]++
 
-  // Filtro por classificação + ordenação por risco (pior 1º) + página.
+  // Filtro por classificação + ordenação + página. Padrão: risco (pior 1º).
+  // sortKey aceita qualquer campo do score, inclusive caminho aninhado
+  // ("signals.lateInvoices"); arrays ordenam pelo tamanho, classification pela
+  // severidade, números numericamente e o resto por localeCompare pt-BR.
   if (opts.classification) scores = scores.filter((s) => s.classification === opts.classification)
-  scores = scores.slice().sort((a, b) => a.healthScore - b.healthScore)
+  const CLASS_RANK = { critical: 0, high_risk: 1, attention: 2, healthy: 3, excellent: 4 }
+  const sortKey = typeof opts.sortKey === 'string' && opts.sortKey ? opts.sortKey : null
+  const dir = opts.sortDir === 'desc' ? -1 : 1
+  const sortVal = (s) => {
+    if (sortKey === 'classification') return CLASS_RANK[s.classification] ?? null
+    let v = s
+    for (const part of sortKey.split('.')) {
+      if (v == null || typeof v !== 'object') return null
+      v = v[part]
+    }
+    if (Array.isArray(v)) return v.length
+    return v ?? null
+  }
+  scores = scores.slice().sort((a, b) => {
+    if (!sortKey) return a.healthScore - b.healthScore
+    const va = sortVal(a)
+    const vb = sortVal(b)
+    if (va == null && vb == null) return 0
+    if (va == null) return 1
+    if (vb == null) return -1
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
+    return String(va).localeCompare(String(vb), 'pt-BR') * dir
+  })
 
   const total = scores.length
   const pageSize = Math.min(200, Math.max(1, Number(opts.pageSize) || 25))

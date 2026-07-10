@@ -52,8 +52,8 @@ export default function NetworkEnginePage() {
       rankingSubtitle="Clientes ordenados por Health Score de rede (pior primeiro)"
       tableHeaders={['Massivas', 'Site']}
       columns={[
-        { header: 'Massivas', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.massiveCount}× · {fmtMin(s.avgOfflineMin)}</span> },
-        { header: 'Site', cell: (s) => <span className="text-[10px] text-gray-500 font-mono truncate block max-w-[90px]">{s.site || '—'}</span> },
+        { header: 'Massivas', sortKey: 'massiveCount', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.massiveCount}× · {fmtMin(s.avgOfflineMin)}</span> },
+        { header: 'Site', sortKey: 'site', cell: (s) => <span className="text-[10px] text-gray-500 font-mono truncate block max-w-[90px]">{s.site || '—'}</span> },
       ]}
       renderExpanded={(s) => (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

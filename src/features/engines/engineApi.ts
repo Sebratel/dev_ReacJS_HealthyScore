@@ -16,6 +16,10 @@ export interface EngineFetchParams {
   contract?: string
   city?: string
   classification?: string
+  // Ordenação por qualquer campo do score (cabeçalhos clicáveis). Ausente →
+  // padrão do servidor (healthScore asc, pior primeiro).
+  sortKey?: string
+  sortDir?: 'asc' | 'desc'
 }
 
 export interface EngineMeta {

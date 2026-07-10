@@ -8,7 +8,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/engine-comercial': { title: 'Comercial', subtitle: 'Performance de vendedores e qualidade de aquisição' },
   '/engine-conexao': { title: 'Conexão', subtitle: 'Qualidade de CPE e equipamentos' },
   '/engine-rede': { title: 'Rede', subtitle: 'Infraestrutura, massivas e impacto no churn' },
-  '/manutencao': { title: 'Campo', subtitle: 'Protocolos, SLA e reincidência técnica' },
+  '/manutencao': { title: 'Manutenção', subtitle: 'Protocolos, SLA e reincidência técnica' },
   '/engine-instalacao': { title: 'Instalação', subtitle: 'Qualidade e SLA de instalação' },
   '/engine-relacionamento': { title: 'Relacionamento', subtitle: 'NPS, sentimento e ameaças de cancelamento' },
   '/perfis-cancelados': { title: 'Cancelados', subtitle: 'Pontuação sugerida pela IA · Perfil de quem cancelou' },

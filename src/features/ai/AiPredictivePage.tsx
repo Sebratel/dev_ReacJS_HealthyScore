@@ -9,6 +9,7 @@ import { ContractFilters, type ContractFilterState } from '@/components/ui/Contr
 import { formatCurrency, cn } from '@/utils/cn'
 import { useAppStore } from '@/store/appStore'
 import { fetchDashboard, ApiError, type DashboardResponse, type RankedClient } from '@/features/dashboard/dashboardApi'
+import { useIndicatorLabelMap, resolveIndicatorLabel } from '@/features/settings/indicatorCatalog'
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null
@@ -44,7 +45,7 @@ function explain(r: RankedClient): string {
     if (s.overdue > 0) parts.push(`${s.overdue} fatura(s) em atraso/aberto`)
     if (s.renegotiations > 0) parts.push(`${s.renegotiations} renegociação(ões)`)
     if (s.netMassiveCount > 0) parts.push(`${s.netMassiveCount} massiva(s) de rede`)
-    if (s.slaLateCount > 0) parts.push(`${s.slaLateCount} atendimento(s) de campo com SLA estourado`)
+    if (s.slaLateCount > 0) parts.push(`${s.slaLateCount} atendimento(s) de manutenção com SLA estourado`)
     if (s.trustReleases > 0) parts.push(`${s.trustReleases} desbloqueio(s) por confiança`)
   }
   const worst = [...r.byEngine].sort((a, b) => a.healthScore - b.healthScore)[0]
@@ -90,17 +91,22 @@ export default function AiPredictivePage() {
 
   const monthlyData = useMemo(() => (data?.monthly ?? []).map((m) => ({ month: m.month, 'No prazo': m.onTime, 'Em atraso': m.late, 'Em aberto': m.overdue })), [data])
 
+  // Nomenclaturas vigentes dos indicadores (editáveis em /configuracoes) —
+  // mantêm alertas e KPIs coerentes com o nome usado no resto do sistema.
+  const labelMap = useIndicatorLabelMap()
+  const cancelThreatsLabel = resolveIndicatorLabel(labelMap, 'relationship', 'cancelThreats')
+
   const autoAlerts = useMemo(() => {
     if (!data) return []
     const bc = data.baseCounts
     return [
       { type: 'critical', message: `${data.ranking.criticalCount} clientes com health combinado crítico (<${criticalThreshold}) — ação imediata`, action: 'Ver financeiro', path: '/financeiro' },
-      { type: 'critical', message: `${bc.cancelThreats} clientes com ameaça ativa de cancelamento`, action: 'Relacionamento', path: '/engine-relacionamento' },
-      { type: 'high', message: `${bc.overdueClients} clientes com faturas em atraso ou em aberto vencidas`, action: 'Financeiro', path: '/financeiro' },
-      { type: 'medium', message: `${bc.slaLateClients} clientes com SLA de atendimento em campo estourado`, action: 'Campo', path: '/manutencao' },
+      { type: 'critical', message: `${bc.cancelThreats} clientes com registro de "${cancelThreatsLabel}"`, action: 'Relacionamento', path: '/engine-relacionamento' },
+      { type: 'high', message: `${bc.overdueClients} clientes com registro de "${resolveIndicatorLabel(labelMap, 'financial', 'overdueBills')}"`, action: 'Financeiro', path: '/financeiro' },
+      { type: 'medium', message: `${bc.slaLateClients} clientes com registro de "${resolveIndicatorLabel(labelMap, 'field', 'slaOverdue')}" na manutenção`, action: 'Manutenção', path: '/manutencao' },
       { type: 'info', message: `${bc.massiveClients} clientes impactados por massivas de rede no período`, action: 'Rede', path: '/engine-rede' },
     ]
-  }, [data, criticalThreshold])
+  }, [data, criticalThreshold, labelMap, cancelThreatsLabel])
 
   const runModel = () => {
     setModelRunning(true); setModelDone(false)
@@ -158,7 +164,7 @@ export default function AiPredictivePage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Clientes Críticos" value={rk.criticalCount.toLocaleString('pt-BR')} subtitle={`Health combinado < ${criticalThreshold}`} variant="danger" icon={<AlertTriangle size={14} />} iconColor="text-risk-critical" />
         <KpiCard label="Receita Anual em Risco" value={formatCurrency(rk.annualRevenueRisk)} subtitle="Risco × MRR × 12" variant="warning" icon={<DollarSign size={14} />} iconColor="text-risk-medium" />
-        <KpiCard label="Ameaças de Cancelamento" value={data.baseCounts.cancelThreats.toLocaleString('pt-BR')} subtitle="Registradas no relacionamento" variant="danger" icon={<MessageSquare size={14} />} iconColor="text-risk-high" />
+        <KpiCard label={cancelThreatsLabel} value={data.baseCounts.cancelThreats.toLocaleString('pt-BR')} subtitle="Registradas no relacionamento" variant="danger" icon={<MessageSquare size={14} />} iconColor="text-risk-high" />
         <KpiCard label="Alertas Automáticos" value={autoAlerts.length} subtitle="Ações recomendadas" variant="brand" icon={<Radio size={14} />} iconColor="text-brand-blue" />
       </div>
 

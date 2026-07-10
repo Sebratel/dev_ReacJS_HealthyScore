@@ -77,7 +77,7 @@ function IndicatorCard({ indicator }: { indicator: ConnectionIndicatorConfig }) 
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-gray-100">{indicator.label}</p>
-            <span className="text-[9px] text-gray-500 font-mono">{indicator.indices.length} modelos · {configured} c/ nota</span>
+            {indicator.dynamic && <span className="text-[9px] text-gray-500 font-mono">{indicator.indices.length} modelos · {configured} c/ nota</span>}
           </div>
           <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{indicator.description}</p>
         </div>
@@ -86,7 +86,14 @@ function IndicatorCard({ indicator }: { indicator: ConnectionIndicatorConfig }) 
 
       <div className="mt-3">
         {indicator.mode === 'manual' ? (
-          <IndexList indicatorKey={indicator.key} indices={indicator.indices} />
+          indicator.dynamic ? (
+            <IndexList indicatorKey={indicator.key} indices={indicator.indices} />
+          ) : (
+            <div className="flex items-center justify-between gap-2 bg-app-bg/50 rounded-lg px-3 py-2">
+              <span className="text-xs text-gray-300">Quando o status ocorreu no período</span>
+              <PointsInput value={indicator.points ?? 0} onChange={(v) => updateConnectionIndicator(indicator.key, { points: v })} />
+            </div>
+          )
         ) : (
           <div className="flex items-center gap-2.5 bg-brand-violet/5 border border-brand-violet/15 rounded-lg px-3 py-2.5">
             <Brain size={14} className="text-brand-violet shrink-0" />
@@ -129,7 +136,7 @@ export function ConnectionEngineConfigModal({ open, onClose }: Props) {
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-blue to-brand-violet flex items-center justify-center"><SlidersHorizontal size={15} className="text-[#fff]" /></div>
             <div>
               <h2 className="text-sm font-bold text-white">Configuração — Conexão</h2>
-              <p className="text-[11px] text-gray-500">Defina a pontuação de cada modelo de equipamento</p>
+              <p className="text-[11px] text-gray-500">Pontuação por modelo de equipamento e por status da ONU (quedas de PPPoE)</p>
             </div>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-200 transition-colors p-1"><X size={18} /></button>

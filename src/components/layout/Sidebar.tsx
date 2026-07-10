@@ -13,7 +13,7 @@ const NAV_ITEMS = [
   { path: '/engine-comercial',      icon: Briefcase,       label: 'Comercial',       sublabel: 'Aquisição e vendedores' },
   { path: '/engine-conexao',        icon: Wifi,            label: 'Conexão',         sublabel: 'Qualidade CPE' },
   { path: '/engine-rede',           icon: Network,         label: 'Rede',            sublabel: 'Infraestrutura' },
-  { path: '/manutencao',            icon: Wrench,          label: 'Campo',           sublabel: 'Atendimento a campo' },
+  { path: '/manutencao',            icon: Wrench,          label: 'Manutenção',      sublabel: 'Atendimento a campo' },
   { path: '/engine-instalacao',     icon: PackageOpen,     label: 'Instalação',      sublabel: 'Qualidade de instalação' },
   { path: '/engine-relacionamento', icon: MessageSquare,   label: 'Relacionamento',  sublabel: 'NPS · Sentimento' },
   { path: '/perfis-cancelados',     icon: UserMinus,       label: 'Cancelados',      sublabel: 'Pontuação sugerida (IA)' },

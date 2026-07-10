@@ -138,6 +138,7 @@ app.post('/api/engine/:key', requireAuth(), (req, res) => {
       monthly: getDataset()?.monthly || [],
       page: b.page, pageSize: b.pageSize,
       name: b.name, contract: b.contract, city: b.city, classification: b.classification,
+      sortKey: b.sortKey, sortDir: b.sortDir,
     })
     res.json({ ...result, meta: datasetStatus() })
   } catch (e) {

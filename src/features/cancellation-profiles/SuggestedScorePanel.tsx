@@ -14,6 +14,7 @@ import {
 } from '@/data/realClients'
 import type { SuggestionEngineKey, IndicatorSuggestion, IndexSuggestion } from './suggestionEngine'
 import { fetchCancellationSuggestions, ApiError, type SuggestionResult } from './suggestionsApi'
+import { useIndicatorLabelMap, resolveIndicatorLabel } from '@/features/settings/indicatorCatalog'
 
 // ─── Datas ─────────────────────────────────────────────────────
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -105,6 +106,17 @@ function Explanation({ ind, idx }: { ind: IndicatorSuggestion; idx: IndexSuggest
           sugestão de <strong style={{ color }}>{idx.suggestedPoints! > 0 ? '+' : ''}{idx.suggestedPoints} pts</strong>.
         </span>
       </p>
+      {ind.presence && (
+        <p className="text-[10px] text-gray-500 leading-relaxed flex items-start gap-1.5">
+          <Info size={11} className="mt-0.5 shrink-0" />
+          <span>
+            Percentual <strong className="text-gray-400">por cliente</strong>, não por fatura/evento: conta quem teve{' '}
+            <strong className="text-gray-400">ao menos uma</strong> ocorrência no histórico. Por isso indicadores de
+            presença não somam 100% entre si — o mesmo cliente pode ter, por exemplo, faturas atrasadas <em>e</em> faturas
+            pagas no prazo.
+          </span>
+        </p>
+      )}
     </div>
   )
 }
@@ -205,7 +217,7 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-100">{ind.indicatorLabel}</span>
-            {ind.presence && <span className="text-[9px] px-1.5 py-0.5 rounded bg-app-surface border border-app-border text-gray-500 uppercase tracking-wider">presença</span>}
+            {ind.presence && <span title="Indicador de presença: o % é por cliente (ao menos uma ocorrência no histórico). Não é excludente com outros indicadores — os percentuais não somam 100% entre si." className="text-[9px] px-1.5 py-0.5 rounded bg-app-surface border border-app-border text-gray-500 uppercase tracking-wider cursor-help">presença</span>}
             {ind.multi && <span className="text-[9px] px-1.5 py-0.5 rounded bg-app-surface border border-app-border text-gray-500 uppercase tracking-wider">multi</span>}
           </div>
           <p className="text-[11px] text-gray-500 mt-0.5 truncate">{ind.description}</p>
@@ -226,6 +238,7 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
           <div className="flex items-center justify-between px-4 py-2 bg-app-surface/30">
             <span className="text-[10px] text-gray-500">
               {valid.length} de {ind.indices.length} {ind.presence ? 'condição' : 'índices'} com amostra suficiente
+              {ind.presence && <span className="text-gray-600"> · % = clientes com ao menos uma ocorrência no histórico</span>}
             </span>
             {appliableCount > 0 && (
               <button onClick={() => onApplyAll(ind)} className="inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-md bg-gradient-brand text-white shadow-glow hover:-translate-y-0.5 transition-all">
@@ -380,13 +393,18 @@ export default function SuggestedScorePanel() {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [exporting, setExporting] = useState(false)
 
+  // Nomenclaturas vigentes dos indicadores (editáveis em /configuracoes).
+  // O servidor devolve os nomes de fábrica — aqui trocamos pelo nome atual
+  // para a tela (e o PDF) ficarem coerentes com o resto do sistema.
+  const labelMap = useIndicatorLabelMap()
+
   // Gera o PDF (KPIs + sugestões por módulo) — usa a janela efetiva do servidor.
   async function exportPdf() {
-    if (state.status !== 'ready' || exporting) return
+    if (!built || exporting) return
     setExporting(true)
     try {
       const { exportSuggestionsPdf } = await import('./exportPdf')
-      await exportSuggestionsPdf(state.data, { from: state.data.window.from, to: state.data.window.to })
+      await exportSuggestionsPdf(built, { from: built.window.from, to: built.window.to })
     } finally {
       setExporting(false)
     }
@@ -445,8 +463,19 @@ export default function SuggestedScorePanel() {
     setFrom(f); setTo(t); load(f, t)
   }
 
-  // O lift já vem calculado do servidor (base completa materializada).
-  const built = state.status === 'ready' ? state.data : null
+  // O lift já vem calculado do servidor (base completa materializada) — só
+  // renomeamos os indicadores conforme a nomenclatura configurada.
+  const built = useMemo<SuggestionResult | null>(() => {
+    if (state.status !== 'ready') return null
+    const rename = (ind: IndicatorSuggestion): IndicatorSuggestion => ({
+      ...ind,
+      indicatorLabel: resolveIndicatorLabel(labelMap, ind.engineKey, ind.indicatorKey, ind.indicatorLabel),
+    })
+    return {
+      ...state.data,
+      groups: state.data.groups.map((g) => ({ ...g, indicators: g.indicators.map(rename) })),
+    }
+  }, [state, labelMap])
   // Cobertura real da base: 'full' (ETL noturno completo) vs 'sample' (amostra
   // de dev). Rotula o KPI com honestidade — em dev a base ativa é uma amostra.
   const isFullBase = built?.meta?.coverage === 'full'

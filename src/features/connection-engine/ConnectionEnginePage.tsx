@@ -14,6 +14,9 @@ const DATA_COLUMNS: DataColumn[] = [
   { key: 'mrr', label: 'MRR', align: 'right', value: (c) => c.monthlyValue },
   { key: 'equip', label: 'Equipamentos', value: (c) => c.equipment.join(', ') || '—' },
   { key: 'equipN', label: 'Qtd equip.', align: 'right', value: (c) => c.equipment.length },
+  { key: 'onuDrops', label: 'Quedas ONU', align: 'right', value: (c) => c.onuDrops },
+  { key: 'onuPf', label: 'power_fail', align: 'right', value: (c) => c.onuStatusCounts?.power_fail ?? 0 },
+  { key: 'onuLs', label: 'loss_signal', align: 'right', value: (c) => c.onuStatusCounts?.loss_signal ?? 0 },
 ]
 
 export default function ConnectionEnginePage() {
@@ -27,15 +30,16 @@ export default function ConnectionEnginePage() {
       engineKey="connection"
       icon={<Wifi size={18} className="text-[#fff]" />}
       title="Conexão"
-      subtitle="Score de conexão a partir do modelo de equipamento alocado — pontuado no servidor."
+      subtitle="Score de conexão a partir do modelo de equipamento alocado e das quedas de PPPoE (status da ONU) — pontuado no servidor."
       config={config}
       thresholds={thresholds}
       analyzedLabel="c/ equip."
       rankingTitle="Ranking de Conexão"
       rankingSubtitle="Clientes ordenados por Health Score de conexão (pior primeiro)"
-      tableHeaders={['Equip.']}
+      tableHeaders={['Equip.', 'Quedas']}
       columns={[
-        { header: 'Equip.', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.equipment.length} equip.</span> },
+        { header: 'Equip.', sortKey: 'equipment', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.equipment.length} equip.</span> },
+        { header: 'Quedas', sortKey: 'onuDrops', cell: (s) => <span className={s.onuDrops > 0 ? 'text-[10px] text-risk-critical font-mono' : 'text-[10px] text-gray-500 font-mono'}>{s.onuDrops}× queda{s.onuDrops === 1 ? '' : 's'}</span> },
       ]}
       dataTitle="Dados — Conexão"
       dataColumns={DATA_COLUMNS}

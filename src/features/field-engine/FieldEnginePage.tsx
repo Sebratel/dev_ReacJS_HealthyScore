@@ -34,20 +34,20 @@ export default function FieldEnginePage() {
     <EngineScreen<FieldEngineData, FieldEngineScore>
       engineKey="field"
       icon={<Wrench size={18} className="text-[#fff]" />}
-      title="Campo"
-      subtitle="Score de campo a partir de protocolos, motivos, agendamentos, SLA e técnicos — pontuado no servidor."
+      title="Manutenção"
+      subtitle="Score de manutenção a partir de protocolos, motivos, agendamentos, SLA e técnicos — pontuado no servidor."
       config={config}
       thresholds={thresholds}
       analyzedLabel="c/ protocolo"
       footerNote={`protocolos desde ${realMeta.fromDate}`}
       rankingTitle="Ranking de Manutenção"
-      rankingSubtitle="Clientes ordenados por Health Score de campo (pior primeiro)"
+      rankingSubtitle="Clientes ordenados por Health Score de manutenção (pior primeiro)"
       tableHeaders={['Protocolos', 'Média SLA']}
       columns={[
-        { header: 'Protocolos', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.protocolCount}p · <span className="text-risk-critical">{s.slaLateCount} atr.</span></span> },
-        { header: 'Média SLA', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.avgSlaDays.toFixed(1)}d</span> },
+        { header: 'Protocolos', sortKey: 'protocolCount', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.protocolCount}p · <span className="text-risk-critical">{s.slaLateCount} atr.</span></span> },
+        { header: 'Média SLA', sortKey: 'avgSlaDays', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.avgSlaDays.toFixed(1)}d</span> },
       ]}
-      dataTitle="Dados — Campo"
+      dataTitle="Dados — Manutenção"
       dataColumns={DATA_COLUMNS}
       buildAggregates={() => [
         { title: 'Motivos de visita', entries: realField.reasons.map((e) => ({ label: e.value, value: e.count })) },
