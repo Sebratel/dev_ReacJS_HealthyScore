@@ -1,43 +1,60 @@
-import { UserMinus } from 'lucide-react'
+import { useState } from 'react'
+import { UserMinus, Sparkles, Users } from 'lucide-react'
+import { cn } from '@/utils/cn'
 import SuggestedScorePanel from './SuggestedScorePanel'
 import CancelledClientsPanel from './CancelledClientsPanel'
-import CancelledByMotivePanel from './CancelledByMotivePanel'
 
-// Tela de Cancelados — hoje concentra a Pontuação Sugerida pela IA: a partir
-// dos padrões de cancelamento, sugere a nota de cada indicador de todas as
-// engines (comparando quem cancelou com a base ativa). Os perfis de
-// cancelamento manuais foram descontinuados.
+// Tela de Cancelados — organizada em abas para reduzir a poluição visual:
+//   • Pontuação IA  → sugestão de notas a partir dos padrões de cancelamento
+//   • Cancelados    → perfis de quem cancelou (motivo como faixa + filtro)
+const TABS = [
+  { key: 'suggestion' as const, label: 'Pontuação IA', icon: Sparkles, hint: 'Notas sugeridas a partir de quem cancelou × base ativa' },
+  { key: 'clients' as const, label: 'Cancelados', icon: Users, hint: 'Perfis de quem cancelou, por motivo' },
+]
+
 export default function CancellationProfilesPage() {
+  const [tab, setTab] = useState<'suggestion' | 'clients'>('suggestion')
+  const active = TABS.find((t) => t.key === tab)!
+
   return (
-    <div className="space-y-5 animate-slide-up">
-      {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl border border-app-border bg-app-card shadow-card-md">
-        <div className="absolute -top-24 -right-12 w-80 h-80 rounded-full bg-gradient-danger opacity-[0.07] blur-3xl pointer-events-none animate-float" />
-        <div className="absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-risk-critical/40 to-transparent" />
-        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5">
-          <div>
-            <div className="flex items-center gap-3 mb-1.5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-danger flex items-center justify-center shadow-glow-danger shrink-0">
-                <UserMinus size={18} className="text-white" />
-              </div>
-              <h1 className="text-xl font-bold gradient-text tracking-tight">Pontuação Sugerida pela IA</h1>
+    <div className="space-y-4 animate-slide-up">
+      {/* Cabeçalho compacto + abas */}
+      <div className="rounded-2xl border border-app-border bg-app-card shadow-card-md px-5 py-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-gradient-danger flex items-center justify-center shadow-glow-danger shrink-0">
+              <UserMinus size={16} className="text-white" />
             </div>
-            <p className="text-xs text-gray-500 max-w-2xl leading-relaxed">
-              A partir dos padrões de cancelamento, a IA sugere a pontuação de cada indicador de todas as engines —
-              comparando a prevalência de cada atributo entre <strong className="text-gray-300">quem cancelou</strong> e a{' '}
-              <strong className="text-gray-300">base ativa</strong>.
-            </p>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold gradient-text tracking-tight leading-none">Cancelados</h1>
+              <p className="text-[11px] text-gray-500 mt-1 truncate">{active.hint}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 p-0.5 rounded-xl bg-app-surface border border-app-border shrink-0">
+            {TABS.map((t) => {
+              const Icon = t.icon
+              const sel = tab === t.key
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+                    sel ? 'bg-gradient-brand text-[#fff] shadow-glow' : 'text-gray-400 hover:text-gray-200',
+                  )}
+                >
+                  <Icon size={13} />
+                  {t.label}
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>
 
-      <SuggestedScorePanel />
-
-      {/* Perfis dos cancelados agrupados por motivo de cancelamento */}
-      <CancelledByMotivePanel />
-
-      {/* Quem cancelou — perfil compacto por cliente (dados da coorte materializada) */}
-      <CancelledClientsPanel />
+      {/* Painel da aba ativa (montado sob demanda) */}
+      {tab === 'suggestion' ? <SuggestedScorePanel /> : <CancelledClientsPanel />}
     </div>
   )
 }

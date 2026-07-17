@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { cn, formatCurrency } from '@/utils/cn'
-import { fetchCancelledClients, ApiError, type CancelledClient, type CancelledClientsResult } from './suggestionsApi'
+import { fetchCancelledClients, ApiError, type CancelledClient, type CancelledClientsResult, type MotiveAgg } from './suggestionsApi'
 
 const PAGE_SIZE = 15
 
@@ -14,6 +14,11 @@ const fmtDateBR = (iso: string | null) => {
   if (!iso) return '—'
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
+}
+
+// Cor por posição no ranking de motivos (topo = mais frequente).
+function motiveColor(i: number): string {
+  return ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22d3ee', '#818cf8'][i % 7]
 }
 
 // Tempo de contrato (meses) entre a assinatura e o cancelamento.
@@ -172,10 +177,12 @@ export default function CancelledClientsPanel() {
   const [contract, setContract] = useState('')
   const [name, setName] = useState('')
   const [city, setCity] = useState('')
+  const [motive, setMotive] = useState('')
   const [page, setPage] = useState(0)
   const [state, setState] = useState<LoadState>({ status: 'loading' })
-  // Mantém a última lista de cidades — o dropdown não pisca durante o loading.
+  // Mantém a última lista de cidades/motivos — não pisca durante o loading.
   const [cities, setCities] = useState<string[]>([])
+  const [motives, setMotives] = useState<MotiveAgg[]>([])
 
   // Debounce dos filtros de texto (400ms) — cada tecla não vira request.
   const [debounced, setDebounced] = useState({ contract: '', name: '' })
@@ -183,21 +190,24 @@ export default function CancelledClientsPanel() {
     const t = setTimeout(() => setDebounced({ contract, name }), 400)
     return () => clearTimeout(t)
   }, [contract, name])
-  useEffect(() => { setPage(0) }, [debounced, city])
+  useEffect(() => { setPage(0) }, [debounced, city, motive])
 
   useEffect(() => {
     let alive = true
     setState((s) => (s.status === 'ready' ? s : { status: 'loading' }))
-    fetchCancelledClients({ contract: debounced.contract, name: debounced.name, city, page, pageSize: PAGE_SIZE })
-      .then((data) => { if (!alive) return; setState({ status: 'ready', data }); setCities(data.cities) })
+    fetchCancelledClients({ contract: debounced.contract, name: debounced.name, city, motive, page, pageSize: PAGE_SIZE })
+      .then((data) => { if (!alive) return; setState({ status: 'ready', data }); setCities(data.cities); if (data.motives?.length) setMotives(data.motives) })
       .catch((e) => { if (!alive) return; setState({ status: 'error', error: e instanceof ApiError ? e : new ApiError(0, 'Erro inesperado.') }) })
     return () => { alive = false }
-  }, [debounced, city, page])
+  }, [debounced, city, motive, page])
 
   const data = state.status === 'ready' ? state.data : null
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
-  const hasFilter = !!(contract || name || city)
-  const clearFilters = () => { setContract(''); setName(''); setCity('') }
+  const hasFilter = !!(contract || name || city || motive)
+  const clearFilters = () => { setContract(''); setName(''); setCity(''); setMotive('') }
+
+  const totalMotive = useMemo(() => motives.reduce((a, m) => a + m.count, 0), [motives])
+  const hasMotives = motives.length > 0 && !(motives.length === 1 && motives[0].value === 'Não informado')
 
   const windowLabel = useMemo(() => {
     const w = data?.materializedWindow
@@ -211,6 +221,36 @@ export default function CancelledClientsPanel() {
         subtitle={data ? `${data.total.toLocaleString('pt-BR')} cancelamentos${windowLabel ? ` · ${windowLabel}` : ''}` : 'Quem cancelou e com quais sinais'}
         icon={<UserMinus size={14} />}
       />
+
+      {/* Faixa de motivos (clicável) — resumo + filtro em um só lugar */}
+      {hasMotives && (
+        <div className="px-5 pt-3 flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold pr-1">Motivo</span>
+          <button
+            onClick={() => setMotive('')}
+            className={cn('flex items-center gap-1.5 text-[11px] px-2.5 h-7 rounded-lg border transition-all', !motive ? 'border-brand-blue/40 bg-brand-blue/10 text-gray-100' : 'border-app-border text-gray-400 hover:text-gray-200 hover:border-app-borderLight')}
+          >
+            Todos <span className="font-mono opacity-60">{totalMotive.toLocaleString('pt-BR')}</span>
+          </button>
+          {motives.map((m, i) => {
+            const sel = motive === m.value
+            const share = totalMotive ? Math.round((m.count / totalMotive) * 100) : 0
+            const avg = m.count ? m.mrr / m.count : 0
+            return (
+              <button
+                key={m.value}
+                onClick={() => setMotive(sel ? '' : m.value)}
+                title={`${m.value} · ${m.count} cancelamento(s) · ticket médio ${formatCurrency(avg)}/mês`}
+                className={cn('flex items-center gap-1.5 text-[11px] px-2.5 h-7 rounded-lg border transition-all max-w-[240px]', sel ? 'border-brand-blue/40 bg-brand-blue/10 text-gray-100' : 'border-app-border text-gray-400 hover:text-gray-200 hover:border-app-borderLight')}
+              >
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: motiveColor(i) }} />
+                <span className="truncate">{m.value}</span>
+                <span className="font-mono opacity-60 shrink-0">{m.count} · {share}%</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="px-5 pt-3 flex items-center gap-2 flex-wrap">
