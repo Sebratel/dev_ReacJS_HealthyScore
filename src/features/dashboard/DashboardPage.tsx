@@ -179,7 +179,9 @@ export default function DashboardPage() {
                   <div className="w-8 h-8 rounded-full border flex items-center justify-center text-[11px] font-bold shrink-0" style={{ backgroundColor: color + '15', borderColor: color + '30', color }}>{c.customerName[0]}</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-gray-100 truncate">{c.customerName}</p>
-                    <p className="text-[10px] text-gray-500">{c.city} · {c.plan}</p>
+                    <p className="text-[10px] text-gray-500">
+                      {c.contractNumber && <><span className="font-mono text-gray-400" title="Nº do contrato">#{c.contractNumber}</span> · </>}{c.city} · {c.plan}
+                    </p>
                   </div>
                   <div className="hidden sm:flex flex-col items-center"><span className="text-[9px] text-gray-600">{c.enginesPresent} módulos</span></div>
                   <div className="flex flex-col items-end"><span style={{ color }} className="text-sm font-bold tabular-nums leading-none">{c.overallHealth}</span><span className="text-[9px] text-gray-600">health</span></div>

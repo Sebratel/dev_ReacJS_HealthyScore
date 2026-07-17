@@ -11,6 +11,7 @@ const fmtMin = (m: number) => (m >= 60 ? `${(m / 60).toFixed(1)}h` : `${Math.rou
 
 const DATA_COLUMNS: DataColumn[] = [
   { key: 'name', label: 'Cliente', value: (c) => c.customerName },
+  { key: 'contract', label: 'Contrato', value: (c) => c.contractNumber || '—' },
   { key: 'city', label: 'Cidade', value: (c) => c.city },
   { key: 'mrr', label: 'MRR', align: 'right', value: (c) => c.monthlyValue },
   { key: 'site', label: 'Site', value: (c) => c.site || '—' },

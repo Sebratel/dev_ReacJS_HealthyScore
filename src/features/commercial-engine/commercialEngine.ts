@@ -110,6 +110,7 @@ export function buildEngineScores(clients: RealClient[], config: CommercialEngin
     return {
       customerId: c.clientId,
       customerName: c.name,
+      contractNumber: c.contractNumber,
       seller: c.seller,
       city: c.city,
       neighborhood: c.neighborhood,

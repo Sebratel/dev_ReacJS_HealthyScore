@@ -25,6 +25,7 @@ export function ScoreBar({ value, max = 100, color }: { value: number; max?: num
 export interface EngineScoreBase {
   customerId: string
   customerName: string
+  contractNumber?: string
   city: string
   healthScore: number
   churnRisk: number
@@ -65,7 +66,12 @@ function EngineRow<S extends EngineScoreBase>({ score, rank, columns, renderExpa
         <td className="px-4 py-2.5">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ background: `${color}20`, color }}>{score.customerName[0]}</div>
-            <div><p className="text-xs font-medium text-gray-200 truncate max-w-[150px]">{score.customerName}</p><p className="text-[10px] text-gray-500">{score.city}</p></div>
+            <div>
+              <p className="text-xs font-medium text-gray-200 truncate max-w-[150px]">{score.customerName}</p>
+              <p className="text-[10px] text-gray-500">
+                {score.contractNumber && <><span className="font-mono text-gray-400" title="Nº do contrato">#{score.contractNumber}</span> · </>}{score.city}
+              </p>
+            </div>
           </div>
         </td>
         <td className="px-4 py-2.5"><div className="flex items-center gap-2"><span className="text-sm font-bold font-mono" style={{ color }}>{score.healthScore}</span><div className="w-16"><ScoreBar value={score.healthScore} color={color} /></div></div></td>

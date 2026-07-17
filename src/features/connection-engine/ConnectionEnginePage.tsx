@@ -11,6 +11,7 @@ import { ConnectionEngineConfigModal } from './ConnectionEngineConfigModal'
 
 const DATA_COLUMNS: DataColumn[] = [
   { key: 'name', label: 'Cliente', value: (c) => c.customerName },
+  { key: 'contract', label: 'Contrato', value: (c) => c.contractNumber || '—' },
   { key: 'city', label: 'Cidade', value: (c) => c.city },
   { key: 'plan', label: 'Plano', value: (c) => c.plan },
   { key: 'mrr', label: 'MRR', align: 'right', value: (c) => c.monthlyValue },

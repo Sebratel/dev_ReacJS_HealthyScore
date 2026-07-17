@@ -72,6 +72,7 @@ export function buildEngineScores(clients: RealClient[], config: ConnectionEngin
     return {
       customerId: c.clientId,
       customerName: c.name,
+      contractNumber: c.contractNumber,
       city: c.city,
       plan: c.plan,
       monthlyValue: c.monthlyValue,
