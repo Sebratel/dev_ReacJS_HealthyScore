@@ -27,7 +27,7 @@ const TRUST_DESCRIPTIONS = [
 const BASE_COLUMNS = `
   p.id client_id, p.name client_name, p.gender client_gender, p.birth_date client_birth,
   p2.name seller_name, p2.gender seller_gender, p2.birth_date seller_birth, p2.created seller_admitted,
-  c.contract_number, c.created created_contract, c.cancellation_date,
+  c.contract_number, c.created created_contract, c.cancellation_date, c.cancellation_motive,
   pf.title payment_form, sp.selling_price, sp.title plan_name,
   p.city, p.neighborhood
 `
@@ -294,6 +294,7 @@ function baseRow(r) {
     contractNumber: r.contract_number != null ? String(r.contract_number) : '',
     contractDate: toDate(r.created_contract),
     cancellationDate: toDate(r.cancellation_date),
+    cancellationMotive: r.cancellation_motive != null && String(r.cancellation_motive).trim() ? String(r.cancellation_motive).trim() : null,
     plan: r.plan_name?.trim() || 'Sem plano',
     monthlyValue: Number(r.selling_price) || 0,
     paymentForm: r.payment_form?.trim() || 'Não informado',

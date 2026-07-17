@@ -254,6 +254,9 @@ app.get('/api/cancelled-clients', requireAuth(), (req, res) => {
   const name = String(q.name || '').trim().toLowerCase()
   const contract = String(q.contract || '').trim().toLowerCase()
   const city = typeof q.city === 'string' ? q.city : ''
+  const motive = typeof q.motive === 'string' ? q.motive : ''
+  const MOTIVE_NA = 'Não informado'
+  const motiveOf = (c) => (c.cancellationMotive && String(c.cancellationMotive).trim()) || MOTIVE_NA
 
   let rows = all.filter((c) => c.cancellationDate && c.cancellationDate >= from && c.cancellationDate <= to)
   if (name) rows = rows.filter((c) => c.name && c.name.toLowerCase().includes(name))
@@ -262,13 +265,25 @@ app.get('/api/cancelled-clients', requireAuth(), (req, res) => {
   const cities = Array.from(new Set(rows.map((c) => c.city).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'))
   if (city) rows = rows.filter((c) => c.city === city)
 
+  // Motivos (contagem + MRR) sobre o escopo atual, ANTES do filtro de motivo —
+  // o breakdown mantém todos os motivos mesmo com um selecionado.
+  const motiveAgg = new Map()
+  for (const c of rows) {
+    const m = motiveOf(c)
+    const e = motiveAgg.get(m) || { count: 0, mrr: 0 }
+    e.count++; e.mrr += Number(c.monthlyValue) || 0
+    motiveAgg.set(m, e)
+  }
+  const motives = Array.from(motiveAgg, ([value, e]) => ({ value, count: e.count, mrr: e.mrr })).sort((a, b) => b.count - a.count)
+  if (motive) rows = rows.filter((c) => motiveOf(c) === motive)
+
   rows = rows.slice().sort((a, b) => String(b.cancellationDate || '').localeCompare(String(a.cancellationDate || '')))
   const total = rows.length
   const pageSize = Math.min(200, Math.max(1, Number(q.pageSize) || 25))
   const page = Math.max(0, Number(q.page) || 0)
   res.json({
     rows: rows.slice(page * pageSize, page * pageSize + pageSize),
-    total, page, pageSize, cities,
+    total, page, pageSize, cities, motives,
     window: { from, to }, materializedWindow: cw,
     meta: datasetStatus(),
   })

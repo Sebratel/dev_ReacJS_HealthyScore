@@ -9,6 +9,7 @@ import { InstallationEngineConfigModal } from './InstallationEngineConfigModal'
 
 const DATA_COLUMNS: DataColumn[] = [
   { key: 'name', label: 'Cliente', value: (c) => c.customerName },
+  { key: 'contract', label: 'Contrato', value: (c) => c.contractNumber || '—' },
   { key: 'city', label: 'Cidade', value: (c) => c.city },
   { key: 'mrr', label: 'MRR', align: 'right', value: (c) => c.monthlyValue },
   { key: 'protocols', label: 'Protocolos', align: 'right', value: (c) => c.protocolCount },

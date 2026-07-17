@@ -11,6 +11,7 @@ import { CommercialEngineConfigModal } from './CommercialEngineConfigModal'
 
 const DATA_COLUMNS: DataColumn[] = [
   { key: 'name', label: 'Cliente', value: (c) => c.customerName },
+  { key: 'contract', label: 'Contrato', value: (c) => c.contractNumber || '—' },
   { key: 'city', label: 'Cidade', value: (c) => c.city },
   { key: 'neighborhood', label: 'Bairro', value: (c) => c.neighborhood },
   { key: 'plan', label: 'Plano', value: (c) => c.plan },

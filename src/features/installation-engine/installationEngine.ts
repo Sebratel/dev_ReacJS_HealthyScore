@@ -75,6 +75,7 @@ export function buildEngineScores(clients: RealClient[], config: InstallationEng
     return {
       customerId: c.clientId,
       customerName: c.name,
+      contractNumber: c.contractNumber,
       city: c.city,
       plan: c.plan,
       monthlyValue: c.monthlyValue,

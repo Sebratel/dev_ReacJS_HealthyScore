@@ -61,6 +61,7 @@ export interface CancelledClient {
   contractNumber: string
   contractDate: string | null
   cancellationDate: string | null
+  cancellationMotive: string | null
   plan: string
   monthlyValue: number
   paymentForm: string
@@ -93,12 +94,15 @@ export interface CancelledClient {
   relAttendants: string[]
 }
 
+export interface MotiveAgg { value: string; count: number; mrr: number }
+
 export interface CancelledClientsResult {
   rows: CancelledClient[]
   total: number
   page: number
   pageSize: number
   cities: string[]
+  motives: MotiveAgg[]
   window: { from: string; to: string }
   materializedWindow: MaterializedWindow | null
   meta: SuggestionsMeta
@@ -110,6 +114,7 @@ export interface CancelledClientsQuery {
   name?: string
   contract?: string
   city?: string
+  motive?: string
   page?: number
   pageSize?: number
 }
@@ -121,6 +126,7 @@ export async function fetchCancelledClients(q: CancelledClientsQuery): Promise<C
   if (q.name) params.set('name', q.name)
   if (q.contract) params.set('contract', q.contract)
   if (q.city) params.set('city', q.city)
+  if (q.motive) params.set('motive', q.motive)
   if (q.page !== undefined) params.set('page', String(q.page))
   if (q.pageSize !== undefined) params.set('pageSize', String(q.pageSize))
   const res = await apiFetch(`/api/cancelled-clients?${params.toString()}`)

@@ -59,7 +59,7 @@ function ProfileGroup({ icon, title, children }: { icon: React.ReactNode; title:
 }
 
 // Perfil compacto do cliente cancelado — todos os sinais que temos na base.
-function CancelledProfile({ c }: { c: CancelledClient }) {
+export function CancelledProfile({ c }: { c: CancelledClient }) {
   const months = contractMonths(c)
   const overdue = c.lateInvoices + c.overdueInvoices
   return (
@@ -74,6 +74,7 @@ function CancelledProfile({ c }: { c: CancelledClient }) {
           <Stat label="Forma pagamento" value={c.paymentForm} />
           <Stat label="Plano" value={c.plan} />
           <Stat label="Vendedor" value={c.seller} />
+          <div className="col-span-2"><Stat label="Motivo do cancelamento" value={c.cancellationMotive || 'Não informado'} danger={!!c.cancellationMotive} /></div>
         </div>
       </ProfileGroup>
 

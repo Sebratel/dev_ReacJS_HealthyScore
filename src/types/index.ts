@@ -395,6 +395,7 @@ export interface CommercialEngineConfig {
 export interface CommercialEngineScore {
   customerId: string
   customerName: string
+  contractNumber: string
   seller: string
   city: string
   neighborhood: string
@@ -533,6 +534,7 @@ export interface RealFinancialSignals {
 export interface FinancialEngineScore {
   customerId: string
   customerName: string
+  contractNumber: string
   city: string
   plan: string
   monthlyValue: number
@@ -641,6 +643,7 @@ export interface ConnectionEngineConfig {
 export interface ConnectionEngineScore {
   customerId: string
   customerName: string
+  contractNumber: string
   city: string
   plan: string
   monthlyValue: number
@@ -716,6 +719,7 @@ export interface NetworkEngineConfig {
 export interface NetworkEngineScore {
   customerId: string
   customerName: string
+  contractNumber: string
   city: string
   plan: string
   monthlyValue: number
@@ -794,6 +798,7 @@ export interface FieldEngineConfig {
 export interface FieldEngineScore {
   customerId: string
   customerName: string
+  contractNumber: string
   city: string
   plan: string
   monthlyValue: number
@@ -867,6 +872,7 @@ export interface InstallationEngineConfig {
 export interface InstallationEngineScore {
   customerId: string
   customerName: string
+  contractNumber: string
   city: string
   plan: string
   monthlyValue: number
@@ -1046,6 +1052,7 @@ export interface RelationshipEngineConfig {
 export interface RelationshipEngineScore {
   customerId: string
   customerName: string
+  contractNumber: string
   city: string
   plan: string
   monthlyValue: number

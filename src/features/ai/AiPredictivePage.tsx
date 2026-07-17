@@ -240,7 +240,9 @@ export default function AiPredictivePage() {
                   <HealthGauge score={r.overallHealth} size={42} showLabel={false} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-gray-100 truncate">{r.customerName}</p>
-                    <p className="text-[10px] text-gray-500">{r.city} · {r.plan}</p>
+                    <p className="text-[10px] text-gray-500">
+                      {r.contractNumber && <><span className="font-mono text-gray-400" title="Nº do contrato">#{r.contractNumber}</span> · </>}{r.city} · {r.plan}
+                    </p>
                   </div>
                   <div className="hidden sm:flex flex-col items-end"><span style={{ color }} className="text-sm font-bold">{r.overallHealth}</span><span className="text-[9px] text-gray-600">{HEALTH_LABELS[r.classification]}</span></div>
                   <div className="hidden md:flex flex-col items-end"><span className="text-xs font-mono text-risk-critical">{r.overallChurnRisk}%</span><span className="text-[10px] text-gray-600">churn</span></div>
