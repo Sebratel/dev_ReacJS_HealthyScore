@@ -597,27 +597,35 @@ group by c.contract_id, s.subsc_id, osc.new_status
     sql: `
 select protocol, contract_number, is_cancelled, retrieved, technician, visits
 from (
-  select ai.protocol,
-    c.contract_number,
-    (c.v_status = 'Cancelado') is_cancelled,
-    (r.description like '%foi retirado com sucesso%') retrieved,
-    vu.name technician,
-    count(distinct r.id) over (partition by ai.protocol) visits,
-    row_number() over (partition by ai.protocol order by r.beginning_date desc, r.id desc) rn
-  from assignment_incidents ai
-  left join reports r on r.assignment_id = ai.assignment_id
-  left join assignments a on a.id = ai.assignment_id
-  left join incident_types it on it.id = ai.incident_type_id
-  left join v_users vu on vu.id = r.created_by
-  left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
-  left join contracts c on c.id = cst.contract_id
-  where (r.description like '%Quando o equipamento NÃO foi retirado.%'
-      or r.description like '%Quando o equipamento foi retirado com sucesso%')
-    and r.title not like 'Relato offline - Atendimento Solicitação'
-    and (vu.name is null or vu.name not like 'LOURDES BARBOSA RAICHEL')
-    and it.id in (1064, 245, 1090, 1155, 1009)
-    and r.description not like '% não visitado%'
-    and date(r.final_date) >= '${FROM_DATE}'
+  -- Janelas sobre os relatos JÁ deduplicados (count(distinct) em window não é
+  -- suportado no PG). visits = nº de relatos do protocolo; rn=1 = mais recente.
+  select d.*,
+    count(*) over (partition by d.protocol) visits,
+    row_number() over (partition by d.protocol order by d.beginning_date desc nulls last, d.report_id desc) rn
+  from (
+    select distinct
+      ai.protocol,
+      r.id report_id,
+      c.contract_number,
+      (c.v_status = 'Cancelado') is_cancelled,
+      (r.description like '%foi retirado com sucesso%') retrieved,
+      vu.name technician,
+      r.beginning_date
+    from assignment_incidents ai
+    left join reports r on r.assignment_id = ai.assignment_id
+    left join assignments a on a.id = ai.assignment_id
+    left join incident_types it on it.id = ai.incident_type_id
+    left join v_users vu on vu.id = r.created_by
+    left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+    left join contracts c on c.id = cst.contract_id
+    where (r.description like '%Quando o equipamento NÃO foi retirado.%'
+        or r.description like '%Quando o equipamento foi retirado com sucesso%')
+      and r.title not like 'Relato offline - Atendimento Solicitação'
+      and (vu.name is null or vu.name not like 'LOURDES BARBOSA RAICHEL')
+      and it.id in (1064, 245, 1090, 1155, 1009)
+      and r.description not like '% não visitado%'
+      and date(r.final_date) >= '${FROM_DATE}'
+  ) d
 ) q
 where rn = 1
 `,
