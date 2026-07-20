@@ -46,6 +46,25 @@ export interface RealNetwork {
   slots: RealDistinctEntry[]
   pons: RealDistinctEntry[]
 }
+// Retiradas de equipamento — agregados protocolo-a-protocolo (base-wide).
+export interface RealWithdrawalStatus { total: number; retrieved: number }
+export interface RealWithdrawalTech {
+  value: string
+  protocols: number
+  retrieved: number
+  successRate: number
+  avgVisits: number
+}
+export interface RealWithdrawals {
+  total: number
+  retrieved: number
+  notRetrieved: number
+  successRate: number
+  avgVisits: number
+  byStatus: { cancelled: RealWithdrawalStatus; active: RealWithdrawalStatus }
+  technicians: RealWithdrawalTech[]
+  visitsHistogram: { visits: string; count: number }[]
+}
 
 interface RealClientsFile {
   meta: RealClientsMeta
@@ -59,7 +78,14 @@ interface RealClientsFile {
   installation: RealInstallation
   relationship: RealRelationship
   network: RealNetwork
+  withdrawals: RealWithdrawals
   clients: RealClient[]
+}
+
+const EMPTY_WITHDRAWALS: RealWithdrawals = {
+  total: 0, retrieved: 0, notRetrieved: 0, successRate: 0, avgVisits: 0,
+  byStatus: { cancelled: { total: 0, retrieved: 0 }, active: { total: 0, retrieved: 0 } },
+  technicians: [], visitsHistogram: [],
 }
 
 // Caminho do snapshot gerado pelo job diário (scripts/fetch-clients.mjs).
@@ -81,6 +107,7 @@ export let realField: RealField = { reasons: [], technicians: [] }
 export let realInstallation: RealInstallation = { technicians: [] }
 export let realRelationship: RealRelationship = { types: [], attendants: [] }
 export let realNetwork: RealNetwork = { totalMassives: 0, splittersAffected: 0, sites: [], concentrators: [], accessPoints: [], splitters: [], slots: [], pons: [] }
+export let realWithdrawals: RealWithdrawals = EMPTY_WITHDRAWALS
 export let realClients: RealClient[] = []
 
 let loaded = false
@@ -135,6 +162,8 @@ export function loadRealData(): Promise<void> {
     // Merge com defaults: snapshot antigo (pré-infra) não traz as listas
     // (sites/concentrators/…); mantê-las como [] evita `.map` de undefined.
     realNetwork = { ...realNetwork, ...(data.network ?? {}) }
+    // Merge com defaults: snapshot antigo (pré-retiradas) não traz o bloco.
+    realWithdrawals = { ...EMPTY_WITHDRAWALS, ...(data.withdrawals ?? {}) }
     realClients = [] // não baixamos mais a base inteira no navegador
     loaded = true
   })()

@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Wifi, Wrench, Brain, ChevronLeft, ChevronRight, Zap,
-  DollarSign, Briefcase, Network, PackageOpen, MessageSquare, UserMinus,
+  DollarSign, Briefcase, Network, PackageOpen, MessageSquare, UserMinus, Truck,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { realTotals } from '@/data/realClients'
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { path: '/engine-instalacao',     icon: PackageOpen,     label: 'Instalação',      sublabel: 'Qualidade de instalação' },
   { path: '/engine-relacionamento', icon: MessageSquare,   label: 'Relacionamento',  sublabel: 'NPS · Sentimento' },
   { path: '/perfis-cancelados',     icon: UserMinus,       label: 'Cancelados',      sublabel: 'Pontuação sugerida (IA)' },
+  { path: '/retiradas',             icon: Truck,           label: 'Retiradas',       sublabel: 'Equipamentos e motoboys' },
   { path: '/ia',                    icon: Brain,           label: 'IA Preditiva',    sublabel: 'Previsões' },
   // Configurações fica só no ícone de engrenagem da TopBar (não no menu).
 ]

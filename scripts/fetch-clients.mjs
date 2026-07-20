@@ -60,13 +60,14 @@ const {
   Q_MARIA_SPLITTER, Q_NET_INFRA, Q_NET_INFRA_CANCELLED,
   Q_INV_AGG, Q_RENEG_AGG, Q_TRUST_AGG,
   Q_AUTOISP_ONU_STATUS,
+  Q_WD_PROT,
 } = buildEffectiveQueries({ full: FULL })
 
 const pool = makePool()
 console.log(`Conectado em ${process.env.DB_ELLEVEN_HOST}/${process.env.DB_ELLEVEN_DATABASE}. Coletando…`)
 
 try {
-  const [totals, byCity, payforms, sample, commSellers, commPlans, commValues, commCities, commHoods, commCGender, commSGender, connModels, fieldReasonList, fieldTechList, instTechList, relTypeList, relAttList] = await Promise.all([
+  const [totals, byCity, payforms, sample, commSellers, commPlans, commValues, commCities, commHoods, commCGender, commSGender, connModels, fieldReasonList, fieldTechList, instTechList, relTypeList, relAttList, wdProt] = await Promise.all([
     pool.query(Q_TOTALS),
     pool.query(Q_BY_CITY),
     pool.query(Q_PAYFORMS),
@@ -84,7 +85,49 @@ try {
     pool.query(Q_INST_TECH_LIST),
     pool.query(Q_REL_TYPE_LIST),
     pool.query(Q_REL_ATT_LIST),
+    pool.query(Q_WD_PROT),
   ])
+
+  // ── Retiradas de equipamento — rollup (base-wide, protocolo-a-protocolo) ──
+  // wdProt: uma linha por protocolo { protocol, contract_number, is_cancelled,
+  // retrieved, technician, visits }. Agregamos aqui em KPIs/rankings/histograma.
+  const withdrawals = (() => {
+    const st = { cancelled: { total: 0, retrieved: 0 }, active: { total: 0, retrieved: 0 } }
+    const techMap = new Map() // nome -> { protocols, retrieved, visits }
+    const histo = new Map()   // '1'|'2'|'3'|'4+' -> count
+    let total = 0, retrieved = 0, visitsSum = 0
+    for (const r of wdProt.rows) {
+      total++
+      const got = r.retrieved === true
+      const v = Number(r.visits) || 0
+      visitsSum += v
+      if (got) retrieved++
+      const bucket = r.is_cancelled ? st.cancelled : st.active
+      bucket.total++; if (got) bucket.retrieved++
+      const name = (r.technician || '').trim() || '(sem técnico)'
+      const tm = techMap.get(name) || { protocols: 0, retrieved: 0, visits: 0 }
+      tm.protocols++; if (got) tm.retrieved++; tm.visits += v
+      techMap.set(name, tm)
+      const key = v >= 4 ? '4+' : String(v || 1)
+      histo.set(key, (histo.get(key) || 0) + 1)
+    }
+    const technicians = [...techMap.entries()]
+      .map(([value, t]) => ({
+        value, protocols: t.protocols, retrieved: t.retrieved,
+        successRate: t.protocols ? t.retrieved / t.protocols : 0,
+        avgVisits: t.protocols ? t.visits / t.protocols : 0,
+      }))
+      .sort((a, b) => b.protocols - a.protocols)
+    return {
+      total, retrieved, notRetrieved: total - retrieved,
+      successRate: total ? retrieved / total : 0,
+      avgVisits: total ? visitsSum / total : 0,
+      byStatus: st,
+      technicians,
+      visitsHistogram: ['1', '2', '3', '4+'].map((k) => ({ visits: k, count: histo.get(k) || 0 })),
+    }
+  })()
+  console.log(`Retiradas: ${withdrawals.total} protocolos · ${withdrawals.retrieved} retirados (${(withdrawals.successRate * 100).toFixed(0)}%) · ${withdrawals.technicians.length} motoboys.`)
 
   const t = totals.rows[0]
   console.log(`Totais: ${t.clients} clientes, ${t.contracts} contratos, MRR R$ ${Number(t.mrr).toLocaleString('pt-BR')}`)
@@ -426,6 +469,8 @@ try {
       slots: distinctFromClients(clients, (c) => c.netSlot),
       pons: distinctFromClients(clients, (c) => c.netPon),
     },
+    // Retiradas de equipamento — KPIs/rankings/histograma (base-wide).
+    withdrawals,
     clients: clientsOut,
     // Coorte de cancelados (materializada) + a janela coberta.
     cancelledClients,

@@ -581,6 +581,47 @@ where osc.new_status_timestamp >= $1
 group by c.contract_id, s.subsc_id, osc.new_status
 `,
   },
+
+  // ── Retiradas de equipamento — protocolos de retirada (motoboys) ─
+  // Uma linha por PROTOCOLO. Cada relato (report) que casa com os filtros é uma
+  // "visita"; o desfecho (retirado × não retirado) e o motoboy vêm do relato
+  // MAIS RECENTE (order by beginning_date desc). is_cancelled cruza o contrato
+  // com c.v_status para a comparação cancelado × ativo. Base-wide (não filtra à
+  // amostra) — o ETL apenas rola isto em KPIs/gráficos, como as massivas.
+  {
+    id: 'Q_WD_PROT', engine: 'retiradas', db: 'postgres',
+    title: 'Retiradas de equipamento por protocolo',
+    description:
+      'Protocolos de retirada de equipamento: desfecho (retirado × não retirado), nº de visitas, motoboy responsável e se o contrato está cancelado ou ativo. Um registro por protocolo, desfecho do relato mais recente.',
+    params: [],
+    sql: `
+select protocol, contract_number, is_cancelled, retrieved, technician, visits
+from (
+  select ai.protocol,
+    c.contract_number,
+    (c.v_status = 'Cancelado') is_cancelled,
+    (r.description like '%foi retirado com sucesso%') retrieved,
+    vu.name technician,
+    count(distinct r.id) over (partition by ai.protocol) visits,
+    row_number() over (partition by ai.protocol order by r.beginning_date desc, r.id desc) rn
+  from assignment_incidents ai
+  left join reports r on r.assignment_id = ai.assignment_id
+  left join assignments a on a.id = ai.assignment_id
+  left join incident_types it on it.id = ai.incident_type_id
+  left join v_users vu on vu.id = r.created_by
+  left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+  left join contracts c on c.id = cst.contract_id
+  where (r.description like '%Quando o equipamento NÃO foi retirado.%'
+      or r.description like '%Quando o equipamento foi retirado com sucesso%')
+    and r.title not like 'Relato offline - Atendimento Solicitação'
+    and (vu.name is null or vu.name not like 'LOURDES BARBOSA RAICHEL')
+    and it.id in (1064, 245, 1090, 1155, 1009)
+    and r.description not like '% não visitado%'
+    and date(r.final_date) >= '${FROM_DATE}'
+) q
+where rn = 1
+`,
+  },
 ]
 
 // Rótulos amigáveis dos grupos (ordem de exibição no catálogo).
@@ -593,6 +634,7 @@ export const ENGINE_LABELS = {
   relacionamento: 'Relacionamento',
   rede: 'Rede / Massivas',
   financeiro: 'Financeiro',
+  retiradas: 'Retiradas de Equipamento',
 }
 
 const BY_ID = new Map(QUERIES.map((q) => [q.id, q]))
