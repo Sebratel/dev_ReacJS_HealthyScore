@@ -90,7 +90,10 @@ try {
 
   // ── Retiradas de equipamento — rollup (base-wide, protocolo-a-protocolo) ──
   // wdProt: uma linha por protocolo { protocol, contract_number, is_cancelled,
-  // retrieved, technician, visits }. Agregamos aqui em KPIs/rankings/histograma.
+  // retrieved, technician, visits, outcome_date }. Agregamos aqui em KPIs/
+  // rankings/histograma e montamos um índice por CONTRATO (wdByContract) para
+  // cruzar com os cancelados adiante (nível pessoa).
+  const wdByContract = new Map() // contract_number -> { protocols, retrieved, visits, technicians:Set, lastDate }
   const withdrawals = (() => {
     const st = { cancelled: { total: 0, retrieved: 0 }, active: { total: 0, retrieved: 0 } }
     const techMap = new Map() // nome -> { protocols, retrieved, visits }
@@ -110,6 +113,16 @@ try {
       techMap.set(name, tm)
       const key = v >= 4 ? '4+' : String(v || 1)
       histo.set(key, (histo.get(key) || 0) + 1)
+      // índice por contrato
+      const cn = r.contract_number != null ? String(r.contract_number) : ''
+      if (cn) {
+        let e = wdByContract.get(cn)
+        if (!e) { e = { protocols: 0, retrieved: 0, visits: 0, technicians: new Set(), lastDate: null }; wdByContract.set(cn, e) }
+        e.protocols++; if (got) e.retrieved++; e.visits += v
+        if (r.technician && r.technician.trim()) e.technicians.add(r.technician.trim())
+        const od = r.outcome_date ? new Date(r.outcome_date).toISOString().slice(0, 10) : null
+        if (od && (!e.lastDate || od > e.lastDate)) e.lastDate = od
+      }
     }
     const technicians = [...techMap.entries()]
       .map(([value, t]) => ({
@@ -122,12 +135,16 @@ try {
       total, retrieved, notRetrieved: total - retrieved,
       successRate: total ? retrieved / total : 0,
       avgVisits: total ? visitsSum / total : 0,
+      contractsWithWithdrawal: wdByContract.size,
       byStatus: st,
       technicians,
       visitsHistogram: ['1', '2', '3', '4+'].map((k) => ({ visits: k, count: histo.get(k) || 0 })),
+      // cancellation{} e people[] preenchidos após materializar os cancelados.
+      cancellation: null,
+      people: [],
     }
   })()
-  console.log(`Retiradas: ${withdrawals.total} protocolos · ${withdrawals.retrieved} retirados (${(withdrawals.successRate * 100).toFixed(0)}%) · ${withdrawals.technicians.length} motoboys.`)
+  console.log(`Retiradas: ${withdrawals.total} protocolos · ${withdrawals.retrieved} retirados (${(withdrawals.successRate * 100).toFixed(0)}%) · ${withdrawals.technicians.length} motoboys · ${wdByContract.size} contratos.`)
 
   const t = totals.rows[0]
   console.log(`Totais: ${t.clients} clientes, ${t.contracts} contratos, MRR R$ ${Number(t.mrr).toLocaleString('pt-BR')}`)
@@ -416,6 +433,55 @@ try {
       } catch (e) { console.warn('Cancelados/Rede: falha —', e.message) }
     }
   } catch (e) { console.warn('Cancelados: falha ao materializar —', e.message) }
+
+  // ── Retiradas × Cancelamentos (nível pessoa) ───────────────────
+  // Cruza os protocolos de retirada (wdByContract) com a coorte de cancelados
+  // (por contract_number). Enriquece cada cancelado com o status de retirada e
+  // materializa: indicadores de recuperação de equipamento + lista de pessoas.
+  {
+    const PEOPLE_CAP = 3000 // limite da lista embarcada no snapshot (leve)
+    let withWithdrawal = 0, recovered = 0, notRecovered = 0, mrrAtRisk = 0, visitsSum = 0
+    const people = []
+    for (const c of cancelledClients) {
+      const e = c.contractNumber ? wdByContract.get(c.contractNumber) : null
+      // Campos de retirada no próprio cancelado (também úteis no perfil de Cancelados)
+      c.wdProtocols = e ? e.protocols : 0
+      c.wdVisits = e ? e.visits : 0
+      c.wdRecovered = e ? e.retrieved > 0 : false
+      c.wdTechnicians = e ? [...e.technicians] : []
+      c.wdLastDate = e ? e.lastDate : null
+      if (!e) continue
+      withWithdrawal++
+      visitsSum += e.visits
+      if (e.retrieved > 0) recovered++
+      else { notRecovered++; mrrAtRisk += Number(c.monthlyValue) || 0 }
+      people.push({
+        name: c.name, contractNumber: c.contractNumber,
+        cancellationDate: c.cancellationDate, cancellationMotive: c.cancellationMotive,
+        plan: c.plan, city: c.city, monthlyValue: c.monthlyValue,
+        protocols: e.protocols, visits: e.visits, recovered: e.retrieved > 0,
+        technicians: [...e.technicians], lastDate: e.lastDate,
+      })
+    }
+    // Mais recentes primeiro; cap para manter o payload leve (sem truncar em silêncio).
+    people.sort((a, b) => String(b.cancellationDate || '').localeCompare(String(a.cancellationDate || '')))
+    const peopleCapped = people.slice(0, PEOPLE_CAP)
+    if (people.length > PEOPLE_CAP) console.log(`Retiradas/Cancelados: lista de pessoas truncada em ${PEOPLE_CAP} de ${people.length}.`)
+
+    withdrawals.cancellation = {
+      cancelledTotal: cancelledClients.length,
+      withWithdrawal,
+      recovered,
+      notRecovered,
+      recoveryRate: withWithdrawal ? recovered / withWithdrawal : 0,
+      avgVisits: withWithdrawal ? visitsSum / withWithdrawal : 0,
+      mrrAtRisk,
+      window: { from: cancelledFrom, to: cancelledTo, months: CANCELLED_MONTHS },
+    }
+    withdrawals.people = peopleCapped
+    withdrawals.peopleTotal = people.length
+    console.log(`Retiradas/Cancelados: ${withWithdrawal}/${cancelledClients.length} cancelados com retirada · ${recovered} recuperados · ${notRecovered} em risco (R$ ${mrrAtRisk.toLocaleString('pt-BR')}/mês).`)
+  }
 
   const payload = {
     meta: {

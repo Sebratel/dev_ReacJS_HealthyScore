@@ -1,17 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Truck, PackageCheck, PackageX, Repeat, Users, UserMinus, UserCheck, Loader2,
+  Search, AlertTriangle, PackageOpen,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { Card, CardHeader } from '@/components/ui/Card'
-import { cn } from '@/utils/cn'
+import { cn, formatCurrency } from '@/utils/cn'
 import {
   realWithdrawals, coverageLabel, isRealDataLoaded, loadRealData,
-  type RealWithdrawalTech,
+  type RealWithdrawalTech, type RealWithdrawalPerson,
 } from '@/data/realClients'
+
+const fmtDateBR = (iso: string | null) => {
+  if (!iso) return '—'
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+const PEOPLE_PAGE = 12
 
 // Verde (bom) → âmbar → vermelho (ruim), conforme a taxa de sucesso.
 function rateColor(rate: number): string {
@@ -45,6 +53,119 @@ const StatusTooltip = ({ active, payload, label }: any) => {
       {payload.map((p: any) => (
         <p key={p.dataKey} style={{ color: p.color }}>{p.name}: <strong>{p.value}</strong></p>
       ))}
+    </div>
+  )
+}
+
+// ─── Retiradas × Cancelamentos (nível pessoa) ──────────────────
+type RecoveredFilter = 'all' | 'yes' | 'no'
+
+function CancelledWithdrawalSection() {
+  const w = realWithdrawals
+  const cc = w.cancellation
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<RecoveredFilter>('all')
+  const [page, setPage] = useState(0)
+  useEffect(() => { setPage(0) }, [query, filter])
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return w.people.filter((p) => {
+      if (filter === 'yes' && !p.recovered) return false
+      if (filter === 'no' && p.recovered) return false
+      if (!q) return true
+      return p.name.toLowerCase().includes(q) || String(p.contractNumber).toLowerCase().includes(q)
+    })
+  }, [w.people, query, filter])
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PEOPLE_PAGE))
+  const pageRows = rows.slice(page * PEOPLE_PAGE, page * PEOPLE_PAGE + PEOPLE_PAGE)
+
+  if (!cc || cc.cancelledTotal === 0) return null
+  const withPct = cc.cancelledTotal ? cc.withWithdrawal / cc.cancelledTotal : 0
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <UserMinus size={14} className="text-risk-critical" />
+        <h2 className="text-sm font-bold text-white">Retiradas × Cancelamentos</h2>
+        <span className="text-[11px] text-gray-500">cancelados de {fmtDateBR(cc.window.from)} a {fmtDateBR(cc.window.to)}</span>
+      </div>
+
+      {/* KPIs de recuperação de equipamento dos cancelados */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard label="Cancelados com retirada" value={cc.withWithdrawal.toLocaleString('pt-BR')} subtitle={`${pct(withPct)} dos ${cc.cancelledTotal.toLocaleString('pt-BR')} cancelados`} icon={<UserMinus size={14} />} variant="brand" />
+        <KpiCard label="Equipamento recuperado" value={pct(cc.recoveryRate)} subtitle={`${cc.recovered.toLocaleString('pt-BR')} de ${cc.withWithdrawal.toLocaleString('pt-BR')} retirados`} icon={<PackageCheck size={14} />} variant="success" iconColor="text-risk-low" />
+        <KpiCard label="Equipamento em risco" value={cc.notRecovered.toLocaleString('pt-BR')} subtitle="cancelados sem retirada concluída" icon={<PackageX size={14} />} variant="danger" iconColor="text-risk-critical" />
+        <KpiCard label="MRR do equipamento em risco" value={formatCurrency(cc.mrrAtRisk)} subtitle="mensalidade dos não recuperados" icon={<AlertTriangle size={14} />} variant="warning" />
+      </div>
+
+      {/* Tabela de pessoas */}
+      <Card>
+        <CardHeader
+          title="Clientes cancelados com retirada de equipamento"
+          subtitle={`${rows.length.toLocaleString('pt-BR')} cliente(s)${w.peopleTotal > w.people.length ? ` · mostrando os ${w.people.length.toLocaleString('pt-BR')} mais recentes de ${w.peopleTotal.toLocaleString('pt-BR')}` : ''}`}
+          icon={<PackageOpen size={14} />}
+          action={
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-app-surface border border-app-border">
+                {([['all', 'Todos'], ['yes', 'Recuperado'], ['no', 'Em aberto']] as [RecoveredFilter, string][]).map(([k, lbl]) => (
+                  <button key={k} onClick={() => setFilter(k)} className={cn('px-2.5 py-1 rounded-md text-[11px] font-medium transition-all', filter === k ? 'bg-gradient-brand text-white shadow-glow' : 'text-gray-400 hover:text-gray-200')}>{lbl}</button>
+                ))}
+              </div>
+              <div className="relative flex items-center">
+                <Search size={12} className="absolute left-2.5 text-gray-500 pointer-events-none" />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nome / contrato"
+                  className="pl-7 pr-2.5 h-8 w-44 text-xs bg-app-surface border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50 transition-all" />
+              </div>
+            </div>
+          }
+        />
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-app-border bg-app-surface/50">
+                {['Cliente', 'Cancelado em', 'Motivo', 'Mensalidade', 'Visitas', 'Motoboy', 'Equipamento'].map((h) => (
+                  <th key={h} className={cn('px-4 py-2.5 text-left text-[10px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap', (h === 'Mensalidade' || h === 'Visitas') && 'text-right')}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((p: RealWithdrawalPerson) => (
+                <tr key={`${p.contractNumber}-${p.name}`} className="border-b border-app-border hover:bg-app-surface/70 transition-colors">
+                  <td className="px-4 py-2.5">
+                    <p className="text-xs font-medium text-gray-200 truncate max-w-[200px]">{p.name}</p>
+                    <p className="text-[10px] text-gray-500 font-mono">#{p.contractNumber} · {p.city}</p>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs font-mono text-risk-critical">{fmtDateBR(p.cancellationDate)}</td>
+                  <td className="px-4 py-2.5 text-[11px] text-gray-400 truncate max-w-[200px]" title={p.cancellationMotive || ''}>{p.cancellationMotive || '—'}</td>
+                  <td className="px-4 py-2.5 text-xs font-mono text-gray-300 text-right">{formatCurrency(p.monthlyValue)}</td>
+                  <td className="px-4 py-2.5 text-xs font-mono text-gray-400 text-right">{p.visits}{p.protocols > 1 ? ` · ${p.protocols}p` : ''}</td>
+                  <td className="px-4 py-2.5 text-[11px] text-gray-400 truncate max-w-[160px]" title={p.technicians.join(', ')}>{p.technicians[0] || '—'}{p.technicians.length > 1 ? ` +${p.technicians.length - 1}` : ''}</td>
+                  <td className="px-4 py-2.5">
+                    {p.recovered
+                      ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full text-risk-low bg-risk-low/10"><PackageCheck size={11} /> Recuperado</span>
+                      : <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full text-risk-critical bg-risk-critical/10"><PackageX size={11} /> Em aberto</span>}
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-xs text-gray-500">Nenhum cliente com esses filtros.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex items-center justify-between px-5 py-3 border-t border-app-border">
+          <span className="text-[10px] text-gray-500">
+            {rows.length > 0 ? `${(page * PEOPLE_PAGE + 1).toLocaleString('pt-BR')}–${Math.min((page + 1) * PEOPLE_PAGE, rows.length).toLocaleString('pt-BR')} de ${rows.length.toLocaleString('pt-BR')}` : '—'}
+          </span>
+          <div className="flex gap-1.5 items-center">
+            <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="text-[10px] px-2.5 py-1 rounded border border-app-border text-gray-400 disabled:opacity-30 hover:border-app-borderLight transition-all">Anterior</button>
+            <span className="text-[10px] text-gray-500 px-1 font-mono">{page + 1}/{totalPages}</span>
+            <button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} className="text-[10px] px-2.5 py-1 rounded border border-app-border text-gray-400 disabled:opacity-30 hover:border-app-borderLight transition-all">Próxima</button>
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }
@@ -220,6 +341,9 @@ export default function EquipmentWithdrawalPage() {
           </div>
         </Card>
       </div>
+
+      {/* Retiradas × Cancelamentos (pessoas) */}
+      <CancelledWithdrawalSection />
 
       <p className="text-[10px] text-gray-500 text-center">
         {coverageLabel()} · retiradas materializadas no snapshot (base completa de protocolos)

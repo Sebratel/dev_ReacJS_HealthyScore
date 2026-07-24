@@ -10,3 +10,6 @@ src/data/realClients.json
 
 # Estado de runtime: overrides de query editados pela tela (volume do servidor)
 data/
+
+# Histórico de Health Score (gerado pelo score-history.mjs → volume do servidor)
+public/history/
