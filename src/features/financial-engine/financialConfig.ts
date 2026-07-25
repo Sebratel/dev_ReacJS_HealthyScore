@@ -54,11 +54,11 @@ export const DEFAULT_FINANCIAL_CONFIG: FinancialEngineConfig = {
     paymentMethod: {
       key: 'paymentMethod',
       label: 'Forma de Pagamento',
-      description: 'Pontuação por forma de pagamento do contrato (formas ativas, sincronizadas do banco).',
+      description: 'Pontuação por forma de pagamento (tipo de contrato) — valores sincronizados do banco.',
       mode: 'manual',
       points: 0,
       indices: [], // preenchido dinamicamente via syncPaymentForms
-      query: 'SELECT pf.title FROM payment_forms pf WHERE pf.active IS TRUE;',
+      query: 'SELECT pf.title FROM contract_types pf JOIN contracts c ON c.contract_type_id = pf.id;',
     },
   },
 }

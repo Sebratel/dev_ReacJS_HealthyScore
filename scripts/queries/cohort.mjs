@@ -37,7 +37,9 @@ left join contract_service_tags cst on cst.contract_id = c.id
 left join service_products sp on sp.id = cst.service_product_id
 left join people p on p.id = c.client_id
 left join people p2 on p2.id = c.seller_1_id
-left join payment_forms pf on pf.id = c.payment_form_id
+-- "Forma de pagamento" = tipo de contrato (contract_types), alias pf mantido
+-- (BASE_COLUMNS usa pf.title payment_form). Migracao de payment_forms para contract_types.
+left join contract_types pf on pf.id = c.contract_type_id
 `
 
 // ATIVOS: amostra aleatória de contratos ativos (limit $1). A janela [from,to]
