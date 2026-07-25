@@ -195,7 +195,7 @@ export default function LoginPage() {
                         <span className="font-semibold text-on-surface">@sebratel.com.br</span>
                       </p>
                       <a
-                        href="mailto:?subject=Pol%C3%ADtica%20de%20acesso%20%E2%80%94%20Healthy%20Score%20Sebratel"
+                        href="mailto:?subject=Pol%C3%ADtica%20de%20acesso%20%E2%80%94%20Health%20Score%20Sebratel"
                         className="inline-flex items-center gap-1 text-xs font-medium text-primary transition hover:text-secondary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                       >
                         <Info className="h-3.5 w-3.5" aria-hidden />
@@ -249,7 +249,7 @@ export default function LoginPage() {
 
                 <p className="text-center text-[11px] text-on-surface-variant">
                   <a
-                    href="mailto:?subject=Acesso%20Healthy%20Score%20Sebratel%20%E2%80%94%20suporte&body=Descreva%20o%20problema%20e%20o%20seu%20e-mail%20corporativo."
+                    href="mailto:?subject=Acesso%20Health%20Score%20Sebratel%20%E2%80%94%20suporte&body=Descreva%20o%20problema%20e%20o%20seu%20e-mail%20corporativo."
                     className="inline-flex items-center justify-center gap-1.5 font-medium text-primary underline-offset-2 transition hover:text-secondary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                   >
                     <Info className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />

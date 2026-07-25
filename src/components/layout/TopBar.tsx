@@ -23,7 +23,7 @@ export function TopBar() {
   const logout = useAuthStore((s) => s.logout)
   const handleLogout = () => { logout(); navigate('/login', { replace: true }) }
 
-  const page = PAGE_TITLES[location.pathname] ?? { title: 'Healthy Score Sebratel', subtitle: '' }
+  const page = PAGE_TITLES[location.pathname] ?? { title: 'Health Score Sebratel', subtitle: '' }
 
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-app-border bg-app-surface/90 backdrop-blur-sm sticky top-0 z-30">

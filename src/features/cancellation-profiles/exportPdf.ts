@@ -132,7 +132,7 @@ export async function exportSuggestionsPdf(data: SuggestionResult, opts: { from:
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i)
     doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(150, 156, 170)
-    doc.text('Healthy Score Sebratel — Cancelados', M, pageH - 18)
+    doc.text('Health Score Sebratel — Cancelados', M, pageH - 18)
     doc.text(`${i} / ${pages}`, pageW - M, pageH - 18, { align: 'right' })
   }
 

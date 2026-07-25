@@ -26,7 +26,9 @@ left join contract_service_tags cst on cst.id = ac.service_tag_id
 left join service_products sp on sp.id = ac.service_product_id
 left join contract_service_tags_catalog_services cst2 on cst2.contract_service_tag_id = cst.id
 left join catalog_services cs on cs.id = cst2.catalog_service_id
-left join payment_forms pf on pf.id = c.payment_form_id
+-- "Forma de pagamento" migrou de payment_forms para contract_types (c.contract_type_id).
+-- Alias pf mantido para nao mexer no resto (Q_SAMPLE usa pf.title payment_form).
+left join contract_types pf on pf.id = c.contract_type_id
 left join people p on p.id = c.client_id
 left join people p2 on p2.id = c.seller_1_id
 where cst2.deleted is not true
@@ -151,10 +153,10 @@ group by ac.city order by contracts desc limit 30
   },
   {
     id: 'Q_PAYFORMS', engine: 'base', db: 'postgres',
-    title: 'Formas de pagamento ativas',
-    description: 'Lista de formas de pagamento ativas (para config dinâmica).',
+    title: 'Formas de pagamento (tipo de contrato)',
+    description: 'Lista distinta de "forma de pagamento" = tipo de contrato (contract_types) em uso na base ativa, para a config dinâmica do indicador.',
     params: [],
-    sql: `select title from payment_forms where active is true order by title`,
+    sql: `select distinct pf.title title ${BASE_FROM} and pf.title is not null order by pf.title`,
   },
   {
     id: 'Q_SAMPLE', engine: 'base', db: 'postgres',
