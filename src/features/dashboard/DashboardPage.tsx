@@ -11,6 +11,7 @@ import { coverageLabelFromMeta } from '@/features/engines/engineApi'
 import { fetchDashboard, ApiError, type DashboardResponse } from './dashboardApi'
 import type { HealthClassification } from '@/types'
 import ScoreTimeline from '@/features/score-history/ScoreTimeline'
+import { ContractFilters, type ContractFilterState } from '@/components/ui/ContractFilters'
 
 const DIST_ORDER: HealthClassification[] = ['critical', 'high_risk', 'attention', 'healthy', 'excellent']
 const scoreColor = (v: number) => HEALTH_COLORS[scoreToHealthClass(v)]
@@ -84,16 +85,28 @@ export default function DashboardPage() {
   const [error, setError] = useState<ApiError | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
+  // Filtro de cliente/contrato/cidade — mesmo componente das demais telas.
+  // Escopa a lista de "Maior Risco" (KPIs/resumos seguem globais). Nome/contrato
+  // com debounce (350ms); cidade é seleção, aplica na hora.
+  const [filters, setFilters] = useState<ContractFilterState>({ contract: '', name: '', city: '' })
+  const [debounced, setDebounced] = useState({ contract: '', name: '' })
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced({ contract: filters.contract, name: filters.name }), 350)
+    return () => clearTimeout(t)
+  }, [filters.contract, filters.name])
+  const hasFilter = !!(debounced.contract || debounced.name || filters.city)
+
   useEffect(() => {
     let alive = true
     setLoading(true)
     const configs = { financial: financialConfig, commercial: commercialConfig, connection: connectionConfig, network: networkConfig, field: fieldConfig, installation: installationConfig, relationship: relationshipConfig }
-    fetchDashboard({ configs, thresholds, topN: 8 })
+    // Ao filtrar, sobe o topN para trazer todos os resultados do filtro (não só o top 8).
+    fetchDashboard({ configs, thresholds, name: debounced.name, contract: debounced.contract, city: filters.city, topN: hasFilter ? 50 : 8 })
       .then((d) => { if (alive) { setData(d); setError(null) } })
       .catch((e) => { if (alive) setError(e instanceof ApiError ? e : new ApiError(0, 'Erro inesperado.')) })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [financialConfig, commercialConfig, connectionConfig, networkConfig, fieldConfig, installationConfig, relationshipConfig, thresholds, reloadKey])
+  }, [financialConfig, commercialConfig, connectionConfig, networkConfig, fieldConfig, installationConfig, relationshipConfig, thresholds, reloadKey, debounced, filters.city, hasFilter])
 
   const compData = useMemo(
     () => (data ? data.summaries.map((e) => ({ name: e.label, score: e.avgHealthScore })).sort((a, b) => a.score - b.score) : []),
@@ -127,6 +140,14 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-slide-up">
+      {/* Filtro de cliente/contrato — escopa a lista de Maior Risco (panorama do cliente) */}
+      <ContractFilters
+        filters={filters}
+        onChange={setFilters}
+        cities={data?.cities ?? []}
+        resultCount={data?.ranking.visibleTotal}
+        totalCount={data?.ranking.total}
+      />
       {loading && <div className="flex items-center justify-end gap-1.5 text-[11px] text-gray-500 -mb-3"><Loader2 size={11} className="animate-spin" /> atualizando…</div>}
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -196,13 +217,18 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader
-            title="Clientes com Maior Risco"
-            subtitle="Score combinado por cliente"
+            title={hasFilter ? 'Clientes no filtro' : 'Clientes com Maior Risco'}
+            subtitle={hasFilter ? `${rk.visibleTotal.toLocaleString('pt-BR')} cliente(s) · clique para ver o panorama` : 'Score combinado por cliente · clique para ver o panorama'}
             icon={<AlertTriangle size={14} />}
             action={<button onClick={() => navigate('/ia')} className="text-[11px] text-brand-blue hover:text-brand-blueLight flex items-center gap-1"><Brain size={11} /> Análise de IA →</button>}
           />
           <div className="divide-y divide-app-border">
             {rk.top.map((c, i) => <RiskRow key={c.customerId} c={c} rank={i + 1} />)}
+            {rk.top.length === 0 && (
+              <div className="px-5 py-10 text-center text-xs text-gray-500">
+                {hasFilter ? 'Nenhum cliente encontrado com esse filtro.' : 'Sem clientes para exibir.'}
+              </div>
+            )}
           </div>
         </Card>
       </div>
