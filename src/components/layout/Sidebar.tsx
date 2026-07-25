@@ -33,7 +33,7 @@ export function Sidebar() {
         <img src="/logo-circular-sebratel.png" alt="Sebratel" className="w-8 h-8 rounded-full shrink-0 ring-1 ring-app-border" />
         {!sidebarCollapsed && (
           <div className="flex flex-col leading-tight">
-            <span className="text-sm font-bold text-white tracking-tight">Healthy Score</span>
+            <span className="text-sm font-bold text-white tracking-tight">Health Score</span>
             <span className="text-[10px] text-gray-500 font-medium uppercase tracking-widest">Sebratel</span>
           </div>
         )}

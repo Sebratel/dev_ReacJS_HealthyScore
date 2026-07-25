@@ -1,4 +1,4 @@
-# Healthy Score Sebratel — stack de produção (SPA estática via nginx + API de queries).
+# Health Score Sebratel — stack de produção (SPA estática via nginx + API de queries).
 # Deploy no Portainer: Stacks → Add stack → Repository → branch main.
 # Defina VITE_GOOGLE_CLIENT_ID (e, se quiser, QUERY_EDITOR_EMAILS) nas
 # "Environment variables" da stack.
