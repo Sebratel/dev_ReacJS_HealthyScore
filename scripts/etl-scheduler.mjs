@@ -17,8 +17,21 @@ import { dirname, resolve } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ETL = resolve(__dirname, 'fetch-clients.mjs')
+const SCORER = resolve(__dirname, 'score-history.mjs')
 const OUT = process.env.SNAPSHOT_OUT ? resolve(process.env.SNAPSHOT_OUT) : resolve(__dirname, '../public/realClients.data')
 const HOUR = Math.min(23, Math.max(0, Number(process.env.ETL_HOUR ?? 3)))
+// Histórico de score ligado por padrão; desligue com SCORE_HISTORY=off.
+const SCORE_HISTORY = (process.env.SCORE_HISTORY ?? 'on').toLowerCase() !== 'off'
+
+// Anexa um ponto ao histórico de score (roda sob tsx — importa as engines .ts).
+// A própria trava de cadência (HISTORY_MIN_DAYS) decide se grava ou pula.
+function runScoreHistory() {
+  if (!SCORE_HISTORY) return
+  console.log('[etl] pontuando histórico de score…')
+  const child = spawn(process.execPath, ['--import', 'tsx', SCORER], { stdio: 'inherit', env: process.env })
+  child.on('exit', (code) => console.log(`[etl] score-history finalizado (code ${code})`))
+  child.on('error', (e) => console.error(`[etl] score-history falhou ao iniciar: ${e.message}`))
+}
 
 let running = false
 function runETL(reason) {
@@ -26,7 +39,11 @@ function runETL(reason) {
   running = true
   console.log(`[etl] iniciando ETL completo (${reason}) → ${OUT}`)
   const child = spawn(process.execPath, [ETL, 'full'], { stdio: 'inherit', env: process.env })
-  child.on('exit', (code) => { running = false; console.log(`[etl] finalizado (code ${code}) em ${new Date().toISOString()}`) })
+  child.on('exit', (code) => {
+    running = false
+    console.log(`[etl] finalizado (code ${code}) em ${new Date().toISOString()}`)
+    if (code === 0) runScoreHistory() // só pontua se o ETL gravou o snapshot novo
+  })
   child.on('error', (e) => { running = false; console.error(`[etl] falha ao iniciar: ${e.message}`) })
 }
 

@@ -595,7 +595,7 @@ group by c.contract_id, s.subsc_id, osc.new_status
       'Protocolos de retirada de equipamento: desfecho (retirado × não retirado), nº de visitas, motoboy responsável e se o contrato está cancelado ou ativo. Um registro por protocolo, desfecho do relato mais recente.',
     params: [],
     sql: `
-select protocol, contract_number, is_cancelled, retrieved, technician, visits
+select protocol, contract_number, is_cancelled, retrieved, technician, visits, outcome_date
 from (
   -- Janelas sobre os relatos JÁ deduplicados (count(distinct) em window não é
   -- suportado no PG). visits = nº de relatos do protocolo; rn=1 = mais recente.
@@ -610,7 +610,8 @@ from (
       (c.v_status = 'Cancelado') is_cancelled,
       (r.description like '%foi retirado com sucesso%') retrieved,
       vu.name technician,
-      r.beginning_date
+      r.beginning_date,
+      date(r.final_date) outcome_date
     from assignment_incidents ai
     left join reports r on r.assignment_id = ai.assignment_id
     left join assignments a on a.id = ai.assignment_id

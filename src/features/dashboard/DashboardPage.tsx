@@ -10,6 +10,7 @@ import { useAppStore } from '@/store/appStore'
 import { coverageLabelFromMeta } from '@/features/engines/engineApi'
 import { fetchDashboard, ApiError, type DashboardResponse } from './dashboardApi'
 import type { HealthClassification } from '@/types'
+import ScoreTimeline from '@/features/score-history/ScoreTimeline'
 
 const DIST_ORDER: HealthClassification[] = ['critical', 'high_risk', 'attention', 'healthy', 'excellent']
 const scoreColor = (v: number) => HEALTH_COLORS[scoreToHealthClass(v)]
@@ -33,6 +34,36 @@ function DistBar({ dist, total }: { dist: Record<HealthClassification, number>; 
         if (pct <= 0) return null
         return <div key={cls} className="h-full" style={{ width: `${pct}%`, background: HEALTH_COLORS[cls] }} title={`${HEALTH_LABELS[cls]}: ${dist[cls]}`} />
       })}
+    </div>
+  )
+}
+
+type RiskItem = DashboardResponse['ranking']['top'][number]
+
+// Linha do ranking de risco — clicável, abre a timeline de health do cliente.
+function RiskRow({ c, rank }: { c: RiskItem; rank: number }) {
+  const [open, setOpen] = useState(false)
+  const color = HEALTH_COLORS[c.classification]
+  return (
+    <div>
+      <div className="flex items-center gap-3 px-5 py-2.5 cursor-pointer hover:bg-app-surface/60 transition-colors" onClick={() => setOpen((v) => !v)}>
+        <span className="text-[10px] font-mono text-gray-600 w-4">{rank}</span>
+        <div className="w-8 h-8 rounded-full border flex items-center justify-center text-[11px] font-bold shrink-0" style={{ backgroundColor: color + '15', borderColor: color + '30', color }}>{c.customerName[0]}</div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-gray-100 truncate">{c.customerName}</p>
+          <p className="text-[10px] text-gray-500">
+            {c.contractNumber && <><span className="font-mono text-gray-400" title="Nº do contrato">#{c.contractNumber}</span> · </>}{c.city} · {c.plan}
+          </p>
+        </div>
+        <div className="hidden sm:flex flex-col items-center"><span className="text-[9px] text-gray-600">{c.enginesPresent} módulos</span></div>
+        <div className="flex flex-col items-end"><span style={{ color }} className="text-sm font-bold tabular-nums leading-none">{c.overallHealth}</span><span className="text-[9px] text-gray-600">health</span></div>
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color, background: `${color}15` }}>{HEALTH_LABELS[c.classification]}</span>
+      </div>
+      {open && (
+        <div className="px-5 pb-3 pt-1 bg-app-surface/40">
+          <ScoreTimeline clientId={c.customerId} />
+        </div>
+      )}
     </div>
   )
 }
@@ -171,24 +202,7 @@ export default function DashboardPage() {
             action={<button onClick={() => navigate('/ia')} className="text-[11px] text-brand-blue hover:text-brand-blueLight flex items-center gap-1"><Brain size={11} /> Análise de IA →</button>}
           />
           <div className="divide-y divide-app-border">
-            {rk.top.map((c, i) => {
-              const color = HEALTH_COLORS[c.classification]
-              return (
-                <div key={c.customerId} className="flex items-center gap-3 px-5 py-2.5">
-                  <span className="text-[10px] font-mono text-gray-600 w-4">{i + 1}</span>
-                  <div className="w-8 h-8 rounded-full border flex items-center justify-center text-[11px] font-bold shrink-0" style={{ backgroundColor: color + '15', borderColor: color + '30', color }}>{c.customerName[0]}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-gray-100 truncate">{c.customerName}</p>
-                    <p className="text-[10px] text-gray-500">
-                      {c.contractNumber && <><span className="font-mono text-gray-400" title="Nº do contrato">#{c.contractNumber}</span> · </>}{c.city} · {c.plan}
-                    </p>
-                  </div>
-                  <div className="hidden sm:flex flex-col items-center"><span className="text-[9px] text-gray-600">{c.enginesPresent} módulos</span></div>
-                  <div className="flex flex-col items-end"><span style={{ color }} className="text-sm font-bold tabular-nums leading-none">{c.overallHealth}</span><span className="text-[9px] text-gray-600">health</span></div>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color, background: `${color}15` }}>{HEALTH_LABELS[c.classification]}</span>
-                </div>
-              )
-            })}
+            {rk.top.map((c, i) => <RiskRow key={c.customerId} c={c} rank={i + 1} />)}
           </div>
         </Card>
       </div>

@@ -55,15 +55,43 @@ export interface RealWithdrawalTech {
   successRate: number
   avgVisits: number
 }
+export interface RealWithdrawalPerson {
+  name: string
+  contractNumber: string
+  cancellationDate: string | null
+  cancellationMotive: string | null
+  plan: string
+  city: string
+  monthlyValue: number
+  protocols: number
+  visits: number
+  recovered: boolean
+  technicians: string[]
+  lastDate: string | null
+}
+export interface RealWithdrawalCancellation {
+  cancelledTotal: number
+  withWithdrawal: number
+  recovered: number
+  notRecovered: number
+  recoveryRate: number
+  avgVisits: number
+  mrrAtRisk: number
+  window: { from: string; to: string; months: number }
+}
 export interface RealWithdrawals {
   total: number
   retrieved: number
   notRetrieved: number
   successRate: number
   avgVisits: number
+  contractsWithWithdrawal: number
   byStatus: { cancelled: RealWithdrawalStatus; active: RealWithdrawalStatus }
   technicians: RealWithdrawalTech[]
   visitsHistogram: { visits: string; count: number }[]
+  cancellation: RealWithdrawalCancellation | null
+  people: RealWithdrawalPerson[]
+  peopleTotal: number
 }
 
 interface RealClientsFile {
@@ -84,8 +112,10 @@ interface RealClientsFile {
 
 const EMPTY_WITHDRAWALS: RealWithdrawals = {
   total: 0, retrieved: 0, notRetrieved: 0, successRate: 0, avgVisits: 0,
+  contractsWithWithdrawal: 0,
   byStatus: { cancelled: { total: 0, retrieved: 0 }, active: { total: 0, retrieved: 0 } },
   technicians: [], visitsHistogram: [],
+  cancellation: null, people: [], peopleTotal: 0,
 }
 
 // Caminho do snapshot gerado pelo job diário (scripts/fetch-clients.mjs).

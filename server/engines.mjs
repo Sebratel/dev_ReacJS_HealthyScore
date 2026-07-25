@@ -143,6 +143,44 @@ export function runEngine(key, opts = {}) {
   return { aggregates, distribution, cities, scores: pageScores, total, analyzed, populationTotal: population.length, page, pageSize }
 }
 
+// ─── Score de TODOS os clientes (para o histórico/timeline) ────
+// Igual à primeira metade do runDashboard, porém devolve o overall + os scores
+// por engine de CADA cliente (não só o topN). Usado pelo job score-history.mjs
+// com a config oficial. Reaproveita o cache de scoredEngineData.
+export function scoreAllClients(clients, opts = {}) {
+  const { configs = {}, thresholds, monthly = [] } = opts
+  applyHealthThresholds(thresholds && typeof thresholds === 'object' ? thresholds : DEFAULT_HEALTH_THRESHOLDS)
+
+  const byClient = new Map()
+  for (const key of ENGINE_KEYS) {
+    const cfg = configs[key]
+    if (!cfg) continue
+    const { data } = scoredEngineData(key, clients, cfg, thresholds, monthly)
+    for (const s of data.scores) {
+      let e = byClient.get(s.customerId)
+      if (!e) { e = { customerId: s.customerId, sum: 0, count: 0, byEngine: {} }; byClient.set(s.customerId, e) }
+      e.sum += s.healthScore; e.count++
+      e.byEngine[key] = Math.round(s.healthScore)
+    }
+  }
+
+  const clientById = new Map(clients.map((c) => [c.clientId, c]))
+  const out = []
+  for (const e of byClient.values()) {
+    const overall = Math.round(e.sum / Math.max(1, e.count))
+    const c = clientById.get(e.customerId)
+    out.push({
+      clientId: e.customerId,
+      contractNumber: c?.contractNumber || '',
+      overall,
+      classification: scoreToHealthClass(overall),
+      enginesPresent: e.count,
+      byEngine: e.byEngine,
+    })
+  }
+  return out
+}
+
 // ─── Dashboard / IA — roda as 7 engines e combina o risco por cliente ──
 // Substitui o cálculo client-side (useEngineSummaries + buildClientRiskRanking)
 // que hoje roda no navegador sobre a base inteira.

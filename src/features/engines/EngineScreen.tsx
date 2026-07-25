@@ -9,6 +9,7 @@ import { ContractFilters, type ContractFilterState } from '@/components/ui/Contr
 import { cn } from '@/utils/cn'
 import type { HealthClassification } from '@/types'
 import { fetchEngine, ApiError, coverageLabelFromMeta, type EngineResponse, type EngineMeta } from './engineApi'
+import ScoreTimeline from '@/features/score-history/ScoreTimeline'
 
 export const CLASS_COLOR: Record<string, string> = { excellent: '#22d3ee', healthy: '#10b981', attention: '#f59e0b', high_risk: '#f97316', critical: '#ef4444' }
 export const CLASS_LABEL: Record<string, string> = { excellent: 'Excelente', healthy: 'Saudável', attention: 'Atenção', high_risk: 'Alto Risco', critical: 'Crítico' }
@@ -89,6 +90,10 @@ function EngineRow<S extends EngineScoreBase>({ score, rank, columns, renderExpa
                 <IndicatorBreakdown indicators={score.indicators} />
               </>
             )}
+            <div className="mt-3 pt-3 border-t border-app-border/40">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Histórico de Health Score</p>
+              <ScoreTimeline clientId={score.customerId} />
+            </div>
           </td>
         </tr>
       )}

@@ -19,6 +19,7 @@ import { writeOverride, deleteOverride, OVERRIDES_PATH } from '../scripts/querie
 import { getQueryDef } from '../scripts/queries/registry.mjs'
 import { getStatus as datasetStatus, getClients, getCancelledClients, getDataset } from './dataset.mjs'
 import { runEngine, runDashboard, ENGINE_KEYS } from './engines.mjs'
+import { getClientHistory, getScoreHistoryStatus } from './scoreHistory.mjs'
 import { buildSuggestions, deriveLists } from '../src/features/cancellation-profiles/suggestionEngine.ts'
 
 const PORT = Number(process.env.API_PORT) || 8787
@@ -144,6 +145,19 @@ app.post('/api/engine/:key', requireAuth(), (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e.message })
   }
+})
+
+// ─── Histórico de Health Score (timeline por cliente) ─────────
+// Status do índice de histórico (nº de pontos, janela coberta).
+app.get('/api/score-history/status', requireAuth(), (_req, res) => {
+  res.json(getScoreHistoryStatus())
+})
+
+// Série temporal de um cliente (ativo ou cancelado). Vazia até acumular pontos.
+// GET /api/clients/:id/score-history
+app.get('/api/clients/:id/score-history', requireAuth(), (req, res) => {
+  const series = getClientHistory(req.params.id)
+  res.json({ clientId: req.params.id, points: series, status: getScoreHistoryStatus() })
 })
 
 app.get('/api/queries', requireAuth(), (req, res) => {

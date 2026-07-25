@@ -7,6 +7,8 @@ import {
 import { Card, CardHeader } from '@/components/ui/Card'
 import { cn, formatCurrency } from '@/utils/cn'
 import { fetchCancelledClients, ApiError, type CancelledClient, type CancelledClientsResult, type MotiveAgg } from './suggestionsApi'
+import ScoreTimeline from '@/features/score-history/ScoreTimeline'
+import { Activity } from 'lucide-react'
 
 const PAGE_SIZE = 15
 
@@ -125,6 +127,12 @@ export function CancelledProfile({ c }: { c: CancelledClient }) {
       <ProfileGroup icon={<Router size={12} />} title="Equipamentos">
         <Chips items={c.equipment} />
       </ProfileGroup>
+
+      <div className="lg:col-span-3">
+        <ProfileGroup icon={<Activity size={12} />} title="Histórico de Health Score">
+          <ScoreTimeline clientId={c.clientId} />
+        </ProfileGroup>
+      </div>
     </div>
   )
 }
