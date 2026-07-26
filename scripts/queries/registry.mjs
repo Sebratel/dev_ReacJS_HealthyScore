@@ -121,6 +121,26 @@ const INV_BASE = (extraWhere) => `
     ${extraWhere}
 `
 
+// ─── Coorte (Cancelados) — base compartilhada pelas queries gêmeas ─────
+// Espelha cohort.mjs. As colunas/joins são iguais para ativos e cancelados;
+// só o filtro de v_status muda ({{statusCmp}}). "Forma de pagamento" já usa
+// contract_types (migração de payment_forms).
+const COHORT_BASE_COLUMNS = `
+  p.id client_id, p.name client_name, p.gender client_gender, p.birth_date client_birth,
+  p2.name seller_name, p2.gender seller_gender, p2.birth_date seller_birth, p2.created seller_admitted,
+  c.contract_number, c.created created_contract, c.cancellation_date, c.cancellation_motive,
+  pf.title payment_form, sp.selling_price, sp.title plan_name,
+  p.city, p.neighborhood
+`
+const COHORT_BASE_JOINS = `
+from contracts c
+left join contract_service_tags cst on cst.contract_id = c.id
+left join service_products sp on sp.id = cst.service_product_id
+left join people p on p.id = c.client_id
+left join people p2 on p2.id = c.seller_1_id
+left join contract_types pf on pf.id = c.contract_type_id
+`
+
 // ─────────────────────────────────────────────────────────────────────────
 // Catálogo — uma entrada por query, na mesma ordem em que aparecem no ETL.
 // `id` casa com o antigo nome da constante (ex.: 'Q_TOTALS').
@@ -633,6 +653,302 @@ from (
 where rn = 1
 `,
   },
+
+  // ── Cancelados (coorte) — queries GÊMEAS ativos × cancelados ────────
+  // Rodam para os DOIS coortes; só o filtro de status muda via {{statusCmp}}
+  // ('=' cancelados | '<>' ativos). Consumidas por scripts/queries/cohort.mjs
+  // (buildCohort) — fonte única, editáveis pela tela como as demais.
+  {
+    id: 'Q_COH_ACTIVE_BASE', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — base de ATIVOS (amostra)',
+    description: 'Identidade/plano/endereço de uma amostra aleatória de contratos ativos. $1 = tamanho da amostra.',
+    params: ['$1 = sampleLimit'],
+    sql: `
+with base as (
+  select id from contracts where v_status <> 'Cancelado' order by random() limit $1
+)
+select distinct on (c.id) ${COHORT_BASE_COLUMNS}
+${COHORT_BASE_JOINS}
+join base b on b.id = c.id
+order by c.id, sp.selling_price desc nulls last
+`,
+  },
+  {
+    id: 'Q_COH_CANCELLED_BASE', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — base de CANCELADOS (janela)',
+    description: 'Identidade/plano/endereço dos contratos cancelados na janela. $1 = from, $2 = to (datas).',
+    params: ['$1 = from', '$2 = to'],
+    sql: `
+select distinct on (c.id) ${COHORT_BASE_COLUMNS}
+${COHORT_BASE_JOINS}
+where c.v_status = 'Cancelado'
+  and c.cancellation_date >= $1::date and c.cancellation_date < ($2::date + 1)
+order by c.id, sp.selling_price desc nulls last
+`,
+  },
+  {
+    id: 'Q_COH_INV', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — faturas (on_time/late/overdue) por contrato',
+    description: 'Estados das faturas por contrato. $1 = contract_numbers, $2 = from, $3 = to. {{statusCmp}} = filtro de v_status.',
+    params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
+    sql: `
+select contract_number,
+  count(*) filter (where st = 'on_time') on_time_invoices,
+  count(*) filter (where st = 'late')    late_invoices,
+  count(*) filter (where st = 'overdue') overdue_invoices,
+  count(*) total_invoices
+from (
+  select c.contract_number,
+    case
+      when frt2.client_paid_date is null and frt.expiration_date < now() then 'overdue'
+      when frt2.client_paid_date is null then 'open'
+      when frt2.client_paid_date > frt.expiration_date then 'late'
+      else 'on_time'
+    end st
+  from contracts c
+  join financial_receivable_titles frt on frt.contract_id = c.id
+  left join financial_receipt_titles frt2 on frt2.financial_receivable_title_id = frt.id
+  left join financers_natures fn on fn.id = frt2.financer_nature_id
+  where c.v_status {{statusCmp}} 'Cancelado'
+    and frt.title like '%FAT%' and frt.deleted = 'False' and frt.renegotiated = 'False'
+    and frt.bill_title_id is null
+    and (fn.title is null or fn.title <> 'DF - TARIFA BAIXA DE TÍTULO')
+    and date(frt.issue_date) >= $2::date and date(frt.issue_date) < ($3::date + 1)
+    and c.contract_number::text = any($1::text[])
+) q
+group by contract_number`,
+  },
+  {
+    id: 'Q_COH_RENEG', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — renegociações por contrato',
+    description: 'Títulos FAT renegotiated=True. $1 = contract_numbers, $2 = from, $3 = to.',
+    params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
+    sql: `
+select c.contract_number, count(distinct frt.id) renegotiations
+from contracts c
+join financial_receivable_titles frt on frt.contract_id = c.id
+where c.v_status {{statusCmp}} 'Cancelado'
+  and frt.title like '%FAT%' and frt.deleted = 'False' and frt.renegotiated = 'True'
+  and date(frt.issue_date) >= $2::date and date(frt.issue_date) < ($3::date + 1)
+  and c.contract_number::text = any($1::text[])
+group by c.contract_number`,
+  },
+  {
+    id: 'Q_COH_TRUST', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — desbloqueios por confiança por contrato',
+    description: 'Eventos de desbloqueio financeiro por confiança. $1 = contract_numbers, $2 = from, $3 = to.',
+    params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
+    sql: `
+select c.contract_number, count(*) trust_releases
+from contracts c
+join contract_events ce on ce.contract_id = c.id
+where c.v_status {{statusCmp}} 'Cancelado'
+  and ce.description in (
+    'Desbloqueio Financeiro realizado pelo cliente através do atendimento telefônico.',
+    'Desbloqueio Financeiro realizado pela tela de atendimento ao cliente.',
+    'Desbloqueio Financeiro realizado pelo usuário através do Portal de Relacionamento.'
+  )
+  and date(ce."date") >= $2::date and date(ce."date") < ($3::date + 1)
+  and c.contract_number::text = any($1::text[])
+group by c.contract_number`,
+  },
+  {
+    id: 'Q_COH_EQUIP', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — modelos de equipamento por contrato',
+    description: 'Modelos alocados (patrimonies). Sem janela (alocação). $1 = contract_numbers.',
+    params: ['$1 = contract_numbers'],
+    sql: `
+select c.contract_number, array_remove(array_agg(distinct p.title), null) models
+from patrimony_packing_list_items plis
+left join patrimony_packing_lists ppl on ppl.id = plis.patrimony_packing_list_id
+left join assignments a on a.id = ppl.assignment_id
+left join assignment_incidents ai on ai.assignment_id = a.id
+left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+left join contracts c on c.id = cst.contract_id
+left join patrimonies p on p.id = plis.patrimony_id
+where c.v_status {{statusCmp}} 'Cancelado' and p.title is not null
+  and c.contract_number::text = any($1::text[])
+group by c.contract_number`,
+  },
+  {
+    id: 'Q_COH_FIELD_PROT', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — protocolos/SLA de manutenção por contrato',
+    description: 'Protocolos, atraso de SLA e SLA médio (manutenção). $1 = contract_numbers, $2 = from, $3 = to.',
+    params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
+    sql: `
+select contract_number,
+  count(*) protocol_count,
+  count(*) filter (where late) sla_late_count,
+  round(avg(sla_days) filter (where sla_days is not null)::numeric, 2) avg_sla_days
+from (
+  select a.id pid, c.contract_number,
+    (max(a.conclusion_date) > max(ai.responsible_final_date))
+      or (max(a.conclusion_date) is null and max(ai.responsible_final_date) < now()) late,
+    case when max(a.conclusion_date) is not null
+      then extract(epoch from (max(a.conclusion_date) - max(a.created))) / 86400.0 end sla_days
+  from assignment_incidents ai
+  left join assignments a on a.id = ai.assignment_id
+  left join incident_types it on it.id = ai.incident_type_id
+  left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+  left join contracts c on c.id = cst.contract_id
+  left join catalog_services cs on cs.id = ai.catalog_service_id
+  where (it.active is true or cs.title in ('Equipe reparo','Equipe tecnologia'))
+    and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+    and c.contract_number::text = any($1::text[])
+  group by a.id, c.contract_number
+) q
+group by contract_number`,
+  },
+  {
+    id: 'Q_COH_FIELD_SCHED', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — agendamentos/técnicos de manutenção por contrato',
+    description: 'Nº de agendamentos e técnicos (manutenção). $1 = contract_numbers, $2 = from, $3 = to.',
+    params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
+    sql: `
+select c.contract_number,
+  count(distinct sds.id) schedule_count,
+  array_remove(array_agg(distinct p2.name), null) technicians
+from assignment_incidents ai
+left join assignments a on a.id = ai.assignment_id
+left join incident_types it on it.id = ai.incident_type_id
+left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+left join contracts c on c.id = cst.contract_id
+left join catalog_services cs on cs.id = ai.catalog_service_id
+left join service_desk_slots sds on sds.pre_reserved_assignment_id = a.id
+left join people p2 on p2.id = sds.resource_id
+where (it.active is true or cs.title in ('Equipe reparo','Equipe tecnologia'))
+  and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+  and c.contract_number::text = any($1::text[])
+group by c.contract_number`,
+  },
+  {
+    id: 'Q_COH_FIELD_REASONS', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — motivos de manutenção por contrato',
+    description: 'Categorias (1-4) distintas por contrato. $1 = contract_numbers, $2 = from, $3 = to.',
+    params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
+    sql: `
+select contract_number, array_remove(array_agg(distinct cat), null) reasons
+from (
+  select c.contract_number, unnest(array[ssc1.title, ssc2.title, ssc3.title, ssc4.title]) cat
+  from assignment_incidents ai
+  left join assignments a on a.id = ai.assignment_id
+  left join incident_types it on it.id = ai.incident_type_id
+  left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+  left join contracts c on c.id = cst.contract_id
+  left join catalog_services cs on cs.id = ai.catalog_service_id
+  left join solicitation_category_matrices scm on scm.id = ai.solicitation_category_matrix_id
+  left join solicitation_service_categories ssc1 on ssc1.id = scm.service_category_id_1
+  left join solicitation_service_categories ssc2 on ssc2.id = scm.service_category_id_2
+  left join solicitation_service_categories ssc3 on ssc3.id = scm.service_category_id_3
+  left join solicitation_service_categories ssc4 on ssc4.id = scm.service_category_id_4
+  where (it.active is true or cs.title in ('Equipe reparo','Equipe tecnologia'))
+    and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+    and c.contract_number::text = any($1::text[])
+) q
+where cat is not null and cat <> ''
+group by contract_number`,
+  },
+  {
+    id: 'Q_COH_INST_PROT', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — protocolos/SLA de instalação por contrato',
+    description: 'Protocolos, SLA e venda→agenda (instalação ATV). $1 = contract_numbers, $2 = from, $3 = to.',
+    params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
+    sql: `
+select contract_number,
+  count(*) protocol_count,
+  count(*) filter (where late) sla_late_count,
+  round(avg(sla_days) filter (where sla_days is not null)::numeric, 2) avg_sla_days,
+  round(avg(s2a_days) filter (where s2a_days is not null)::numeric, 2) sale_to_schedule_days
+from (
+  select a.id pid, c.contract_number,
+    (max(a.conclusion_date) > max(ai.responsible_final_date))
+      or (max(a.conclusion_date) is null and max(ai.responsible_final_date) < now()) late,
+    case when max(a.conclusion_date) is not null
+      then extract(epoch from (max(a.conclusion_date) - max(a.created))) / 86400.0 end sla_days,
+    case when min(sds.begin_date) is not null
+      then extract(epoch from (min(sds.begin_date) - max(c.created))) / 86400.0 end s2a_days
+  from assignment_incidents ai
+  left join assignments a on a.id = ai.assignment_id
+  left join incident_types it on it.id = ai.incident_type_id
+  left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+  left join contracts c on c.id = cst.contract_id
+  left join service_desk_slots sds on sds.pre_reserved_assignment_id = a.id
+  where it.active is true and it.code like 'ATV%'
+    and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+    and c.contract_number::text = any($1::text[])
+  group by a.id, c.contract_number
+) q
+group by contract_number`,
+  },
+  {
+    id: 'Q_COH_INST_SCHED', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — agendamentos/técnicos de instalação por contrato',
+    description: 'Nº de agendamentos e técnicos (instalação ATV). $1 = contract_numbers, $2 = from, $3 = to.',
+    params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
+    sql: `
+select c.contract_number,
+  count(distinct sds.id) schedule_count,
+  array_remove(array_agg(distinct p2.name), null) technicians
+from assignment_incidents ai
+left join assignments a on a.id = ai.assignment_id
+left join incident_types it on it.id = ai.incident_type_id
+left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+left join contracts c on c.id = cst.contract_id
+left join service_desk_slots sds on sds.pre_reserved_assignment_id = a.id
+left join people p2 on p2.id = sds.resource_id
+where it.active is true and it.code like 'ATV%'
+  and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+  and c.contract_number::text = any($1::text[])
+group by c.contract_number`,
+  },
+  {
+    id: 'Q_COH_REL_PROT', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — protocolos de relacionamento por contrato',
+    description: 'Protocolos, recorrência, excedente de SLA e ameaças de cancelamento. $1 = contract_numbers, $2 = from, $3 = to.',
+    params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
+    sql: `
+select contract_number,
+  count(*) protocol_count,
+  round(avg(rec_days)::numeric, 1) recurrence_days,
+  round(avg(overage_h)::numeric, 2) avg_overage_hours,
+  count(*) filter (where is_threat) cancel_threats
+from (
+  select a.id pid, c.contract_number,
+    extract(epoch from (max(a.created) - max(c.created))) / 86400.0 rec_days,
+    greatest(0, extract(epoch from (max(a.conclusion_date) - max(ai.responsible_final_date))) / 3600.0) overage_h,
+    bool_or(it.id in ${CANCEL_IDS}) is_threat
+  from assignment_incidents ai
+  left join assignments a on a.id = ai.assignment_id
+  left join incident_types it on it.id = ai.incident_type_id
+  left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+  left join contracts c on c.id = cst.contract_id
+  where it.active is true and not (it.code like 'ATV%' or it.code like 'MNT%')
+    and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+    and c.contract_number::text = any($1::text[])
+  group by a.id, c.contract_number
+) q
+group by contract_number`,
+  },
+  {
+    id: 'Q_COH_REL_DIM', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — tipos de protocolo/atendentes por contrato',
+    description: 'Tipos de protocolo e atendentes distintos por contrato (relacionamento). $1 = contract_numbers, $2 = from, $3 = to.',
+    params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
+    sql: `
+select c.contract_number,
+  array_remove(array_agg(distinct it.title), null) protocol_types,
+  array_remove(array_agg(distinct p2.name), null) attendant_names
+from assignment_incidents ai
+left join assignments a on a.id = ai.assignment_id
+left join incident_types it on it.id = ai.incident_type_id
+left join people p2 on p2.id = a.responsible_id
+left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
+left join contracts c on c.id = cst.contract_id
+where it.active is true and not (it.code like 'ATV%' or it.code like 'MNT%')
+  and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+  and c.contract_number::text = any($1::text[])
+group by c.contract_number`,
+  },
 ]
 
 // Rótulos amigáveis dos grupos (ordem de exibição no catálogo).
@@ -646,6 +962,7 @@ export const ENGINE_LABELS = {
   rede: 'Rede / Massivas',
   financeiro: 'Financeiro',
   retiradas: 'Retiradas de Equipamento',
+  cancelados: 'Cancelados (coorte ativos × cancelados)',
 }
 
 const BY_ID = new Map(QUERIES.map((q) => [q.id, q]))
@@ -661,9 +978,15 @@ export function listQueries() {
 // Resolve o(s) token(s) dinâmico(s) de um SQL conforme o contexto de execução.
 // Hoje só existe {{sampleClause}} (usado na Q_SAMPLE): em base completa não
 // adiciona nada; em amostra adiciona `order by random()` + `limit $1`.
-export function renderTemplate(sql, { full = false } = {}) {
+export function renderTemplate(sql, { full = false, cancelled = false } = {}) {
   const sampleClause = full ? '' : 'order by random()\nlimit $1'
-  return sql.replace(/\{\{sampleClause\}\}/g, sampleClause)
+  // {{statusCmp}} — usado pelas queries GÊMEAS da coorte (engine 'cancelados'):
+  // '=' para cancelados, '<>' para ativos. Default '<>' quando não informado
+  // (o ETL principal não usa essas queries; cohort.mjs sempre passa o contexto).
+  const statusCmp = cancelled ? '=' : '<>'
+  return sql
+    .replace(/\{\{sampleClause\}\}/g, sampleClause)
+    .replace(/\{\{statusCmp\}\}/g, statusCmp)
 }
 
 // SQL default já renderizado para o contexto dado (sem overrides).
