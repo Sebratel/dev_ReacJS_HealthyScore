@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { useAppStore } from '@/store/appStore'
 import { loadRealData, isRealDataLoaded } from '@/data/realClients'
+import { fetchMe } from '@/features/auth/access'
 import { cn } from '@/utils/cn'
 
 type LoadStatus = 'loading' | 'ready' | 'error'
@@ -48,6 +49,9 @@ export function MainLayout() {
   const [status, setStatus] = useState<LoadStatus>(isRealDataLoaded() ? 'ready' : 'loading')
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
+
+  // Resolve o papel do usuário (mostra/esconde controles). Fire-and-forget.
+  useEffect(() => { fetchMe() }, [])
 
   useEffect(() => {
     if (isRealDataLoaded()) { setStatus('ready'); return }
