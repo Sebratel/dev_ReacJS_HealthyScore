@@ -367,6 +367,6 @@ app.get('/api/cancelled-clients', requireAuth(), (req, res) => {
 app.listen(PORT, () => {
   console.log(`ChurnIQ API ouvindo em :${PORT}`)
   console.log(`  domínio permitido: @${ALLOWED_DOMAIN}`)
-  console.log(`  editores: ${EDITORS.length ? EDITORS.join(', ') : '(qualquer conta do domínio)'}`)
+  console.log(`  papéis: ADMIN_EMAILS/POWER_USER_EMAILS (env) + data/roles.json (tela)`)
   console.log(`  overrides: ${OVERRIDES_PATH}`)
 })
