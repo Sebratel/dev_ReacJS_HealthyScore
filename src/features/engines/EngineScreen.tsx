@@ -128,7 +128,7 @@ export interface EngineScreenProps<Agg, S extends EngineScoreBase> {
 
 export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreenProps<Agg, S>) {
   const { engineKey, config, thresholds } = props
-  const { isAdmin } = useRole() // "Configurar" (pesos) é só admin
+  const { isPowerUser } = useRole() // "Configurar" (pesos): power_user+ (admin herda)
   const [filters, setFilters] = useState<ContractFilterState>({ contract: '', name: '', city: '' })
   const [tab, setTab] = useState<Tab>('all')
   const [page, setPage] = useState(0)
@@ -228,8 +228,8 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
               </span>
             </div>
             <button onClick={() => setDataOpen(true)} className="flex items-center gap-2 text-xs font-medium text-gray-300 bg-app-surface border border-app-border px-3.5 py-2 rounded-xl hover:border-app-borderLight hover:text-white transition-all duration-200"><Table2 size={13} />Ver dados</button>
-            {/* Ajustar pesos dos indicadores — só admin */}
-            {isAdmin && (
+            {/* Ajustar pesos dos indicadores — power_user+ */}
+            {isPowerUser && (
               <button onClick={() => setConfigOpen(true)} className="group flex items-center gap-2 text-xs font-medium text-[#fff] bg-gradient-brand px-3.5 py-2 rounded-xl shadow-glow hover:shadow-glow-violet hover:-translate-y-0.5 transition-all duration-200">
                 <SlidersHorizontal size={13} className="group-hover:rotate-90 transition-transform duration-300" />Configurar
               </button>

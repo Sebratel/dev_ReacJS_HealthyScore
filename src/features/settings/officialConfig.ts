@@ -1,7 +1,7 @@
 // Sincronização da CONFIG OFICIAL (pesos + limiares) com o servidor.
 //   - Boot: baixa /api/config e hidrata o store (todos veem a mesma config).
-//   - Escrita: quando um ADMIN muda pesos, ou um POWER_USER+ muda limiares,
-//     grava de volta (debounced). O backend revalida o papel (não burlável).
+//   - Escrita: quando um POWER_USER+ muda pesos ou limiares, grava de volta
+//     (debounced). O backend revalida o papel (não burlável).
 // Autoridade real do scoring é o servidor; isto mantém a UI e a oficial em dia.
 import { quietAuthedGet, quietAuthedPut } from '@/features/auth/access'
 import { useAppStore } from '@/store/appStore'
@@ -46,7 +46,7 @@ export function initOfficialConfigSync(): void {
       s.connectionConfig !== prev.connectionConfig || s.networkConfig !== prev.networkConfig ||
       s.fieldConfig !== prev.fieldConfig || s.installationConfig !== prev.installationConfig ||
       s.relationshipConfig !== prev.relationshipConfig
-    if (cfgChanged && hasRole(role, 'admin')) {
+    if (cfgChanged && hasRole(role, 'power_user')) {
       clearTimeout(tCfg)
       tCfg = setTimeout(() => quietAuthedPut('/api/config/configs', { configs: collectConfigs() }), 900)
     }

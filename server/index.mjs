@@ -111,13 +111,14 @@ app.get('/api/me', requireAuth(), (req, res) => {
 })
 
 // ─── Config oficial (pesos + limiares) ─────────────────────────
-// Leitura por todos (@domínio); escrita: pesos → admin, limiares → power_user+.
+// Leitura por todos (@domínio); escrita: pesos e limiares → power_user+
+// (admin herda). Gestão de usuários continua exclusiva de admin.
 app.get('/api/config', requireAuth(), (_req, res) => {
   const o = getOfficialConfig()
   res.json({ configs: o?.configs ?? null, thresholds: o?.thresholds ?? null, updatedAt: o?.updatedAt ?? null, updatedBy: o?.updatedBy ?? null })
 })
 
-app.put('/api/config/configs', requireAuth({ minRole: 'admin' }), (req, res) => {
+app.put('/api/config/configs', requireAuth({ minRole: 'power_user' }), (req, res) => {
   try {
     const saved = setOfficialConfigs(req.body?.configs, req.user.email)
     res.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy })
