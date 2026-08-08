@@ -1,6 +1,7 @@
 import { Bell, Settings, AlertTriangle, LogOut } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
+import { useRole } from '@/features/auth/access'
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/': { title: 'Dashboard Executivo', subtitle: 'Resumo dos Health Scores por módulo' },
@@ -21,6 +22,7 @@ export function TopBar() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+  const { isPowerUser } = useRole()
   const handleLogout = () => { logout(); navigate('/login', { replace: true }) }
 
   const page = PAGE_TITLES[location.pathname] ?? { title: 'Health Score Sebratel', subtitle: '' }
@@ -46,9 +48,12 @@ export function TopBar() {
           </span>
         </div>
 
-        <button onClick={() => navigate('/configuracoes')} className="h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all" aria-label="Configurações">
-          <Settings size={13} />
-        </button>
+        {/* Configurações (SQL + limiares) — só power_user+ */}
+        {isPowerUser && (
+          <button onClick={() => navigate('/configuracoes')} className="h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all" aria-label="Configurações">
+            <Settings size={13} />
+          </button>
+        )}
 
         <div className="flex items-center gap-2 h-7 pl-1 pr-1 rounded-lg bg-app-card border border-app-border">
           {user?.picture ? (

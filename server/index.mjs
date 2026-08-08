@@ -21,13 +21,11 @@ import { getStatus as datasetStatus, getClients, getCancelledClients, getDataset
 import { runEngine, runDashboard, ENGINE_KEYS } from './engines.mjs'
 import { getClientHistory, getScoreHistoryStatus } from './scoreHistory.mjs'
 import { buildSuggestions, deriveLists } from '../src/features/cancellation-profiles/suggestionEngine.ts'
+import { resolveRole, atLeast, listRoles, setRole, deleteRole } from './roles.mjs'
+import { getOfficialConfig, setOfficialConfigs, setOfficialThresholds } from './officialConfig.mjs'
 
 const PORT = Number(process.env.API_PORT) || 8787
 const ALLOWED_DOMAIN = (process.env.ALLOWED_DOMAIN || 'sebratel.com.br').toLowerCase()
-// Allowlist opcional de editores (CSV de e-mails). Vazia → qualquer usuário do
-// domínio permitido pode editar.
-const EDITORS = (process.env.QUERY_EDITOR_EMAILS || '')
-  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
 
 const app = express()
 // Limite generoso: os configs das engines carregam os índices dinâmicos
@@ -66,7 +64,9 @@ async function getUserFromToken(token) {
   return user
 }
 
-function requireAuth({ editor = false } = {}) {
+// Auth + RBAC. minRole: 'viewer' (default) | 'power_user' | 'admin'.
+// req.user recebe { email, name, role } (papel efetivo resolvido em roles.mjs).
+function requireAuth({ minRole = 'viewer' } = {}) {
   return async (req, res, next) => {
     const m = /^Bearer (.+)$/.exec(req.headers.authorization || '')
     if (!m) return res.status(401).json({ error: 'Token de autenticação ausente.' })
@@ -76,10 +76,12 @@ function requireAuth({ editor = false } = {}) {
     if (!user.email.endsWith('@' + ALLOWED_DOMAIN)) {
       return res.status(403).json({ error: `Acesso restrito a contas @${ALLOWED_DOMAIN}.` })
     }
-    if (editor && EDITORS.length && !EDITORS.includes(user.email)) {
-      return res.status(403).json({ error: 'Sua conta não tem permissão para editar queries.' })
+    const role = resolveRole(user.email)
+    req.user = { ...user, role }
+    if (!atLeast(role, minRole)) {
+      const label = minRole === 'admin' ? 'administrador' : 'power user'
+      return res.status(403).json({ error: `Ação restrita a ${label}. Sua conta é "${role}".` })
     }
-    req.user = user
     next()
   }
 }
@@ -87,6 +89,37 @@ function requireAuth({ editor = false } = {}) {
 // ─── Rotas ─────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'churniq-api', overridesPath: OVERRIDES_PATH })
+})
+
+// Identidade + papel do usuário logado — o front usa pra mostrar/esconder
+// controles (pesos, SQL, limiares, gestão de usuários).
+app.get('/api/me', requireAuth(), (req, res) => {
+  res.json({ email: req.user.email, name: req.user.name, role: req.user.role })
+})
+
+// ─── Config oficial (pesos + limiares) ─────────────────────────
+// Leitura por todos (@domínio); escrita: pesos → admin, limiares → power_user+.
+app.get('/api/config', requireAuth(), (_req, res) => {
+  const o = getOfficialConfig()
+  res.json({ configs: o?.configs ?? null, thresholds: o?.thresholds ?? null, updatedAt: o?.updatedAt ?? null, updatedBy: o?.updatedBy ?? null })
+})
+
+app.put('/api/config/configs', requireAuth({ minRole: 'admin' }), (req, res) => {
+  try {
+    const saved = setOfficialConfigs(req.body?.configs, req.user.email)
+    res.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.put('/api/config/thresholds', requireAuth({ minRole: 'power_user' }), (req, res) => {
+  try {
+    const saved = setOfficialThresholds(req.body?.thresholds, req.user.email)
+    res.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
 })
 
 // Status da base materializada (snapshot completo carregado em memória pelo
@@ -112,8 +145,13 @@ app.post('/api/dashboard', requireAuth(), (req, res) => {
   if (!clients.length) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
   try {
     const b = req.body || {}
+    // Config OFICIAL do servidor manda; se ainda não gravada, cai no que o
+    // cliente enviou (compat — nada quebra antes de um admin publicar a oficial).
+    const official = getOfficialConfig()
     const result = runDashboard(clients, {
-      configs: b.configs, thresholds: b.thresholds, monthly: getDataset()?.monthly || [],
+      configs: official?.configs ?? b.configs,
+      thresholds: official?.thresholds ?? b.thresholds,
+      monthly: getDataset()?.monthly || [],
       name: b.name, contract: b.contract, city: b.city, topN: b.topN,
     })
     res.json({ ...result, meta: datasetStatus(), monthly: getDataset()?.monthly || [] })
@@ -132,10 +170,11 @@ app.post('/api/engine/:key', requireAuth(), (req, res) => {
   if (!clients.length) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
   try {
     const b = req.body || {}
+    const official = getOfficialConfig()
     const result = runEngine(key, {
       clients,
-      config: b.config,
-      thresholds: b.thresholds,
+      config: official?.configs?.[key] ?? b.config,
+      thresholds: official?.thresholds ?? b.thresholds,
       monthly: getDataset()?.monthly || [],
       page: b.page, pageSize: b.pageSize,
       name: b.name, contract: b.contract, city: b.city, classification: b.classification,
@@ -160,13 +199,13 @@ app.get('/api/clients/:id/score-history', requireAuth(), (req, res) => {
   res.json({ clientId: req.params.id, points: series, status: getScoreHistoryStatus() })
 })
 
-app.get('/api/queries', requireAuth(), (req, res) => {
-  // canEdit informa ao front se deve mostrar os controles de edição.
-  const canEdit = !EDITORS.length || EDITORS.includes(req.user.email)
-  res.json({ queries: getCatalog(), engineLabels: ENGINE_LABELS, canEdit })
+// Catálogo de queries — a tela de SQL é área do power_user (view + edit).
+app.get('/api/queries', requireAuth({ minRole: 'power_user' }), (req, res) => {
+  // canEdit sempre true aqui (só power_user+ chega); mantido p/ compat do front.
+  res.json({ queries: getCatalog(), engineLabels: ENGINE_LABELS, canEdit: atLeast(req.user.role, 'power_user') })
 })
 
-app.put('/api/queries/:id', requireAuth({ editor: true }), (req, res) => {
+app.put('/api/queries/:id', requireAuth({ minRole: 'power_user' }), (req, res) => {
   const { id } = req.params
   if (!getQueryDef(id)) return res.status(404).json({ error: `Query desconhecida: ${id}` })
   const sql = req.body?.sql
@@ -179,11 +218,33 @@ app.put('/api/queries/:id', requireAuth({ editor: true }), (req, res) => {
   }
 })
 
-app.delete('/api/queries/:id', requireAuth({ editor: true }), (req, res) => {
+app.delete('/api/queries/:id', requireAuth({ minRole: 'power_user' }), (req, res) => {
   const { id } = req.params
   if (!getQueryDef(id)) return res.status(404).json({ error: `Query desconhecida: ${id}` })
   const removed = deleteOverride(id)
   res.json({ ok: true, id, removed })
+})
+
+// ─── Usuários e Acessos (admin) ────────────────────────────────
+// Lista/atribui/remove papéis. Entradas de env (bootstrap) são fixas (source
+// 'env') e não podem ser rebaixadas; as demais ficam em data/roles.json.
+app.get('/api/access/users', requireAuth({ minRole: 'admin' }), (_req, res) => {
+  res.json({ users: listRoles() })
+})
+
+app.put('/api/access/users/:email', requireAuth({ minRole: 'admin' }), (req, res) => {
+  const role = req.body?.role
+  try {
+    const effective = setRole(req.params.email, role)
+    res.json({ ok: true, email: String(req.params.email).toLowerCase(), role: effective })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.delete('/api/access/users/:email', requireAuth({ minRole: 'admin' }), (req, res) => {
+  const removed = deleteRole(req.params.email)
+  res.json({ ok: true, email: String(req.params.email).toLowerCase(), removed })
 })
 
 // ─── Pontuação sugerida (lift: ativos × cancelados, materializados) ──
@@ -306,6 +367,6 @@ app.get('/api/cancelled-clients', requireAuth(), (req, res) => {
 app.listen(PORT, () => {
   console.log(`ChurnIQ API ouvindo em :${PORT}`)
   console.log(`  domínio permitido: @${ALLOWED_DOMAIN}`)
-  console.log(`  editores: ${EDITORS.length ? EDITORS.join(', ') : '(qualquer conta do domínio)'}`)
+  console.log(`  papéis: ADMIN_EMAILS/POWER_USER_EMAILS (env) + data/roles.json (tela)`)
   console.log(`  overrides: ${OVERRIDES_PATH}`)
 })

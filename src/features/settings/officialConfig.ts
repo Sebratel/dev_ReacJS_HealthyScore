@@ -1,0 +1,66 @@
+// Sincronização da CONFIG OFICIAL (pesos + limiares) com o servidor.
+//   - Boot: baixa /api/config e hidrata o store (todos veem a mesma config).
+//   - Escrita: quando um ADMIN muda pesos, ou um POWER_USER+ muda limiares,
+//     grava de volta (debounced). O backend revalida o papel (não burlável).
+// Autoridade real do scoring é o servidor; isto mantém a UI e a oficial em dia.
+import { apiFetch } from '@/lib/apiClient'
+import { useAppStore } from '@/store/appStore'
+import { useAuthStore, hasRole } from '@/store/authStore'
+
+let ready = false      // só grava depois da hidratação inicial (evita eco)
+let started = false    // assina o store uma única vez
+let tCfg: ReturnType<typeof setTimeout> | undefined
+let tThr: ReturnType<typeof setTimeout> | undefined
+
+function collectConfigs() {
+  const s = useAppStore.getState()
+  return {
+    financial: s.financialConfig, commercial: s.commercialConfig, connection: s.connectionConfig,
+    network: s.networkConfig, field: s.fieldConfig, installation: s.installationConfig, relationship: s.relationshipConfig,
+  }
+}
+
+async function putJSON(path: string, body: unknown) {
+  try {
+    await apiFetch(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  } catch { /* silencioso — o backend é a autoridade; retenta no próximo save */ }
+}
+
+// Baixa a config oficial e hidrata o store. Silencioso: sem oficial ainda,
+// mantém defaults/local (o backend também cai no envio do cliente).
+export async function loadOfficialConfig(): Promise<void> {
+  try {
+    const res = await apiFetch('/api/config')
+    if (res.ok) {
+      const data = await res.json().catch(() => null)
+      if (data && (data.configs || data.thresholds)) {
+        useAppStore.getState().hydrateOfficial({ configs: data.configs || undefined, thresholds: data.thresholds || undefined })
+      }
+    }
+  } catch { /* offline — mantém local */ }
+  finally { ready = true }
+}
+
+// Liga a sincronização (idempotente). Chamar uma vez no boot autenticado.
+export function initOfficialConfigSync(): void {
+  if (started) return
+  started = true
+  loadOfficialConfig()
+  useAppStore.subscribe((s, prev) => {
+    if (!ready) return
+    const role = useAuthStore.getState().role
+    const cfgChanged =
+      s.financialConfig !== prev.financialConfig || s.commercialConfig !== prev.commercialConfig ||
+      s.connectionConfig !== prev.connectionConfig || s.networkConfig !== prev.networkConfig ||
+      s.fieldConfig !== prev.fieldConfig || s.installationConfig !== prev.installationConfig ||
+      s.relationshipConfig !== prev.relationshipConfig
+    if (cfgChanged && hasRole(role, 'admin')) {
+      clearTimeout(tCfg)
+      tCfg = setTimeout(() => putJSON('/api/config/configs', { configs: collectConfigs() }), 900)
+    }
+    if (s.healthThresholds !== prev.healthThresholds && hasRole(role, 'power_user')) {
+      clearTimeout(tThr)
+      tThr = setTimeout(() => putJSON('/api/config/thresholds', { thresholds: useAppStore.getState().healthThresholds }), 900)
+    }
+  })
+}

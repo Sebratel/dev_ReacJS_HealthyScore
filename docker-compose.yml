@@ -48,10 +48,20 @@ services:
       - churniq
     environment:
       API_PORT: 8787
-      # Domínio de e-mail permitido para acessar o catálogo.
+      # Domínio de e-mail permitido para acessar (todos @domínio = viewer).
       ALLOWED_DOMAIN: ${ALLOWED_DOMAIN:-sebratel.com.br}
-      # Allowlist (CSV) de quem pode EDITAR queries. Vazio → qualquer conta do domínio.
+      # ── Controle de acesso (RBAC) ──
+      # Admins SEMENTE (CSV) — sempre admin, não removíveis pela tela. Garante
+      # que sempre haja alguém pra abrir "Usuários e Acessos".
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      # Power users de bootstrap por env (CSV). Opcional — o resto é gerido na tela.
+      POWER_USER_EMAILS: ${POWER_USER_EMAILS:-}
+      # Legado: QUERY_EDITOR_EMAILS ainda conta como power_user (compat).
       QUERY_EDITOR_EMAILS: ${QUERY_EDITOR_EMAILS:-}
+      # Papéis geridos pela tela (volume compartilhado, persiste entre deploys).
+      ROLES_PATH: /app/data/roles.json
+      # Config oficial (pesos + limiares) — fonte única do scoring, no volume.
+      OFFICIAL_CONFIG_PATH: /app/data/official-config.json
       QUERY_OVERRIDES_PATH: /app/data/query-overrides.json
       # Base materializada (snapshot gerado pelo `etl`) que o backend carrega em
       # memória. A `api` NÃO acessa mais o banco — tudo vem do snapshot.

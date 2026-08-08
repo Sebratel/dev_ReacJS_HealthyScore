@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
-import { useAuthStore } from '@/store/authStore'
+import { useAuthStore, hasRole, type Role } from '@/store/authStore'
 
 const LoginPage = lazy(() => import('@/features/auth/LoginPage'))
 
@@ -43,6 +43,15 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Guard por papel (defesa em profundidade — a UI já esconde o acesso, mas isto
+// barra navegação direta pela URL). role null = /api/me ainda resolvendo → loader.
+function RequireRole({ min, children }: { min: Role; children: React.ReactNode }) {
+  const role = useAuthStore((s) => s.role)
+  if (role === null) return <PageLoader />
+  if (!hasRole(role, min)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 // Rota de login — já autenticado → vai para o dashboard
 function LoginRoute() {
   const user = useAuthStore((s) => s.user)
@@ -67,7 +76,7 @@ export const router = createBrowserRouter([
       { path: 'engine-relacionamento',  element: <PageSuspense><RelationshipEnginePage /></PageSuspense> },
       { path: 'perfis-cancelados',      element: <PageSuspense><CancellationProfilesPage /></PageSuspense> },
       { path: 'retiradas',              element: <PageSuspense><EquipmentWithdrawalPage /></PageSuspense> },
-      { path: 'configuracoes',          element: <PageSuspense><SettingsPage /></PageSuspense> },
+      { path: 'configuracoes',          element: <RequireRole min="power_user"><PageSuspense><SettingsPage /></PageSuspense></RequireRole> },
       // Rotas antigas removidas → redireciona
       { path: 'clientes',               element: <Navigate to="/" replace /> },
       { path: 'cliente360',             element: <Navigate to="/" replace /> },
