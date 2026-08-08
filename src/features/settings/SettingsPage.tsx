@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SlidersHorizontal, RotateCcw, Info, Database, Tag } from 'lucide-react'
+import { SlidersHorizontal, RotateCcw, Info, Database, Tag, ShieldCheck } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { HEALTH_COLORS, HEALTH_LABELS } from '@/components/ui/HealthGauge'
 import { useAppStore } from '@/store/appStore'
@@ -8,6 +8,8 @@ import { DEFAULT_HEALTH_THRESHOLDS } from '@/utils/health'
 import { cn } from '@/utils/cn'
 import { QueriesPanel } from './queries/QueriesPanel'
 import { IndicatorNamesTab } from './IndicatorNamesTab'
+import { AccessPanel } from './AccessPanel'
+import { useRole } from '@/features/auth/access'
 
 // Chaves editáveis (limite inferior de cada faixa), de cima para baixo.
 const EDITABLE: { key: keyof HealthThresholds; cls: keyof typeof HEALTH_COLORS }[] = [
@@ -35,27 +37,33 @@ function PreviewBar({ t }: { t: HealthThresholds }) {
   )
 }
 
-type Tab = 'health' | 'names' | 'queries'
+type Tab = 'health' | 'names' | 'queries' | 'access'
 
-const TABS: { key: Tab; label: string; icon: typeof SlidersHorizontal }[] = [
+const TABS: { key: Tab; label: string; icon: typeof SlidersHorizontal; adminOnly?: boolean }[] = [
   { key: 'health', label: 'Health Score', icon: SlidersHorizontal },
   { key: 'names', label: 'Nomenclaturas', icon: Tag },
   { key: 'queries', label: 'Queries do Sistema', icon: Database },
+  { key: 'access', label: 'Usuários e Acessos', icon: ShieldCheck, adminOnly: true },
 ]
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('health')
+  const { isAdmin } = useRole()
+  const tabs = TABS.filter((t) => !t.adminOnly || isAdmin)
+  // Se um não-admin cair na aba de acessos (ex.: estado antigo), volta pra health.
+  const active = tabs.some((t) => t.key === tab) ? tab : 'health'
+  const wide = active === 'queries' || active === 'access'
   return (
-    <div className={cn('space-y-5', tab === 'queries' ? 'max-w-5xl' : 'max-w-3xl')}>
+    <div className={cn('space-y-5', wide ? 'max-w-5xl' : 'max-w-3xl')}>
       {/* Seletor de abas */}
       <div className="inline-flex gap-1 rounded-xl border border-app-border bg-app-card p-1">
-        {TABS.map(({ key, label, icon: Icon }) => (
+        {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={cn(
               'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
-              tab === key ? 'bg-brand-blue/15 text-brand-blue' : 'text-gray-400 hover:text-gray-200',
+              active === key ? 'bg-brand-blue/15 text-brand-blue' : 'text-gray-400 hover:text-gray-200',
             )}
           >
             <Icon size={14} />
@@ -64,7 +72,10 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === 'health' ? <HealthThresholdsTab /> : tab === 'names' ? <IndicatorNamesTab /> : <QueriesPanel />}
+      {active === 'health' ? <HealthThresholdsTab />
+        : active === 'names' ? <IndicatorNamesTab />
+        : active === 'queries' ? <QueriesPanel />
+        : <AccessPanel />}
     </div>
   )
 }
@@ -159,8 +170,8 @@ function HealthThresholdsTab() {
             <Info size={13} className="text-brand-blue shrink-0 mt-0.5" />
             <p className="leading-relaxed">
               As faixas valem para todos os módulos, contadores, gráficos e alertas da IA — a reclassificação é
-              imediata. Os limites são validados automaticamente para nunca se sobreporem. Alterações são salvas neste
-              navegador.
+              imediata. Os limites são validados automaticamente para nunca se sobreporem. Alterações são salvas como
+              <strong> config oficial no servidor</strong> (valem para todos os usuários).
             </p>
           </div>
         </div>
