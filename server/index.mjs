@@ -22,6 +22,7 @@ import { runEngine, runDashboard, ENGINE_KEYS } from './engines.mjs'
 import { getClientHistory, getScoreHistoryStatus } from './scoreHistory.mjs'
 import { buildSuggestions, deriveLists } from '../src/features/cancellation-profiles/suggestionEngine.ts'
 import { resolveRole, atLeast, listRoles, setRole, deleteRole } from './roles.mjs'
+import { getOfficialConfig, setOfficialConfigs, setOfficialThresholds } from './officialConfig.mjs'
 
 const PORT = Number(process.env.API_PORT) || 8787
 const ALLOWED_DOMAIN = (process.env.ALLOWED_DOMAIN || 'sebratel.com.br').toLowerCase()
@@ -96,6 +97,31 @@ app.get('/api/me', requireAuth(), (req, res) => {
   res.json({ email: req.user.email, name: req.user.name, role: req.user.role })
 })
 
+// ─── Config oficial (pesos + limiares) ─────────────────────────
+// Leitura por todos (@domínio); escrita: pesos → admin, limiares → power_user+.
+app.get('/api/config', requireAuth(), (_req, res) => {
+  const o = getOfficialConfig()
+  res.json({ configs: o?.configs ?? null, thresholds: o?.thresholds ?? null, updatedAt: o?.updatedAt ?? null, updatedBy: o?.updatedBy ?? null })
+})
+
+app.put('/api/config/configs', requireAuth({ minRole: 'admin' }), (req, res) => {
+  try {
+    const saved = setOfficialConfigs(req.body?.configs, req.user.email)
+    res.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.put('/api/config/thresholds', requireAuth({ minRole: 'power_user' }), (req, res) => {
+  try {
+    const saved = setOfficialThresholds(req.body?.thresholds, req.user.email)
+    res.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
 // Status da base materializada (snapshot completo carregado em memória pelo
 // backend). Fundação dos endpoints paginados por engine.
 app.get('/api/dataset/status', requireAuth(), (_req, res) => {
@@ -119,8 +145,13 @@ app.post('/api/dashboard', requireAuth(), (req, res) => {
   if (!clients.length) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
   try {
     const b = req.body || {}
+    // Config OFICIAL do servidor manda; se ainda não gravada, cai no que o
+    // cliente enviou (compat — nada quebra antes de um admin publicar a oficial).
+    const official = getOfficialConfig()
     const result = runDashboard(clients, {
-      configs: b.configs, thresholds: b.thresholds, monthly: getDataset()?.monthly || [],
+      configs: official?.configs ?? b.configs,
+      thresholds: official?.thresholds ?? b.thresholds,
+      monthly: getDataset()?.monthly || [],
       name: b.name, contract: b.contract, city: b.city, topN: b.topN,
     })
     res.json({ ...result, meta: datasetStatus(), monthly: getDataset()?.monthly || [] })
@@ -139,10 +170,11 @@ app.post('/api/engine/:key', requireAuth(), (req, res) => {
   if (!clients.length) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
   try {
     const b = req.body || {}
+    const official = getOfficialConfig()
     const result = runEngine(key, {
       clients,
-      config: b.config,
-      thresholds: b.thresholds,
+      config: official?.configs?.[key] ?? b.config,
+      thresholds: official?.thresholds ?? b.thresholds,
       monthly: getDataset()?.monthly || [],
       page: b.page, pageSize: b.pageSize,
       name: b.name, contract: b.contract, city: b.city, classification: b.classification,

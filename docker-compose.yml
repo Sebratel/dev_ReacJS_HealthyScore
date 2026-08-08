@@ -60,6 +60,8 @@ services:
       QUERY_EDITOR_EMAILS: ${QUERY_EDITOR_EMAILS:-}
       # Papéis geridos pela tela (volume compartilhado, persiste entre deploys).
       ROLES_PATH: /app/data/roles.json
+      # Config oficial (pesos + limiares) — fonte única do scoring, no volume.
+      OFFICIAL_CONFIG_PATH: /app/data/official-config.json
       QUERY_OVERRIDES_PATH: /app/data/query-overrides.json
       # Base materializada (snapshot gerado pelo `etl`) que o backend carrega em
       # memória. A `api` NÃO acessa mais o banco — tudo vem do snapshot.

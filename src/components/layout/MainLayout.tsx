@@ -6,6 +6,7 @@ import { TopBar } from './TopBar'
 import { useAppStore } from '@/store/appStore'
 import { loadRealData, isRealDataLoaded } from '@/data/realClients'
 import { fetchMe } from '@/features/auth/access'
+import { initOfficialConfigSync } from '@/features/settings/officialConfig'
 import { cn } from '@/utils/cn'
 
 type LoadStatus = 'loading' | 'ready' | 'error'
@@ -50,8 +51,9 @@ export function MainLayout() {
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
 
-  // Resolve o papel do usuário (mostra/esconde controles). Fire-and-forget.
-  useEffect(() => { fetchMe() }, [])
+  // Resolve o papel do usuário (mostra/esconde controles) e sincroniza a config
+  // oficial (pesos + limiares) com o servidor. Fire-and-forget.
+  useEffect(() => { fetchMe(); initOfficialConfigSync() }, [])
 
   useEffect(() => {
     if (isRealDataLoaded()) { setStatus('ready'); return }

@@ -34,6 +34,11 @@ interface AppState {
   updateHealthThresholds: (patch: Partial<HealthThresholds>) => void
   resetHealthThresholds: () => void
 
+  // Hidrata a config OFICIAL vinda do servidor (pesos por engine + limiares).
+  // Substitui os valores locais pelos oficiais no boot; só aplica as partes
+  // presentes. É a fonte de verdade — o scoring do servidor usa a mesma.
+  hydrateOfficial: (official: { configs?: Record<string, unknown>; thresholds?: Partial<HealthThresholds> }) => void
+
   // ─── Configuração da Financial Engine (persistida) ───
   financialConfig: FinancialEngineConfig
   updateFinancialIndicator: (key: FinancialIndicatorKey, patch: Partial<FinancialIndicatorConfig>) => void
@@ -110,6 +115,21 @@ export const useAppStore = create<AppState>()(
           return { healthThresholds: { excellent, healthy, attention, high_risk } }
         }),
       resetHealthThresholds: () => set({ healthThresholds: { ...DEFAULT_HEALTH_THRESHOLDS } }),
+
+      hydrateOfficial: (official) =>
+        set(() => {
+          const c = (official.configs ?? {}) as Record<string, any>
+          const patch: Record<string, unknown> = {}
+          if (c.financial) patch.financialConfig = c.financial
+          if (c.commercial) patch.commercialConfig = c.commercial
+          if (c.connection) patch.connectionConfig = c.connection
+          if (c.network) patch.networkConfig = c.network
+          if (c.field) patch.fieldConfig = c.field
+          if (c.installation) patch.installationConfig = c.installation
+          if (c.relationship) patch.relationshipConfig = c.relationship
+          if (official.thresholds) patch.healthThresholds = { ...DEFAULT_HEALTH_THRESHOLDS, ...official.thresholds }
+          return patch
+        }),
 
       financialConfig: cloneDefaultFinancialConfig(),
       updateFinancialIndicator: (key, patch) =>
