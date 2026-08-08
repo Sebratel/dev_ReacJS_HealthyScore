@@ -13,7 +13,13 @@
 // com o ETL (scripts/queries/overrides.mjs).
 // ─────────────────────────────────────────────────────────────────────────
 import 'dotenv/config'
+import dns from 'node:dns'
 import express from 'express'
+
+// Node 18+ pode resolver AAAA (IPv6) primeiro. Se o container não tem egress
+// IPv6 (comum), o fetch() para googleapis.com falha — mesmo com IPv4 OK (wget
+// funciona) — e a validação do token do Google cai em 401. Preferir IPv4 evita.
+dns.setDefaultResultOrder('ipv4first')
 import { getCatalog, ENGINE_LABELS } from '../scripts/queries/index.mjs'
 import { writeOverride, deleteOverride, OVERRIDES_PATH } from '../scripts/queries/overrides.mjs'
 import { getQueryDef } from '../scripts/queries/registry.mjs'
