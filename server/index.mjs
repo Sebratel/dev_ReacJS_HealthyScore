@@ -53,12 +53,19 @@ const TOKEN_TTL_MS = 5 * 60 * 1000
 async function getUserFromToken(token) {
   const cached = tokenCache.get(token)
   if (cached && cached.exp > Date.now()) return cached.user
-  const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!r.ok) return null
-  const p = await r.json()
-  if (!p.email || p.email_verified === false) return null
+  let r
+  try {
+    r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  } catch (e) {
+    // Falha de REDE: o container não alcançou o googleapis.com (egress/DNS).
+    console.warn('[auth] falha de rede ao validar token no Google userinfo:', e.message)
+    return null
+  }
+  if (!r.ok) { console.warn(`[auth] Google userinfo respondeu ${r.status} (token inválido/expirado?)`); return null }
+  const p = await r.json().catch(() => ({}))
+  if (!p.email || p.email_verified === false) { console.warn('[auth] token sem e-mail verificado'); return null }
   const user = { email: String(p.email).toLowerCase(), name: p.name || p.email }
   tokenCache.set(token, { user, exp: Date.now() + TOKEN_TTL_MS })
   return user
