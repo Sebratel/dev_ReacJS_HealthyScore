@@ -3,7 +3,7 @@
 //   - Escrita: quando um ADMIN muda pesos, ou um POWER_USER+ muda limiares,
 //     grava de volta (debounced). O backend revalida o papel (não burlável).
 // Autoridade real do scoring é o servidor; isto mantém a UI e a oficial em dia.
-import { apiFetch } from '@/lib/apiClient'
+import { quietAuthedGet, quietAuthedPut } from '@/features/auth/access'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore, hasRole } from '@/store/authStore'
 
@@ -20,25 +20,17 @@ function collectConfigs() {
   }
 }
 
-async function putJSON(path: string, body: unknown) {
-  try {
-    await apiFetch(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  } catch { /* silencioso — o backend é a autoridade; retenta no próximo save */ }
-}
-
-// Baixa a config oficial e hidrata o store. Silencioso: sem oficial ainda,
-// mantém defaults/local (o backend também cai no envio do cliente).
+// Baixa a config oficial e hidrata o store. Silencioso (quiet get): sem oficial
+// ainda, mantém defaults/local (o backend também cai no envio do cliente).
 export async function loadOfficialConfig(): Promise<void> {
-  try {
-    const res = await apiFetch('/api/config')
-    if (res.ok) {
-      const data = await res.json().catch(() => null)
-      if (data && (data.configs || data.thresholds)) {
-        useAppStore.getState().hydrateOfficial({ configs: data.configs || undefined, thresholds: data.thresholds || undefined })
-      }
+  const res = await quietAuthedGet('/api/config')
+  if (res?.ok) {
+    const data = await res.json().catch(() => null)
+    if (data && (data.configs || data.thresholds)) {
+      useAppStore.getState().hydrateOfficial({ configs: data.configs || undefined, thresholds: data.thresholds || undefined })
     }
-  } catch { /* offline — mantém local */ }
-  finally { ready = true }
+  }
+  ready = true
 }
 
 // Liga a sincronização (idempotente). Chamar uma vez no boot autenticado.
@@ -56,11 +48,11 @@ export function initOfficialConfigSync(): void {
       s.relationshipConfig !== prev.relationshipConfig
     if (cfgChanged && hasRole(role, 'admin')) {
       clearTimeout(tCfg)
-      tCfg = setTimeout(() => putJSON('/api/config/configs', { configs: collectConfigs() }), 900)
+      tCfg = setTimeout(() => quietAuthedPut('/api/config/configs', { configs: collectConfigs() }), 900)
     }
     if (s.healthThresholds !== prev.healthThresholds && hasRole(role, 'power_user')) {
       clearTimeout(tThr)
-      tThr = setTimeout(() => putJSON('/api/config/thresholds', { thresholds: useAppStore.getState().healthThresholds }), 900)
+      tThr = setTimeout(() => quietAuthedPut('/api/config/thresholds', { thresholds: useAppStore.getState().healthThresholds }), 900)
     }
   })
 }
