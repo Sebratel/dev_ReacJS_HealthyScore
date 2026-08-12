@@ -94,6 +94,7 @@ try {
   // rankings/histograma e montamos um índice por CONTRATO (wdByContract) para
   // cruzar com os cancelados adiante (nível pessoa).
   const wdByContract = new Map() // contract_number -> { protocols, retrieved, visits, technicians:Set, lastDate }
+  const wdProtocols = []         // linhas cruas por protocolo (compactas) p/ o filtro por período no detalhe
   const withdrawals = (() => {
     const st = { cancelled: { total: 0, retrieved: 0 }, active: { total: 0, retrieved: 0 } }
     const techMap = new Map() // nome -> { protocols, retrieved, visits }
@@ -105,6 +106,15 @@ try {
       const v = Number(r.visits) || 0
       visitsSum += v
       if (got) retrieved++
+      // linha crua compacta p/ o detalhe: x=cancelado, r=retirado, v=visitas,
+      // t=técnico, d=data do desfecho (usada no filtro por período da tela).
+      wdProtocols.push({
+        x: r.is_cancelled ? 1 : 0,
+        r: got ? 1 : 0,
+        v,
+        t: (r.technician || '').trim(),
+        d: r.outcome_date ? new Date(r.outcome_date).toISOString().slice(0, 10) : null,
+      })
       const bucket = r.is_cancelled ? st.cancelled : st.active
       bucket.total++; if (got) bucket.retrieved++
       const name = (r.technician || '').trim() || '(sem técnico)'
@@ -438,8 +448,8 @@ try {
   // Cruza os protocolos de retirada (wdByContract) com a coorte de cancelados
   // (por contract_number). Enriquece cada cancelado com o status de retirada e
   // materializa: indicadores de recuperação de equipamento + lista de pessoas.
+  let wdPeopleFull = [] // lista completa (vai no detalhe servido sob demanda)
   {
-    const PEOPLE_CAP = 3000 // limite da lista embarcada no snapshot (leve)
     let withWithdrawal = 0, recovered = 0, notRecovered = 0, mrrAtRisk = 0, visitsSum = 0
     const people = []
     for (const c of cancelledClients) {
@@ -463,11 +473,13 @@ try {
         technicians: [...e.technicians], lastDate: e.lastDate,
       })
     }
-    // Mais recentes primeiro; cap para manter o payload leve (sem truncar em silêncio).
+    // Mais recentes primeiro. A lista COMPLETA vai no detalhe (servido sob
+    // demanda em /api/withdrawals) — o filtro por período recomputa no cliente.
     people.sort((a, b) => String(b.cancellationDate || '').localeCompare(String(a.cancellationDate || '')))
-    const peopleCapped = people.slice(0, PEOPLE_CAP)
-    if (people.length > PEOPLE_CAP) console.log(`Retiradas/Cancelados: lista de pessoas truncada em ${PEOPLE_CAP} de ${people.length}.`)
+    wdPeopleFull = people
 
+    // Agregados do período inteiro (default da tela antes de filtrar). window =
+    // janela da coorte de cancelados; cancelledTotal = denominador do "% com retirada".
     withdrawals.cancellation = {
       cancelledTotal: cancelledClients.length,
       withWithdrawal,
@@ -478,7 +490,8 @@ try {
       mrrAtRisk,
       window: { from: cancelledFrom, to: cancelledTo, months: CANCELLED_MONTHS },
     }
-    withdrawals.people = peopleCapped
+    // A lista de pessoas não vai mais no bloco leve (fica no detalhe).
+    withdrawals.people = []
     withdrawals.peopleTotal = people.length
     console.log(`Retiradas/Cancelados: ${withWithdrawal}/${cancelledClients.length} cancelados com retirada · ${recovered} recuperados · ${notRecovered} em risco (R$ ${mrrAtRisk.toLocaleString('pt-BR')}/mês).`)
   }
@@ -535,8 +548,11 @@ try {
       slots: distinctFromClients(clients, (c) => c.netSlot),
       pons: distinctFromClients(clients, (c) => c.netPon),
     },
-    // Retiradas de equipamento — KPIs/rankings/histograma (base-wide).
+    // Retiradas de equipamento — KPIs/rankings/histograma (base-wide, leve).
     withdrawals,
+    // Detalhe cru (protocolos + pessoas) p/ o filtro por período — pesado,
+    // excluído do /api/dataset/lists e servido sob demanda em /api/withdrawals.
+    withdrawalDetail: { protocols: wdProtocols, people: wdPeopleFull },
     clients: clientsOut,
     // Coorte de cancelados (materializada) + a janela coberta.
     cancelledClients,

@@ -148,8 +148,16 @@ app.get('/api/dataset/status', requireAuth(), (_req, res) => {
 app.get('/api/dataset/lists', (_req, res) => {
   const ds = getDataset()
   if (!ds) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
-  const { clients, cancelledClients, ...lists } = ds // exclui os arrays pesados
+  const { clients, cancelledClients, withdrawalDetail, ...lists } = ds // exclui os arrays pesados
   res.json(lists)
+})
+
+// Detalhe das Retiradas (protocolos crus + pessoas) — servido sob demanda pra
+// não pesar o boot. A tela de Retiradas usa pra filtrar por período no cliente.
+app.get('/api/withdrawals', requireAuth(), (_req, res) => {
+  const ds = getDataset()
+  if (!ds) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
+  res.json(ds.withdrawalDetail ?? { protocols: [], people: [] })
 })
 
 // Dashboard + IA — 7 engines + ranking combinado por cliente, no servidor.
