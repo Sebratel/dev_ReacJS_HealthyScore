@@ -185,7 +185,7 @@ export function scoreAllClients(clients, opts = {}) {
 // Substitui o cálculo client-side (useEngineSummaries + buildClientRiskRanking)
 // que hoje roda no navegador sobre a base inteira.
 export function runDashboard(clients, opts = {}) {
-  const { configs = {}, thresholds, monthly = [], name, contract, city, topN = 12 } = opts
+  const { configs = {}, thresholds, monthly = [], name, contract, city, classification, topN = 12 } = opts
   applyHealthThresholds(thresholds && typeof thresholds === 'object' ? thresholds : DEFAULT_HEALTH_THRESHOLDS)
 
   const summaries = []
@@ -250,13 +250,14 @@ export function runDashboard(clients, opts = {}) {
     massiveClients: clients.filter((c) => c.netMassiveCount > 0).length,
   }
 
-  // Filtros (nome/contrato/cidade) escopam a lista visível — não os KPIs.
+  // Filtros (nome/contrato/cidade/classificação) escopam a lista visível — não os KPIs.
   const nm = String(name || '').trim().toLowerCase()
   const ct = String(contract || '').trim().toLowerCase()
   let visible = ranking
   if (nm) visible = visible.filter((r) => r.customerName && r.customerName.toLowerCase().includes(nm))
   if (ct) visible = visible.filter((r) => String(r.customerId).toLowerCase().includes(ct) || String(r.contractNumber).toLowerCase().includes(ct))
   if (city) visible = visible.filter((r) => r.city === city)
+  if (classification) visible = visible.filter((r) => r.classification === classification)
   const top = visible.slice(0, topN)
 
   // Sinais brutos por cliente do topo (para a explicação de IA).

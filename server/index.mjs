@@ -174,7 +174,7 @@ app.post('/api/dashboard', requireAuth(), (req, res) => {
       configs: official?.configs ?? b.configs,
       thresholds: official?.thresholds ?? b.thresholds,
       monthly: getDataset()?.monthly || [],
-      name: b.name, contract: b.contract, city: b.city, topN: b.topN,
+      name: b.name, contract: b.contract, city: b.city, classification: b.classification, topN: b.topN,
     })
     res.json({ ...result, meta: datasetStatus(), monthly: getDataset()?.monthly || [] })
   } catch (e) {

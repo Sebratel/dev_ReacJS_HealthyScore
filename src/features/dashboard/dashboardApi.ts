@@ -63,6 +63,7 @@ export interface DashboardParams {
   name?: string
   contract?: string
   city?: string
+  classification?: string
   topN?: number
 }
 

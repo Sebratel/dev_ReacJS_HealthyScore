@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Activity, AlertTriangle, DollarSign, Users, Gauge as GaugeIcon, ChevronRight, Brain, Loader2, Lock, RefreshCw } from 'lucide-react'
+import { Activity, AlertTriangle, DollarSign, Users, Gauge as GaugeIcon, ChevronRight, Brain, Loader2, Lock, RefreshCw, ListFilter } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -12,6 +12,7 @@ import { fetchDashboard, ApiError, type DashboardResponse } from './dashboardApi
 import type { HealthClassification } from '@/types'
 import ScoreTimeline from '@/features/score-history/ScoreTimeline'
 import { ContractFilters, type ContractFilterState } from '@/components/ui/ContractFilters'
+import { WorstHealthModal } from './WorstHealthModal'
 
 const DIST_ORDER: HealthClassification[] = ['critical', 'high_risk', 'attention', 'healthy', 'excellent']
 const scoreColor = (v: number) => HEALTH_COLORS[scoreToHealthClass(v)]
@@ -84,6 +85,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiError | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [worstOpen, setWorstOpen] = useState(false)
 
   // Filtro de cliente/contrato/cidade — mesmo componente das demais telas.
   // Escopa a lista de "Maior Risco" (KPIs/resumos seguem globais). Nome/contrato
@@ -220,7 +222,12 @@ export default function DashboardPage() {
             title={hasFilter ? 'Clientes no filtro' : 'Clientes com Maior Risco'}
             subtitle={hasFilter ? `${rk.visibleTotal.toLocaleString('pt-BR')} cliente(s) · clique para ver o panorama` : 'Score combinado por cliente · clique para ver o panorama'}
             icon={<AlertTriangle size={14} />}
-            action={<button onClick={() => navigate('/ia')} className="text-[11px] text-brand-blue hover:text-brand-blueLight flex items-center gap-1"><Brain size={11} /> Análise de IA →</button>}
+            action={
+              <div className="flex items-center gap-3">
+                <button onClick={() => setWorstOpen(true)} className="text-[11px] text-brand-blue hover:text-brand-blueLight flex items-center gap-1"><ListFilter size={11} /> Ver todos / Exportar</button>
+                <button onClick={() => navigate('/ia')} className="text-[11px] text-brand-blue hover:text-brand-blueLight flex items-center gap-1"><Brain size={11} /> Análise de IA →</button>
+              </div>
+            }
           />
           <div className="divide-y divide-app-border">
             {rk.top.map((c, i) => <RiskRow key={c.customerId} c={c} rank={i + 1} />)}
@@ -236,6 +243,8 @@ export default function DashboardPage() {
       <p className="text-[10px] text-gray-500 text-center">
         {coverageLabelFromMeta(data.meta)} · pontuado no servidor · atualizado em {data.meta.generatedAt ? new Date(data.meta.generatedAt).toLocaleString('pt-BR') : '—'}
       </p>
+
+      <WorstHealthModal open={worstOpen} onClose={() => setWorstOpen(false)} cities={data.cities} />
     </div>
   )
 }
