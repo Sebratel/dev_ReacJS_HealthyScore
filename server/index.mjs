@@ -29,6 +29,7 @@ import { getClientHistory, getScoreHistoryStatus } from './scoreHistory.mjs'
 import { buildSuggestions, deriveLists } from '../src/features/cancellation-profiles/suggestionEngine.ts'
 import { resolveRole, atLeast, listRoles, setRole, deleteRole } from './roles.mjs'
 import { getOfficialConfig, setOfficialConfigs, setOfficialThresholds } from './officialConfig.mjs'
+import { runChurnForecast } from './churnForecast.mjs'
 
 const PORT = Number(process.env.API_PORT) || 8787
 const ALLOWED_DOMAIN = (process.env.ALLOWED_DOMAIN || 'sebratel.com.br').toLowerCase()
@@ -158,6 +159,26 @@ app.get('/api/withdrawals', requireAuth(), (_req, res) => {
   const ds = getDataset()
   if (!ds) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
   res.json(ds.withdrawalDetail ?? { protocols: [], people: [] })
+})
+
+// Previsão de prazo de cancelamento — lista rankeada por urgência (janela pra
+// frente estimada da sobrevivência dos cancelados por perfil). Sob demanda.
+// POST /api/churn-forecast { configs?, thresholds?, topN?, city?, classification? }
+app.post('/api/churn-forecast', requireAuth(), (req, res) => {
+  const active = getClients()
+  if (!active.length) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
+  const cancelled = getCancelledClients()
+  if (!cancelled.length) return res.status(503).json({ error: 'Coorte de cancelados ainda não materializada — a previsão depende dela.' })
+  try {
+    const b = req.body || {}
+    const result = runChurnForecast(active, cancelled, {
+      configs: b.configs, thresholds: b.thresholds, monthly: getDataset()?.monthly || [],
+      topN: b.topN, city: b.city, classification: b.classification,
+    })
+    res.json({ ...result, meta: datasetStatus() })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
 })
 
 // Dashboard + IA — 7 engines + ranking combinado por cliente, no servidor.
