@@ -16,6 +16,14 @@ export interface ForecastRow {
   windowP75Days: number
   sampleN: number
   revenueRisk: number
+  signals: {
+    overdue: number
+    relCancelThreats: number
+    renegotiations: number
+    netMassiveCount: number
+    slaLateCount: number
+    trustReleases: number
+  }
 }
 export interface BandStat { count: number; p25: number; p50: number; p75: number }
 export interface ForecastResult {

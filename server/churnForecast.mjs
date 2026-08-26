@@ -83,6 +83,15 @@ export function computeForecast({ scoredActive, scoredCancelled, activeById, can
       overallHealth: s.overall, classification: s.classification,
       tenureDays: tenure, windowMedianDays: median, windowP25Days: p25, windowP75Days: p75,
       sampleN, revenueRisk: ((100 - s.overall) / 100) * (c.monthlyValue || 0),
+      // Sinais crus — para a narrativa citar "o que mais pesa" neste cliente.
+      signals: {
+        overdue: (c.lateInvoices || 0) + (c.overdueInvoices || 0),
+        relCancelThreats: c.relCancelThreats || 0,
+        renegotiations: c.renegotiations || 0,
+        netMassiveCount: c.netMassiveCount || 0,
+        slaLateCount: c.slaLateCount || 0,
+        trustReleases: c.trustReleases || 0,
+      },
     })
   }
   // Urgência: menor janela primeiro; empate → pior health; empate → maior MRR.

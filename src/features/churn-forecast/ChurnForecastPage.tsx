@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlarmClock, Search, Download, Loader2, AlertTriangle, RefreshCw, Info,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Sparkles,
 } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { KpiCard } from '@/components/ui/KpiCard'
@@ -32,13 +32,47 @@ const fmtWindow = (d: number) => (d <= 0 ? 'iminente' : d < 60 ? `~${d} dias` : 
 const fmtTenure = (d: number) => (d >= 365 ? `${(d / 365).toFixed(1)} anos` : `${Math.round(d / 30)} meses`)
 const confLabel = (n: number) => (n < 20 ? 'baixa' : n < 100 ? 'média' : 'alta')
 
-// Explicação determinística (grounded) — o "porquê" do prazo, sem inventar número.
-function rationale(r: ForecastRow): string {
+// Efeito "IA digitando" — mesmo padrão da tela de IA Preditiva. Não é LLM: é
+// narrativa determinística ancorada nos dados, com cara de IA.
+function TypewriterText({ text, speed = 8 }: { text: string; speed?: number }) {
+  const [shown, setShown] = useState('')
+  const [done, setDone] = useState(false)
+  useEffect(() => {
+    setShown(''); setDone(false)
+    let i = 0
+    const id = setInterval(() => {
+      if (i < text.length) { setShown(text.slice(0, i + 1)); i++ }
+      else { setDone(true); clearInterval(id) }
+    }, speed)
+    return () => clearInterval(id)
+  }, [text, speed])
+  return <span>{shown}{!done && <span className="inline-block w-0.5 h-3.5 bg-brand-blue ml-0.5 align-middle animate-pulse" />}</span>
+}
+
+// Narrativa (grounded): enquadramento, sinais que mais pesam, janela + confiança
+// e uma recomendação de ação. O número vem SEMPRE da estatística.
+function narrative(r: ForecastRow): string {
   const meses = Math.round(r.tenureDays / 30)
-  return `Enquadrado em ${HEALTH_LABELS[r.classification as HealthClassification]} (health ${r.overallHealth}). `
-    + `Entre os cancelados com esse perfil que sobreviveram além de ${meses} meses, o cancelamento veio em mais ${fmtWindow(r.windowMedianDays)} `
-    + `(faixa ${r.windowP25Days}–${r.windowP75Days} dias). Estimativa baseada em ${r.sampleN} cancelados semelhantes (confiança ${confLabel(r.sampleN)}). `
-    + `É uma faixa de risco, não uma data garantida.`
+  const s = r.signals
+  const drivers: string[] = []
+  if (s.relCancelThreats > 0) drivers.push(`${s.relCancelThreats} ameaça(s) de cancelamento`)
+  if (s.overdue > 0) drivers.push(`${s.overdue} fatura(s) em atraso/aberto`)
+  if (s.renegotiations > 0) drivers.push(`${s.renegotiations} renegociação(ões)`)
+  if (s.slaLateCount > 0) drivers.push(`${s.slaLateCount} atendimento(s) com SLA estourado`)
+  if (s.netMassiveCount > 0) drivers.push(`${s.netMassiveCount} massiva(s) de rede`)
+  if (s.trustReleases > 0) drivers.push(`${s.trustReleases} desbloqueio(s) por confiança`)
+  const driverTxt = drivers.length
+    ? `Os sinais que mais pesam: ${drivers.slice(0, 4).join(', ')}. `
+    : 'Sem sinais críticos isolados — o risco vem do conjunto do perfil. '
+  const urg = r.windowMedianDays <= 30 ? 'A janela é curta — priorize o contato imediato.'
+    : r.windowMedianDays <= 90 ? 'Há espaço para uma ação de retenção no curto prazo.'
+    : 'O risco existe, mas com prazo mais folgado para agir.'
+  return `${r.customerName} está classificado como ${HEALTH_LABELS[r.classification as HealthClassification]} `
+    + `(health ${r.overallHealth}) e é cliente há ${meses} meses. ${driverTxt}`
+    + `Comparando com cancelados de perfil semelhante que passaram desse tempo de contrato, a estimativa é de `
+    + `cancelamento em ${fmtWindow(r.windowMedianDays)} (faixa ${r.windowP25Days}–${r.windowP75Days} dias), `
+    + `com confiança ${confLabel(r.sampleN)} (${r.sampleN} casos). ${urg} `
+    + `É uma faixa de risco estatística, não uma data garantida.`
 }
 
 const CSV_COLS: { label: string; value: (r: ForecastRow) => string | number }[] = [
@@ -96,9 +130,9 @@ function Row({ r, rank }: { r: ForecastRow; rank: number }) {
       {open && (
         <tr className="border-b border-app-border bg-app-surface/40">
           <td colSpan={8} className="px-5 py-3">
-            <div className="flex items-start gap-2 text-[12px] text-gray-300 leading-relaxed">
-              <Info size={14} className="mt-0.5 shrink-0 text-brand-blue" />
-              <p>{rationale(r)}</p>
+            <div className="flex items-start gap-2 rounded-lg bg-brand-blue/5 border border-brand-blue/15 px-3 py-2.5">
+              <Sparkles size={14} className="mt-0.5 shrink-0 text-brand-blue" />
+              <p className="text-[12px] text-gray-300 leading-relaxed"><TypewriterText text={narrative(r)} /></p>
             </div>
           </td>
         </tr>
