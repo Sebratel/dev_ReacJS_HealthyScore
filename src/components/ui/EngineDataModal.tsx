@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X, Table2, Search, Download, Database } from 'lucide-react'
+import { X, Table2, Search, Download, Database, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 export interface DataColumn {
@@ -23,6 +23,12 @@ interface Props {
   columns: DataColumn[]
   rows: any[]
   aggregates?: AggregateGroup[]
+  // Seletor de quantidade (opcional): quantas linhas o backend traz. Ao mudar,
+  // o pai re-busca e passa `rows` novo. `loading` mostra o spinner nesse meio.
+  qty?: number
+  qtyOptions?: number[]
+  onQtyChange?: (n: number) => void
+  loading?: boolean
 }
 
 const PAGE_SIZE = 50
@@ -37,7 +43,7 @@ function toCsv(columns: DataColumn[], rows: any[]): string {
   return `${header}\n${body}`
 }
 
-export function EngineDataModal({ open, onClose, title, subtitle, columns, rows, aggregates }: Props) {
+export function EngineDataModal({ open, onClose, title, subtitle, columns, rows, aggregates, qty, qtyOptions, onQtyChange, loading }: Props) {
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
 
@@ -48,8 +54,8 @@ export function EngineDataModal({ open, onClose, title, subtitle, columns, rows,
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  // Reseta a paginação ao reabrir ou ao buscar
-  useEffect(() => { setPage(0) }, [query, open])
+  // Reseta a paginação ao reabrir, ao buscar ou ao trocar a quantidade
+  useEffect(() => { setPage(0) }, [query, open, qty])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -96,16 +102,31 @@ export function EngineDataModal({ open, onClose, title, subtitle, columns, rows,
 
         {/* Toolbar */}
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-app-border shrink-0 flex-wrap">
-          <div className="relative flex items-center">
-            <Search size={13} className="absolute left-2.5 text-gray-500 pointer-events-none" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar nas linhas..."
-              className="pl-8 pr-3 h-8 w-64 text-xs bg-app-card border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50 transition-all"
-            />
+          <div className="flex items-center gap-2 flex-wrap">
+            {onQtyChange && (
+              <label className="flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wider text-gray-500">Quantidade</span>
+                <select
+                  value={qty}
+                  onChange={(e) => onQtyChange(Number(e.target.value))}
+                  className="h-8 px-2 text-xs bg-app-card border border-app-border rounded-lg text-gray-200 focus:outline-none focus:border-brand-blue/50"
+                >
+                  {(qtyOptions ?? [50, 100, 200, 500, 1000, 2000]).map((n) => <option key={n} value={n}>{n} linhas</option>)}
+                </select>
+              </label>
+            )}
+            <div className="relative flex items-center">
+              <Search size={13} className="absolute left-2.5 text-gray-500 pointer-events-none" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar nas linhas..."
+                className="pl-8 pr-3 h-8 w-64 text-xs bg-app-card border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50 transition-all"
+              />
+            </div>
           </div>
           <div className="flex items-center gap-3">
+            {loading && <Loader2 size={13} className="animate-spin text-gray-500" />}
             <span className="text-[11px] text-gray-500 font-mono">{filtered.length.toLocaleString('pt-BR')} linhas</span>
             <button
               onClick={exportCsv}

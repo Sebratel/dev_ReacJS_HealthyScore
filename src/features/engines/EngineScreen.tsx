@@ -181,20 +181,21 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
   ]
   const colSpan = 6 + props.columns.length // #, cliente, health, churn, ...cols, classif, chevron
 
-  // "Ver dados": busca até 200 (maior risco) do backend.
+  // "Ver dados": busca os N de maior risco do backend (N escolhido no modal).
   const [dataRows, setDataRows] = useState<S[]>([])
   const [dataAgg, setDataAgg] = useState<Agg | null>(null)
   const [dataLoading, setDataLoading] = useState(false)
+  const [dataQty, setDataQty] = useState(200)
   useEffect(() => {
     if (!dataOpen) return
     let alive = true
     setDataLoading(true)
-    fetchEngine<Agg, S>(engineKey, { config, thresholds, page: 0, pageSize: 200, name: filters.name, contract: filters.contract, city: filters.city })
+    fetchEngine<Agg, S>(engineKey, { config, thresholds, page: 0, pageSize: dataQty, name: filters.name, contract: filters.contract, city: filters.city })
       .then((res) => { if (alive) { setDataRows(res.scores); setDataAgg(res.aggregates) } })
       .catch(() => { if (alive) { setDataRows([]); setDataAgg(null) } })
       .finally(() => { if (alive) setDataLoading(false) })
     return () => { alive = false }
-  }, [dataOpen, engineKey, config, thresholds, filters.name, filters.contract, filters.city])
+  }, [dataOpen, engineKey, config, thresholds, filters.name, filters.contract, filters.city, dataQty])
 
   const aggregates = useMemo(
     () => (props.buildAggregates && dataAgg ? props.buildAggregates(dataRows, dataAgg) : undefined),
@@ -341,10 +342,14 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
         open={dataOpen}
         onClose={() => setDataOpen(false)}
         title={props.dataTitle}
-        subtitle={dataLoading ? 'Carregando…' : `${dataRows.length.toLocaleString('pt-BR')} clientes de maior risco (amostra) · pontuados no servidor`}
+        subtitle={dataLoading ? 'Carregando…' : `${dataRows.length.toLocaleString('pt-BR')} clientes de maior risco · pontuados no servidor`}
         columns={props.dataColumns}
         rows={dataRows}
         aggregates={aggregates}
+        qty={dataQty}
+        qtyOptions={[50, 100, 200, 500, 1000, 2000]}
+        onQtyChange={setDataQty}
+        loading={dataLoading}
       />
     </div>
   )

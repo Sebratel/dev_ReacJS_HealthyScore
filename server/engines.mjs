@@ -135,7 +135,9 @@ export function runEngine(key, opts = {}) {
   })
 
   const total = scores.length
-  const pageSize = Math.min(200, Math.max(1, Number(opts.pageSize) || 25))
+  // Teto 2000 — a paginação normal usa 10; o "Ver dados" pede lotes maiores
+  // (seletor de quantidade). 2000 cobre o export sem estourar o payload.
+  const pageSize = Math.min(2000, Math.max(1, Number(opts.pageSize) || 25))
   const page = Math.max(0, Number(opts.page) || 0)
   const pageScores = scores.slice(page * pageSize, page * pageSize + pageSize)
 
