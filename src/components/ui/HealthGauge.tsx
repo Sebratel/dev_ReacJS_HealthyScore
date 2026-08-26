@@ -69,14 +69,15 @@ export function HealthGauge({ score, size = 160, showLabel = true, strokeWidth: 
         />
       </g>
 
-      {/* Score number */}
+      {/* Score number — usa a cor da classificação (visível no tema claro e no
+          escuro; antes era branco fixo → sumia no fundo claro). */}
       <text
         x={cx} y={cy - (showLabel ? size * 0.06 : 0)}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill="white"
+        fill={color}
         fontSize={size * 0.22}
-        fontWeight="700"
+        fontWeight="800"
         fontFamily="Inter, sans-serif"
         letterSpacing="-1"
       >
