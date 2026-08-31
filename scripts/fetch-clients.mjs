@@ -233,27 +233,41 @@ try {
   const onuByContract = new Map()
   const onuByClient = new Map()
   if (process.env.DB_AUTOISP_HOST) {
-    try {
+    // AutoISP é opcional e falhava em SILÊNCIO: se a query falhasse (ex.: banco
+    // AutoISP ocupado/lento na janela da madrugada → timeout), o ETL seguia sem
+    // as quedas e ninguém era avisado. Como o re-run manual costuma funcionar (a
+    // carga já passou), aqui a gente RETENTA com backoff antes de desistir — e,
+    // se desistir, avisa ALTO (não some calado). Nº de tentativas: AUTOISP_RETRIES.
+    const ATTEMPTS = Math.max(1, Number(process.env.AUTOISP_RETRIES) || 3)
+    let onuRes = null
+    for (let attempt = 1; attempt <= ATTEMPTS && !onuRes; attempt++) {
       const autoisp = makeAutoIspPool()
       try {
-        const res = await autoisp.query(Q_AUTOISP_ONU_STATUS, [FROM_DATE])
-        for (const r of res.rows) {
-          const status = (r.new_status || '').trim()
-          const qty = Number(r.qty) || 0
-          if (!status || !qty) continue
-          if (r.contract_id != null) {
-            const m = onuByContract.get(String(r.contract_id)) || {}
-            m[status] = (m[status] || 0) + qty
-            onuByContract.set(String(r.contract_id), m)
-          }
-          if (r.client_id != null) {
-            const m = onuByClient.get(String(r.client_id)) || {}
-            m[status] = (m[status] || 0) + qty
-            onuByClient.set(String(r.client_id), m)
-          }
-        }
+        onuRes = await autoisp.query(Q_AUTOISP_ONU_STATUS, [FROM_DATE])
+      } catch (e) {
+        console.warn(`ONU (AutoISP): tentativa ${attempt}/${ATTEMPTS} falhou — ${e.message}`)
+        if (attempt < ATTEMPTS) await new Promise((r) => setTimeout(r, attempt * 15000)) // backoff 15s, 30s…
       } finally { await autoisp.end() }
-    } catch (e) { console.warn('ONU (AutoISP): falha —', e.message) }
+    }
+    if (onuRes) {
+      for (const r of onuRes.rows) {
+        const status = (r.new_status || '').trim()
+        const qty = Number(r.qty) || 0
+        if (!status || !qty) continue
+        if (r.contract_id != null) {
+          const m = onuByContract.get(String(r.contract_id)) || {}
+          m[status] = (m[status] || 0) + qty
+          onuByContract.set(String(r.contract_id), m)
+        }
+        if (r.client_id != null) {
+          const m = onuByClient.get(String(r.client_id)) || {}
+          m[status] = (m[status] || 0) + qty
+          onuByClient.set(String(r.client_id), m)
+        }
+      }
+    } else {
+      console.warn(`⚠️  ONU (AutoISP): FALHOU em ${ATTEMPTS} tentativa(s) — o snapshot vai SEM as quedas de PPPoE. Provável carga/janela do banco AutoISP no horário do ETL (ETL_HOUR=${process.env.ETL_HOUR ?? '3'}).`)
+    }
   } else {
     console.log('ONU (AutoISP): DB_AUTOISP_* ausentes no .env — sinal pulado.')
   }
