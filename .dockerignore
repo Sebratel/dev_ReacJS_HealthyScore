@@ -22,5 +22,8 @@ npm-debug.log*
 .DS_Store
 .vscode
 
-# OBS: public/realClients.data NÃO é ignorado de propósito — é o snapshot
-# de dados servido pelo app.
+# OBS: public/realClients.data não é ignorado aqui de propósito — se existir
+# na máquina que builda, entra na imagem. Mas o app NÃO o consome: o front
+# carrega tudo de /api/dataset/lists, e a api lê o snapshot do volume. O
+# arquivo deixou de ser versionado (ver .gitignore), então num checkout limpo
+# ele simplesmente não existe e nada quebra.
