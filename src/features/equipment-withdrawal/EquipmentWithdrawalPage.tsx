@@ -11,6 +11,9 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { cn, formatCurrency } from '@/utils/cn'
 import { realWithdrawals, coverageLabel, type RealWithdrawalTech, type RealWithdrawalPerson } from '@/data/realClients'
 import { fetchWithdrawalDetail, ApiError, type WithdrawalProtocol, type WithdrawalDetail } from './withdrawalsApi'
+import { useChartTokens } from '@/hooks/useChartTokens'
+import { softenColor } from '@/utils/healthColors'
+import type { ChartTokens } from '@/utils/chartTokens'
 
 const fmtDateBR = (iso: string | null) => {
   if (!iso) return '—'
@@ -20,14 +23,12 @@ const fmtDateBR = (iso: string | null) => {
 const PEOPLE_PAGE = 12
 const MIN_FOR_RATE = 5
 
-function rateColor(rate: number): string {
-  if (rate >= 0.7) return '#10b981'
-  if (rate >= 0.4) return '#f59e0b'
-  return '#ef4444'
+function rateColor(t: ChartTokens, rate: number): string {
+  if (rate >= 0.7) return t.riskLow
+  if (rate >= 0.4) return t.riskMedium
+  return t.riskCritical
 }
 const pct = (v: number) => `${Math.round(v * 100)}%`
-const RETRIEVED = '#10b981'
-const NOT_RETRIEVED = '#ef4444'
 
 // ─── Agregação por período (recomputada no cliente a partir dos protocolos) ──
 interface Agg {
@@ -85,22 +86,23 @@ const inRange = (d: string | null, from: string, to: string) => !!d && (!from ||
 
 // ─── Tooltips ──────────────────────────────────────────────────
 const TechTooltip = ({ active, payload }: any) => {
+  const tokens = useChartTokens()
   if (!active || !payload?.length) return null
   const t: RealWithdrawalTech = payload[0].payload
   return (
-    <div className="bg-app-surface border border-app-border rounded-lg p-2.5 text-xs shadow-xl min-w-[180px]">
-      <p className="text-gray-200 font-semibold mb-1 truncate">{t.value}</p>
-      <p className="text-gray-400">Protocolos: <strong className="text-gray-200">{t.protocols}</strong></p>
-      <p className="text-gray-400">Retirados: <strong style={{ color: rateColor(t.successRate) }}>{t.retrieved} ({pct(t.successRate)})</strong></p>
-      <p className="text-gray-400">Visitas/protocolo: <strong className="text-gray-200">{t.avgVisits.toFixed(1)}</strong></p>
+    <div className="bg-surface-container-low border border-outline rounded-lg p-2.5 text-xs shadow-xl min-w-[180px]">
+      <p className="text-on-surface font-semibold mb-1 truncate">{t.value}</p>
+      <p className="text-on-surface/70">Protocolos: <strong className="text-on-surface">{t.protocols}</strong></p>
+      <p className="text-on-surface/70">Retirados: <strong style={{ color: rateColor(tokens, t.successRate) }}>{t.retrieved} ({pct(t.successRate)})</strong></p>
+      <p className="text-on-surface/70">Visitas/protocolo: <strong className="text-on-surface">{t.avgVisits.toFixed(1)}</strong></p>
     </div>
   )
 }
 const StatusTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-app-surface border border-app-border rounded-lg p-2.5 text-xs shadow-xl">
-      <p className="text-gray-300 font-medium mb-1">{label}</p>
+    <div className="bg-surface-container-low border border-outline rounded-lg p-2.5 text-xs shadow-xl">
+      <p className="text-on-surface/85 font-medium mb-1">{label}</p>
       {payload.map((p: any) => (<p key={p.dataKey} style={{ color: p.color }}>{p.name}: <strong>{p.value}</strong></p>))}
     </div>
   )
@@ -139,8 +141,8 @@ function CancelledWithdrawalSection({ people, cancelledTotal, windowLabel }: { p
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <UserMinus size={14} className="text-risk-critical" />
-        <h2 className="text-sm font-bold text-white">Retiradas × Cancelamentos</h2>
-        {windowLabel && <span className="text-[11px] text-gray-500">coorte de cancelados: {windowLabel}</span>}
+        <h2 className="text-sm font-bold text-on-surface">Retiradas × Cancelamentos</h2>
+        {windowLabel && <span className="text-[11px] text-on-surface-variant">coorte de cancelados: {windowLabel}</span>}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -157,15 +159,15 @@ function CancelledWithdrawalSection({ people, cancelledTotal, windowLabel }: { p
           icon={<PackageOpen size={14} />}
           action={
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-app-surface border border-app-border">
+              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface-container-low border border-outline">
                 {([['all', 'Todos'], ['yes', 'Recuperado'], ['no', 'Em aberto']] as [RecoveredFilter, string][]).map(([k, lbl]) => (
-                  <button key={k} onClick={() => setFilter(k)} className={cn('px-2.5 py-1 rounded-md text-[11px] font-medium transition-all', filter === k ? 'bg-gradient-brand text-white shadow-glow' : 'text-gray-400 hover:text-gray-200')}>{lbl}</button>
+                  <button key={k} onClick={() => setFilter(k)} className={cn('px-2.5 py-1 rounded-md text-[11px] font-medium transition-all', filter === k ? 'bg-gradient-brand text-on-primary shadow-glow' : 'text-on-surface/70 hover:text-on-surface')}>{lbl}</button>
                 ))}
               </div>
               <div className="relative flex items-center">
-                <Search size={12} className="absolute left-2.5 text-gray-500 pointer-events-none" />
+                <Search size={12} className="absolute left-2.5 text-on-surface-variant pointer-events-none" />
                 <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nome / contrato"
-                  className="pl-7 pr-2.5 h-8 w-44 text-xs bg-app-surface border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50 transition-all" />
+                  className="pl-7 pr-2.5 h-8 w-44 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface/85 placeholder-on-surface-variant/90 focus:outline-none focus:border-primary/50 transition-all" />
               </div>
             </div>
           }
@@ -173,24 +175,24 @@ function CancelledWithdrawalSection({ people, cancelledTotal, windowLabel }: { p
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-app-border bg-app-surface/50">
+              <tr className="border-b border-outline bg-surface-container-low/50">
                 {['Cliente', 'Cancelado em', 'Motivo', 'Mensalidade', 'Visitas', 'Motoboy', 'Equipamento'].map((h) => (
-                  <th key={h} className={cn('px-4 py-2.5 text-left text-[10px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap', (h === 'Mensalidade' || h === 'Visitas') && 'text-right')}>{h}</th>
+                  <th key={h} className={cn('px-4 py-2.5 text-left text-[10px] text-on-surface-variant uppercase tracking-wider font-medium whitespace-nowrap', (h === 'Mensalidade' || h === 'Visitas') && 'text-right')}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {pageRows.map((p) => (
-                <tr key={`${p.contractNumber}-${p.name}`} className="border-b border-app-border hover:bg-app-surface/70 transition-colors">
+                <tr key={`${p.contractNumber}-${p.name}`} className="border-b border-outline hover:bg-surface-container-low/70 transition-colors">
                   <td className="px-4 py-2.5">
-                    <p className="text-xs font-medium text-gray-200 truncate max-w-[200px]">{p.name}</p>
-                    <p className="text-[10px] text-gray-500 font-mono">#{p.contractNumber} · {p.city}</p>
+                    <p className="text-xs font-medium text-on-surface truncate max-w-[200px]">{p.name}</p>
+                    <p className="text-[10px] text-on-surface-variant font-mono">#{p.contractNumber} · {p.city}</p>
                   </td>
                   <td className="px-4 py-2.5 text-xs font-mono text-risk-critical">{fmtDateBR(p.cancellationDate)}</td>
-                  <td className="px-4 py-2.5 text-[11px] text-gray-400 truncate max-w-[200px]" title={p.cancellationMotive || ''}>{p.cancellationMotive || '—'}</td>
-                  <td className="px-4 py-2.5 text-xs font-mono text-gray-300 text-right">{formatCurrency(p.monthlyValue)}</td>
-                  <td className="px-4 py-2.5 text-xs font-mono text-gray-400 text-right">{p.visits}{p.protocols > 1 ? ` · ${p.protocols}p` : ''}</td>
-                  <td className="px-4 py-2.5 text-[11px] text-gray-400 truncate max-w-[160px]" title={p.technicians.join(', ')}>{p.technicians[0] || '—'}{p.technicians.length > 1 ? ` +${p.technicians.length - 1}` : ''}</td>
+                  <td className="px-4 py-2.5 text-[11px] text-on-surface/70 truncate max-w-[200px]" title={p.cancellationMotive || ''}>{p.cancellationMotive || '—'}</td>
+                  <td className="px-4 py-2.5 text-xs font-mono text-on-surface/85 text-right">{formatCurrency(p.monthlyValue)}</td>
+                  <td className="px-4 py-2.5 text-xs font-mono text-on-surface/70 text-right">{p.visits}{p.protocols > 1 ? ` · ${p.protocols}p` : ''}</td>
+                  <td className="px-4 py-2.5 text-[11px] text-on-surface/70 truncate max-w-[160px]" title={p.technicians.join(', ')}>{p.technicians[0] || '—'}{p.technicians.length > 1 ? ` +${p.technicians.length - 1}` : ''}</td>
                   <td className="px-4 py-2.5">
                     {p.recovered
                       ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full text-risk-low bg-risk-low/10"><PackageCheck size={11} /> Recuperado</span>
@@ -199,19 +201,19 @@ function CancelledWithdrawalSection({ people, cancelledTotal, windowLabel }: { p
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-xs text-gray-500">Nenhum cliente nesse período/filtro.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-xs text-on-surface-variant">Nenhum cliente nesse período/filtro.</td></tr>
               )}
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between px-5 py-3 border-t border-app-border">
-          <span className="text-[10px] text-gray-500">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-outline">
+          <span className="text-[10px] text-on-surface-variant">
             {rows.length > 0 ? `${(page * PEOPLE_PAGE + 1).toLocaleString('pt-BR')}–${Math.min((page + 1) * PEOPLE_PAGE, rows.length).toLocaleString('pt-BR')} de ${rows.length.toLocaleString('pt-BR')}` : '—'}
           </span>
           <div className="flex gap-1.5 items-center">
-            <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="text-[10px] px-2.5 py-1 rounded border border-app-border text-gray-400 disabled:opacity-30 hover:border-app-borderLight transition-all">Anterior</button>
-            <span className="text-[10px] text-gray-500 px-1 font-mono">{page + 1}/{totalPages}</span>
-            <button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} className="text-[10px] px-2.5 py-1 rounded border border-app-border text-gray-400 disabled:opacity-30 hover:border-app-borderLight transition-all">Próxima</button>
+            <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="text-[10px] px-2.5 py-1 rounded border border-outline text-on-surface/70 disabled:opacity-30 hover:border-outline-strong transition-all">Anterior</button>
+            <span className="text-[10px] text-on-surface-variant px-1 font-mono">{page + 1}/{totalPages}</span>
+            <button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} className="text-[10px] px-2.5 py-1 rounded border border-outline text-on-surface/70 disabled:opacity-30 hover:border-outline-strong transition-all">Próxima</button>
           </div>
         </div>
       </Card>
@@ -226,21 +228,21 @@ function PeriodFilter({ presetKey, from, to, onPreset, onFrom, onTo }: {
 }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <CalendarRange size={14} className="text-brand-blue shrink-0" />
-      <div className="flex items-center gap-1 p-0.5 rounded-lg bg-app-surface border border-app-border">
+      <CalendarRange size={14} className="text-primary shrink-0" />
+      <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface-container-low border border-outline">
         {PRESETS.map((p) => (
           <button key={p.key} onClick={() => onPreset(p.key)}
-            className={cn('px-2.5 py-1 rounded-md text-[11px] font-medium transition-all', presetKey === p.key ? 'bg-gradient-brand text-white shadow-glow' : 'text-gray-400 hover:text-gray-200')}>
+            className={cn('px-2.5 py-1 rounded-md text-[11px] font-medium transition-all', presetKey === p.key ? 'bg-gradient-brand text-on-primary shadow-glow' : 'text-on-surface/70 hover:text-on-surface')}>
             {p.label}
           </button>
         ))}
       </div>
       <div className="flex items-center gap-1.5">
         <input type="date" value={from} onChange={(e) => onFrom(e.target.value)} title="De"
-          className={cn('h-8 px-2 text-xs bg-app-surface border rounded-lg text-gray-300 focus:outline-none focus:border-brand-blue/50', presetKey === 'custom' ? 'border-brand-blue/40' : 'border-app-border')} />
-        <span className="text-gray-600 text-xs">—</span>
+          className={cn('h-8 px-2 text-xs bg-surface-container-low border rounded-lg text-on-surface/85 focus:outline-none focus:border-primary/50', presetKey === 'custom' ? 'border-primary/40' : 'border-outline')} />
+        <span className="text-on-surface-variant/90 text-xs">—</span>
         <input type="date" value={to} onChange={(e) => onTo(e.target.value)} title="Até"
-          className={cn('h-8 px-2 text-xs bg-app-surface border rounded-lg text-gray-300 focus:outline-none focus:border-brand-blue/50', presetKey === 'custom' ? 'border-brand-blue/40' : 'border-app-border')} />
+          className={cn('h-8 px-2 text-xs bg-surface-container-low border rounded-lg text-on-surface/85 focus:outline-none focus:border-primary/50', presetKey === 'custom' ? 'border-primary/40' : 'border-outline')} />
       </div>
     </div>
   )
@@ -253,6 +255,7 @@ type State =
   | { status: 'ready'; detail: WithdrawalDetail }
 
 export default function EquipmentWithdrawalPage() {
+  const tokens = useChartTokens()
   const [state, setState] = useState<State>({ status: 'loading' })
   const [sort, setSort] = useState<TechSort>('successRate')
   const [presetKey, setPresetKey] = useState<PeriodKey>('all')
@@ -305,13 +308,13 @@ export default function EquipmentWithdrawalPage() {
   const periodLabel = presetKey === 'all' ? 'todo o período' : `${from ? fmtDateBR(from) : '…'} a ${to ? fmtDateBR(to) : '…'}`
 
   const header = (
-    <div className="rounded-2xl border border-app-border bg-app-card shadow-card-md px-5 py-4 space-y-3">
+    <div className="rounded-2xl border border-outline bg-surface-container-lowest shadow-card-md px-5 py-4 space-y-3">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow shrink-0"><Truck size={16} className="text-white" /></div>
+          <div className="w-9 h-9 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow shrink-0"><Truck size={16} className="text-on-primary" /></div>
           <div>
             <h1 className="text-lg font-bold gradient-text tracking-tight leading-none">Retiradas de Equipamento</h1>
-            <p className="text-[11px] text-gray-500 mt-1">Processo de retirada: sucesso, visitas e desempenho dos motoboys — cancelados × ativos</p>
+            <p className="text-[11px] text-on-surface-variant mt-1">Processo de retirada: sucesso, visitas e desempenho dos motoboys — cancelados × ativos</p>
           </div>
         </div>
         <PeriodFilter
@@ -328,7 +331,7 @@ export default function EquipmentWithdrawalPage() {
     return (
       <div className="space-y-6 animate-slide-up">
         {header}
-        <div className="flex items-center gap-2 rounded-xl border border-app-border bg-app-card px-5 py-16 text-sm text-gray-400">
+        <div className="flex items-center gap-2 rounded-xl border border-outline bg-surface-container-lowest px-5 py-16 text-sm text-on-surface/70">
           <Loader2 size={16} className="animate-spin" /> Carregando protocolos de retirada…
         </div>
       </div>
@@ -338,9 +341,9 @@ export default function EquipmentWithdrawalPage() {
     return (
       <div className="space-y-6 animate-slide-up">
         {header}
-        <div className="rounded-xl border border-app-border bg-app-card px-5 py-6 space-y-3">
-          <div className="flex items-start gap-2.5 text-sm text-rose-300"><AlertTriangle size={16} className="mt-0.5 shrink-0" /><div><p className="font-medium text-gray-100">Não foi possível carregar as retiradas</p><p className="mt-0.5 text-[12px] text-gray-400">{state.msg}</p></div></div>
-          <button onClick={() => setReloadKey((k) => k + 1)} className="flex items-center gap-1.5 rounded-md border border-app-border px-3 py-1.5 text-[12px] text-gray-300 hover:border-app-borderLight hover:text-gray-100 transition-colors"><RefreshCw size={13} /> Tentar novamente</button>
+        <div className="rounded-xl border border-outline bg-surface-container-lowest px-5 py-6 space-y-3">
+          <div className="flex items-start gap-2.5 text-sm text-risk-critical"><AlertTriangle size={16} className="mt-0.5 shrink-0" /><div><p className="font-medium text-on-surface">Não foi possível carregar as retiradas</p><p className="mt-0.5 text-[12px] text-on-surface/70">{state.msg}</p></div></div>
+          <button onClick={() => setReloadKey((k) => k + 1)} className="flex items-center gap-1.5 rounded-md border border-outline px-3 py-1.5 text-[12px] text-on-surface/85 hover:border-outline-strong hover:text-on-surface transition-colors"><RefreshCw size={13} /> Tentar novamente</button>
         </div>
       </div>
     )
@@ -354,8 +357,8 @@ export default function EquipmentWithdrawalPage() {
       {header}
 
       {agg.total === 0 ? (
-        <div className="rounded-xl border border-app-border bg-app-card px-5 py-12 text-center text-sm text-gray-400">
-          <Truck size={22} className="mx-auto mb-3 text-gray-600" />
+        <div className="rounded-xl border border-outline bg-surface-container-lowest px-5 py-12 text-center text-sm text-on-surface/70">
+          <Truck size={22} className="mx-auto mb-3 text-on-surface-variant/90" />
           Nenhum protocolo de retirada no período selecionado ({periodLabel}).
         </div>
       ) : (
@@ -375,26 +378,26 @@ export default function EquipmentWithdrawalPage() {
               subtitle={sort === 'successRate' ? `Top por taxa de retirada (mín. ${MIN_FOR_RATE} protocolos)` : 'Top por volume de protocolos'}
               icon={<Truck size={14} />}
               action={
-                <div className="flex items-center gap-1 p-0.5 rounded-lg bg-app-surface border border-app-border">
+                <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface-container-low border border-outline">
                   {([['successRate', 'Taxa'], ['protocols', 'Volume']] as [TechSort, string][]).map(([k, lbl]) => (
-                    <button key={k} onClick={() => setSort(k)} className={cn('px-2.5 py-1 rounded-md text-[11px] font-medium transition-all', sort === k ? 'bg-gradient-brand text-white shadow-glow' : 'text-gray-400 hover:text-gray-200')}>{lbl}</button>
+                    <button key={k} onClick={() => setSort(k)} className={cn('px-2.5 py-1 rounded-md text-[11px] font-medium transition-all', sort === k ? 'bg-gradient-brand text-on-primary shadow-glow' : 'text-on-surface/70 hover:text-on-surface')}>{lbl}</button>
                   ))}
                 </div>
               }
             />
             <div className="p-4" style={{ height: Math.max(220, techData.length * 30 + 40) }}>
               {techData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-xs text-gray-500">Sem motoboys com dados suficientes no período.</div>
+                <div className="h-full flex items-center justify-center text-xs text-on-surface-variant">Sem motoboys com dados suficientes no período.</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={techData} layout="vertical" margin={{ top: 4, right: 48, left: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--app-border))" horizontal={false} />
-                    <XAxis type="number" domain={sort === 'successRate' ? [0, 1] : [0, 'dataMax']} tickFormatter={(v) => (sort === 'successRate' ? pct(v) : String(v))} tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis type="category" dataKey="value" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={150} />
-                    <Tooltip content={<TechTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={tokens.grid} horizontal={false} />
+                    <XAxis type="number" domain={sort === 'successRate' ? [0, 1] : [0, 'dataMax']} tickFormatter={(v) => (sort === 'successRate' ? pct(v) : String(v))} tick={{ fill: tokens.axis, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="value" tick={{ fill: tokens.axisStrong, fontSize: 11 }} axisLine={false} tickLine={false} width={150} />
+                    <Tooltip content={<TechTooltip />} cursor={{ fill: softenColor(tokens.onSurface, 0.05) }} />
                     <Bar dataKey={sort} radius={[0, 4, 4, 0]} barSize={18}>
-                      {techData.map((t, i) => <Cell key={i} fill={rateColor(t.successRate)} />)}
-                      <LabelList dataKey={sort} position="right" formatter={(v: number) => (sort === 'successRate' ? pct(v) : String(v))} style={{ fill: '#9ca3af', fontSize: 10 }} />
+                      {techData.map((t, i) => <Cell key={i} fill={rateColor(tokens, t.successRate)} />)}
+                      <LabelList dataKey={sort} position="right" formatter={(v: number) => (sort === 'successRate' ? pct(v) : String(v))} style={{ fill: tokens.axisStrong, fontSize: 10 }} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -409,12 +412,12 @@ export default function EquipmentWithdrawalPage() {
               <div className="p-4 h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={statusData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--app-border))" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<StatusTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                    <Bar dataKey="retrieved" name="Retirado" stackId="s" fill={RETRIEVED} barSize={64} />
-                    <Bar dataKey="notRetrieved" name="Não retirado" stackId="s" fill={NOT_RETRIEVED} radius={[4, 4, 0, 0]} barSize={64} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={tokens.grid} vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: tokens.axisStrong, fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: tokens.axis, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<StatusTooltip />} cursor={{ fill: softenColor(tokens.onSurface, 0.05) }} />
+                    <Bar dataKey="retrieved" name="Retirado" stackId="s" fill={tokens.riskLow} barSize={64} />
+                    <Bar dataKey="notRetrieved" name="Não retirado" stackId="s" fill={tokens.riskCritical} radius={[4, 4, 0, 0]} barSize={64} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -425,12 +428,12 @@ export default function EquipmentWithdrawalPage() {
               <div className="p-4 h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={agg.visitsHistogram} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--app-border))" vertical={false} />
-                    <XAxis dataKey="visits" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<StatusTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                    <Bar dataKey="count" name="Protocolos" fill="#ffb000" radius={[4, 4, 0, 0]} barSize={48}>
-                      <LabelList dataKey="count" position="top" style={{ fill: '#9ca3af', fontSize: 10 }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={tokens.grid} vertical={false} />
+                    <XAxis dataKey="visits" tick={{ fill: tokens.axisStrong, fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: tokens.axis, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<StatusTooltip />} cursor={{ fill: softenColor(tokens.onSurface, 0.05) }} />
+                    <Bar dataKey="count" name="Protocolos" fill={tokens.primary} radius={[4, 4, 0, 0]} barSize={48}>
+                      <LabelList dataKey="count" position="top" style={{ fill: tokens.axisStrong, fontSize: 10 }} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -443,7 +446,7 @@ export default function EquipmentWithdrawalPage() {
         </>
       )}
 
-      <p className="text-[10px] text-gray-500 text-center">
+      <p className="text-[10px] text-on-surface-variant text-center">
         {coverageLabel()} · filtro por data do desfecho da retirada · {periodLabel}
       </p>
     </div>

@@ -16,23 +16,23 @@ interface KpiCardProps {
 }
 
 const VARIANT_STYLES = {
-  default: 'border-app-border',
+  default: 'border-outline',
   danger: 'border-risk-critical/20 bg-risk-critical/5',
   success: 'border-risk-low/20 bg-risk-low/5',
   warning: 'border-risk-medium/20 bg-risk-medium/5',
-  brand: 'border-brand-blue/20 bg-brand-blue/5',
+  brand: 'border-primary/20 bg-primary/5',
 }
 
-export function KpiCard({ label, value, subtitle, delta, deltaLabel, icon, iconColor = 'text-brand-blue', variant = 'default', size = 'md', className }: KpiCardProps) {
+export function KpiCard({ label, value, subtitle, delta, deltaLabel, icon, iconColor = 'text-primary', variant = 'default', size = 'md', className }: KpiCardProps) {
   const isPositive = delta !== undefined && delta > 0
   const isNegative = delta !== undefined && delta < 0
 
   return (
-    <div className={cn('group bg-app-card border border-app-border rounded-2xl p-4 sm:p-5 flex flex-col gap-3 shadow-card transition-[box-shadow,transform,border-color] duration-300 ease-nexa hover:shadow-card-md hover:border-app-borderLight', VARIANT_STYLES[variant], className)}>
+    <div className={cn('group bg-surface-container-lowest border border-outline rounded-2xl p-4 sm:p-5 flex flex-col gap-3 shadow-card transition-[box-shadow,transform,border-color] duration-300 ease-nexa hover:shadow-card-md hover:border-outline-strong', VARIANT_STYLES[variant], className)}>
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-[0.08em]">{label}</span>
         {icon && (
-          <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center bg-app-surface ring-1 ring-inset ring-app-border', iconColor)}>
+          <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center bg-surface-container-low ring-1 ring-inset ring-outline', iconColor)}>
             {icon}
           </div>
         )}
@@ -44,10 +44,10 @@ export function KpiCard({ label, value, subtitle, delta, deltaLabel, icon, iconC
       </div>
 
       {delta !== undefined && (
-        <div className={cn('flex items-center gap-1 text-[11px] font-medium', isPositive ? 'text-risk-low' : isNegative ? 'text-risk-critical' : 'text-gray-500')}>
+        <div className={cn('flex items-center gap-1 text-[11px] font-medium', isPositive ? 'text-risk-low' : isNegative ? 'text-risk-critical' : 'text-on-surface-variant')}>
           {isPositive ? <TrendingUp size={11} /> : isNegative ? <TrendingDown size={11} /> : <Minus size={11} />}
           <span>{isPositive ? '+' : ''}{delta.toFixed(1)}%</span>
-          {deltaLabel && <span className="text-gray-600">{deltaLabel}</span>}
+          {deltaLabel && <span className="text-on-surface-variant/90">{deltaLabel}</span>}
         </div>
       )}
     </div>

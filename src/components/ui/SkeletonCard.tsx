@@ -3,12 +3,12 @@ import { cn } from '@/utils/cn'
 interface SkeletonProps { className?: string }
 
 export function Skeleton({ className }: SkeletonProps) {
-  return <div className={cn('animate-pulse rounded bg-app-surface', className)} />
+  return <div className={cn('animate-pulse rounded bg-surface-container-low', className)} />
 }
 
 export function SkeletonCard() {
   return (
-    <div className="bg-app-card border border-app-border rounded-xl p-4 space-y-3">
+    <div className="bg-surface-container-lowest border border-outline rounded-xl p-4 space-y-3">
       <Skeleton className="h-3 w-24" />
       <Skeleton className="h-7 w-32" />
       <Skeleton className="h-2.5 w-16" />

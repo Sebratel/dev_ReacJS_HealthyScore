@@ -81,56 +81,56 @@ export function EngineDataModal({ open, onClose, title, subtitle, columns, rows,
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+      <div className="absolute inset-0 bg-scrim/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
 
-      <div className="relative w-full max-w-5xl max-h-[88vh] flex flex-col bg-app-surface border border-app-border rounded-2xl shadow-2xl animate-slide-up">
+      <div className="relative w-full max-w-5xl max-h-[88vh] flex flex-col bg-surface-container-low border border-outline rounded-2xl shadow-2xl animate-slide-up">
         {/* Header */}
-        <div className="flex items-start justify-between px-5 py-4 border-b border-app-border shrink-0">
+        <div className="flex items-start justify-between px-5 py-4 border-b border-outline shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-blue to-brand-violet flex items-center justify-center">
-              <Table2 size={15} className="text-white" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+              <Table2 size={15} className="text-on-primary" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white">{title}</h2>
-              <p className="text-[11px] text-gray-500">{subtitle ?? 'Dados que alimentam esta tela'}</p>
+              <h2 className="text-sm font-bold text-on-surface">{title}</h2>
+              <p className="text-[11px] text-on-surface-variant">{subtitle ?? 'Dados que alimentam esta tela'}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-200 transition-colors p-1">
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors p-1">
             <X size={18} />
           </button>
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-app-border shrink-0 flex-wrap">
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-outline shrink-0 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
             {onQtyChange && (
               <label className="flex items-center gap-1.5">
-                <span className="text-[10px] uppercase tracking-wider text-gray-500">Quantidade</span>
+                <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Quantidade</span>
                 <select
                   value={qty}
                   onChange={(e) => onQtyChange(Number(e.target.value))}
-                  className="h-8 px-2 text-xs bg-app-card border border-app-border rounded-lg text-gray-200 focus:outline-none focus:border-brand-blue/50"
+                  className="h-8 px-2 text-xs bg-surface-container-lowest border border-outline rounded-lg text-on-surface focus:outline-none focus:border-primary/50"
                 >
                   {(qtyOptions ?? [50, 100, 200, 500, 1000, 2000]).map((n) => <option key={n} value={n}>{n} linhas</option>)}
                 </select>
               </label>
             )}
             <div className="relative flex items-center">
-              <Search size={13} className="absolute left-2.5 text-gray-500 pointer-events-none" />
+              <Search size={13} className="absolute left-2.5 text-on-surface-variant pointer-events-none" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Buscar nas linhas..."
-                className="pl-8 pr-3 h-8 w-64 text-xs bg-app-card border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50 transition-all"
+                className="pl-8 pr-3 h-8 w-64 text-xs bg-surface-container-lowest border border-outline rounded-lg text-on-surface/85 placeholder-on-surface-variant/90 focus:outline-none focus:border-primary/50 transition-all"
               />
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {loading && <Loader2 size={13} className="animate-spin text-gray-500" />}
-            <span className="text-[11px] text-gray-500 font-mono">{filtered.length.toLocaleString('pt-BR')} linhas</span>
+            {loading && <Loader2 size={13} className="animate-spin text-on-surface-variant" />}
+            <span className="text-[11px] text-on-surface-variant font-mono">{filtered.length.toLocaleString('pt-BR')} linhas</span>
             <button
               onClick={exportCsv}
-              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-brand-blue/15 text-brand-blue border border-brand-blue/30 hover:bg-brand-blue/25 transition-all font-medium"
+              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-all font-medium"
             >
               <Download size={12} />
               Exportar CSV
@@ -142,18 +142,18 @@ export function EngineDataModal({ open, onClose, title, subtitle, columns, rows,
         <div className="flex-1 overflow-auto scrollbar-thin">
           {/* Agregados (retorno das queries de listas distintas) */}
           {aggregates && aggregates.length > 0 && (
-            <div className="px-5 py-4 border-b border-app-border grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="px-5 py-4 border-b border-outline grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {aggregates.map((g) => (
-                <div key={g.title} className="rounded-xl bg-app-card border border-app-border p-3">
+                <div key={g.title} className="rounded-xl bg-surface-container-lowest border border-outline p-3">
                   <div className="flex items-center gap-1.5 mb-2">
-                    <Database size={11} className="text-brand-cyan" />
-                    <span className="text-[10px] font-semibold text-gray-300 uppercase tracking-wider">{g.title}</span>
+                    <Database size={11} className="text-primary-strong" />
+                    <span className="text-[10px] font-semibold text-on-surface/85 uppercase tracking-wider">{g.title}</span>
                   </div>
                   <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
                     {g.entries.map((e, i) => (
                       <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
-                        <span className="text-gray-400 truncate">{e.label}</span>
-                        <span className="font-mono text-gray-300 shrink-0">{typeof e.value === 'number' ? e.value.toLocaleString('pt-BR') : e.value}</span>
+                        <span className="text-on-surface/70 truncate">{e.label}</span>
+                        <span className="font-mono text-on-surface/85 shrink-0">{typeof e.value === 'number' ? e.value.toLocaleString('pt-BR') : e.value}</span>
                       </div>
                     ))}
                   </div>
@@ -165,9 +165,9 @@ export function EngineDataModal({ open, onClose, title, subtitle, columns, rows,
           {/* Tabela bruta */}
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10">
-              <tr className="bg-app-surface border-b border-app-border">
+              <tr className="bg-surface-container-low border-b border-outline">
                 {columns.map((c) => (
-                  <th key={c.key} className={cn('px-3 py-2 text-[10px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap', c.align === 'right' ? 'text-right' : 'text-left')}>
+                  <th key={c.key} className={cn('px-3 py-2 text-[10px] text-on-surface-variant uppercase tracking-wider font-medium whitespace-nowrap', c.align === 'right' ? 'text-right' : 'text-left')}>
                     {c.label}
                   </th>
                 ))}
@@ -175,30 +175,30 @@ export function EngineDataModal({ open, onClose, title, subtitle, columns, rows,
             </thead>
             <tbody>
               {pageRows.map((r, ri) => (
-                <tr key={ri} className="border-b border-app-border/60 hover:bg-app-card/60 transition-colors">
+                <tr key={ri} className="border-b border-outline/60 hover:bg-surface-container-lowest/60 transition-colors">
                   {columns.map((c) => (
-                    <td key={c.key} className={cn('px-3 py-2 text-xs whitespace-nowrap', c.align === 'right' ? 'text-right font-mono text-gray-300' : 'text-gray-300')}>
+                    <td key={c.key} className={cn('px-3 py-2 text-xs whitespace-nowrap', c.align === 'right' ? 'text-right font-mono text-on-surface/85' : 'text-on-surface/85')}>
                       {c.value(r)}
                     </td>
                   ))}
                 </tr>
               ))}
               {pageRows.length === 0 && (
-                <tr><td colSpan={columns.length} className="px-3 py-8 text-center text-xs text-gray-500">Nenhuma linha encontrada.</td></tr>
+                <tr><td colSpan={columns.length} className="px-3 py-8 text-center text-xs text-on-surface-variant">Nenhuma linha encontrada.</td></tr>
               )}
             </tbody>
           </table>
         </div>
 
         {/* Footer / paginação */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-app-border shrink-0">
-          <span className="text-[10px] text-gray-500">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-outline shrink-0">
+          <span className="text-[10px] text-on-surface-variant">
             {filtered.length === 0 ? '0' : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, filtered.length)}`} de {filtered.length.toLocaleString('pt-BR')}
           </span>
           <div className="flex gap-1.5">
-            <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="text-[10px] px-2.5 py-1 rounded border border-app-border text-gray-400 disabled:opacity-30 hover:border-app-borderLight transition-all">Anterior</button>
-            <span className="text-[10px] text-gray-500 px-1 py-1 font-mono">{page + 1}/{totalPages}</span>
-            <button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} className="text-[10px] px-2.5 py-1 rounded border border-app-border text-gray-400 disabled:opacity-30 hover:border-app-borderLight transition-all">Próxima</button>
+            <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="text-[10px] px-2.5 py-1 rounded border border-outline text-on-surface/70 disabled:opacity-30 hover:border-outline-strong transition-all">Anterior</button>
+            <span className="text-[10px] text-on-surface-variant px-1 py-1 font-mono">{page + 1}/{totalPages}</span>
+            <button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} className="text-[10px] px-2.5 py-1 rounded border border-outline text-on-surface/70 disabled:opacity-30 hover:border-outline-strong transition-all">Próxima</button>
           </div>
         </div>
       </div>

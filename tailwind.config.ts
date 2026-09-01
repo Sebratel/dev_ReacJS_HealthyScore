@@ -1,56 +1,60 @@
 import type { Config } from 'tailwindcss'
 
+/** Token do design system: lê a CSS var e preserva o modificador de opacidade (`bg-primary/10`). */
+const token = (name: string) => `rgb(var(--color-${name}) / <alpha-value>)`
+
 const config: Config = {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        app: {
-          bg:          'rgb(var(--app-bg)          / <alpha-value>)',
-          surface:     'rgb(var(--app-surface)     / <alpha-value>)',
-          card:        'rgb(var(--app-card)        / <alpha-value>)',
-          cardHover:   'rgb(var(--app-cardHover)   / <alpha-value>)',
-          border:      'rgb(var(--app-border)      / <alpha-value>)',
-          borderLight: 'rgb(var(--app-borderLight) / <alpha-value>)',
-        },
-        // ── Design System NexaView (tokens canônicos) ──
-        primary: '#ffb000',
-        'primary-container': '#ffc107',
-        secondary: '#ff8f00',
-        tertiary: '#b44a32',
-        surface: '#f4f1e8',
-        'surface-container-low': '#ebe7db',
-        'surface-container-lowest': '#ffffff',
-        'on-surface': '#1a1a1a',
-        'on-surface-variant': '#5d5d5d',
-        'outline-variant': 'rgba(0,0,0,0.05)',
-        'inverse-surface': '#262626',
-        // marca re-apontada para âmbar (mantém classes brand-* existentes funcionando)
-        brand: {
-          blue: '#ffb000',
-          blueLight: '#ffc107',
-          violet: '#ff8f00',
-          violetLight: '#ffb74d',
-          cyan: '#d97706',
-          cyanLight: '#f59e0b',
-        },
+        // ── Design System Sebratel (tokens canônicos) ──
+        // Valores em src/styles/globals.css (:root e .dark).
+        primary: token('primary'),
+        'primary-container': token('primary-container'),
+        'primary-strong': token('primary-strong'),
+        'on-primary': token('on-primary'),
+        secondary: token('secondary'),
+        'secondary-container': token('secondary-container'),
+        tertiary: token('tertiary'),
+
+        surface: token('surface'),
+        'surface-container-low': token('surface-container-low'),
+        'surface-container-lowest': token('surface-container-lowest'),
+        'surface-container-high': token('surface-container-high'),
+
+        'on-surface': token('on-surface'),
+        'on-surface-variant': token('on-surface-variant'),
+
+        outline: token('outline'),
+        'outline-strong': token('outline-strong'),
+        'outline-variant': 'var(--color-outline-variant)',
+
+        'inverse-surface': token('inverse-surface'),
+
+        // Fixos nos dois temas — camada sobre mídia (hero do login).
+        scrim: token('scrim'),
+        'on-scrim': token('on-scrim'),
+
         risk: {
-          low: '#10b981',
-          medium: '#f59e0b',
-          high: '#f97316',
-          critical: '#ef4444',
+          low: token('risk-low'),
+          medium: token('risk-medium'),
+          high: token('risk-high'),
+          critical: token('risk-critical'),
         },
-        white: 'rgb(var(--color-white) / <alpha-value>)',
-        gray: {
-          100: 'rgb(var(--gray-100) / <alpha-value>)',
-          200: 'rgb(var(--gray-200) / <alpha-value>)',
-          300: 'rgb(var(--gray-300) / <alpha-value>)',
-          400: 'rgb(var(--gray-400) / <alpha-value>)',
-          500: 'rgb(var(--gray-500) / <alpha-value>)',
-          600: 'rgb(var(--gray-600) / <alpha-value>)',
-          700: 'rgb(var(--gray-700) / <alpha-value>)',
-          800: 'rgb(var(--gray-800) / <alpha-value>)',
-          900: 'rgb(var(--gray-900) / <alpha-value>)',
+        'health-excellent': token('health-excellent'),
+
+        // Rampa categórica (identidade sem ordem) — ver globals.css.
+        data: {
+          1: token('data-1'),
+          2: token('data-2'),
+          3: token('data-3'),
+          4: token('data-4'),
+          5: token('data-5'),
+          6: token('data-6'),
+          7: token('data-7'),
+          8: token('data-8'),
         },
       },
       fontFamily: {
@@ -83,7 +87,10 @@ const config: Config = {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'fade-in': 'fadeIn 0.3s ease-in-out',
         'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both',
-        'float': 'float 7s ease-in-out infinite',
+        float: 'float 7s ease-in-out infinite',
+        'header-in': 'header-in 300ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'slide-in-right': 'slide-in-right 300ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'fade-in-up': 'fade-in-up 300ms cubic-bezier(0.22, 1, 0.36, 1)',
       },
       keyframes: {
         fadeIn: {

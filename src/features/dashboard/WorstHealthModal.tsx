@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { X, AlertTriangle, Search, Download, Loader2, ShieldAlert } from 'lucide-react'
 import { cn, formatCurrency } from '@/utils/cn'
 import { useAppStore } from '@/store/appStore'
-import { HEALTH_COLORS, HEALTH_LABELS } from '@/components/ui/HealthGauge'
+import { HEALTH_LABELS } from '@/components/ui/HealthGauge'
+import { useHealthColors } from '@/hooks/useHealthColors'
+import { softenColor } from '@/utils/healthColors'
 import { fetchDashboard, ApiError, type RankedClient } from './dashboardApi'
 import type { HealthClassification } from '@/types'
 
@@ -50,6 +52,7 @@ function toCsv(rows: RankedClient[]): string {
 type State = { status: 'loading' } | { status: 'error'; msg: string } | { status: 'ready'; rows: RankedClient[] }
 
 export function WorstHealthModal({ open, onClose, cities }: { open: boolean; onClose: () => void; cities: string[] }) {
+  const palette = useHealthColors()
   const s = useAppStore()
   const [qty, setQty] = useState(100)
   const [classification, setClassification] = useState<'all' | HealthClassification>('all')
@@ -108,52 +111,52 @@ export function WorstHealthModal({ open, onClose, cities }: { open: boolean; onC
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
-      <div className="relative w-full max-w-6xl max-h-[90vh] flex flex-col bg-app-surface border border-app-border rounded-2xl shadow-2xl animate-slide-up">
+      <div className="absolute inset-0 bg-scrim/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+      <div className="relative w-full max-w-6xl max-h-[90vh] flex flex-col bg-surface-container-low border border-outline rounded-2xl shadow-2xl animate-slide-up">
         {/* Header */}
-        <div className="flex items-start justify-between px-5 py-4 border-b border-app-border shrink-0">
+        <div className="flex items-start justify-between px-5 py-4 border-b border-outline shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-danger flex items-center justify-center"><ShieldAlert size={15} className="text-white" /></div>
+            <div className="w-8 h-8 rounded-lg bg-gradient-danger flex items-center justify-center"><ShieldAlert size={15} className="text-on-primary" /></div>
             <div>
-              <h2 className="text-sm font-bold text-white">Piores Health Scores</h2>
-              <p className="text-[11px] text-gray-500">Clientes ordenados do pior score combinado para o melhor — filtre e exporte</p>
+              <h2 className="text-sm font-bold text-on-surface">Piores Health Scores</h2>
+              <p className="text-[11px] text-on-surface-variant">Clientes ordenados do pior score combinado para o melhor — filtre e exporte</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-200 transition-colors p-1"><X size={18} /></button>
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors p-1"><X size={18} /></button>
         </div>
 
         {/* Filtros */}
-        <div className="flex items-end justify-between gap-3 px-5 py-3 border-b border-app-border shrink-0 flex-wrap">
+        <div className="flex items-end justify-between gap-3 px-5 py-3 border-b border-outline shrink-0 flex-wrap">
           <div className="flex items-end gap-2 flex-wrap">
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500">Quantidade</span>
-              <select value={qty} onChange={(e) => setQty(Number(e.target.value))} className="h-8 px-2 text-xs bg-app-card border border-app-border rounded-lg text-gray-200 focus:outline-none focus:border-brand-blue/50">
+              <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Quantidade</span>
+              <select value={qty} onChange={(e) => setQty(Number(e.target.value))} className="h-8 px-2 text-xs bg-surface-container-lowest border border-outline rounded-lg text-on-surface focus:outline-none focus:border-primary/50">
                 {QTY_OPTS.map((n) => <option key={n} value={n}>{n} piores</option>)}
               </select>
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500">Classificação</span>
-              <select value={classification} onChange={(e) => setClassification(e.target.value as any)} className="h-8 px-2 text-xs bg-app-card border border-app-border rounded-lg text-gray-200 focus:outline-none focus:border-brand-blue/50">
+              <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Classificação</span>
+              <select value={classification} onChange={(e) => setClassification(e.target.value as any)} className="h-8 px-2 text-xs bg-surface-container-lowest border border-outline rounded-lg text-on-surface focus:outline-none focus:border-primary/50">
                 {CLASS_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
               </select>
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500">Cidade</span>
-              <select value={city} onChange={(e) => setCity(e.target.value)} className="h-8 px-2 text-xs bg-app-card border border-app-border rounded-lg text-gray-200 focus:outline-none focus:border-brand-blue/50">
+              <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Cidade</span>
+              <select value={city} onChange={(e) => setCity(e.target.value)} className="h-8 px-2 text-xs bg-surface-container-lowest border border-outline rounded-lg text-on-surface focus:outline-none focus:border-primary/50">
                 <option value="">Todas</option>
                 {cities.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </label>
             <div className="relative flex items-center">
-              <Search size={13} className="absolute left-2.5 text-gray-500 pointer-events-none" />
+              <Search size={13} className="absolute left-2.5 text-on-surface-variant pointer-events-none" />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar (nome, contrato, cidade)…"
-                className="pl-8 pr-3 h-8 w-56 text-xs bg-app-card border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50" />
+                className="pl-8 pr-3 h-8 w-56 text-xs bg-surface-container-lowest border border-outline rounded-lg text-on-surface/85 placeholder-on-surface-variant/90 focus:outline-none focus:border-primary/50" />
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-gray-500 font-mono">{filtered.length.toLocaleString('pt-BR')} clientes</span>
+            <span className="text-[11px] text-on-surface-variant font-mono">{filtered.length.toLocaleString('pt-BR')} clientes</span>
             <button onClick={exportCsv} disabled={filtered.length === 0}
-              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-brand-blue/15 text-brand-blue border border-brand-blue/30 hover:bg-brand-blue/25 transition-all font-medium disabled:opacity-30">
+              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-all font-medium disabled:opacity-30">
               <Download size={12} /> Exportar CSV
             </button>
           </div>
@@ -162,33 +165,33 @@ export function WorstHealthModal({ open, onClose, cities }: { open: boolean; onC
         {/* Conteúdo */}
         <div className="flex-1 overflow-auto scrollbar-thin">
           {state.status === 'loading' ? (
-            <div className="flex items-center justify-center gap-2 py-16 text-sm text-gray-400"><Loader2 size={16} className="animate-spin" /> Calculando os piores scores…</div>
+            <div className="flex items-center justify-center gap-2 py-16 text-sm text-on-surface/70"><Loader2 size={16} className="animate-spin" /> Calculando os piores scores…</div>
           ) : state.status === 'error' ? (
-            <div className="flex items-start gap-2.5 px-5 py-10 text-sm text-rose-300"><AlertTriangle size={16} className="mt-0.5 shrink-0" /><div><p className="font-medium text-gray-100">Não foi possível carregar</p><p className="mt-0.5 text-[12px] text-gray-400">{state.msg}</p></div></div>
+            <div className="flex items-start gap-2.5 px-5 py-10 text-sm text-risk-critical"><AlertTriangle size={16} className="mt-0.5 shrink-0" /><div><p className="font-medium text-on-surface">Não foi possível carregar</p><p className="mt-0.5 text-[12px] text-on-surface/70">{state.msg}</p></div></div>
           ) : (
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
-                <tr className="bg-app-surface border-b border-app-border">
-                  <th className="px-3 py-2 text-[10px] text-gray-500 uppercase tracking-wider font-medium text-right">#</th>
+                <tr className="bg-surface-container-low border-b border-outline">
+                  <th className="px-3 py-2 text-[10px] text-on-surface-variant uppercase tracking-wider font-medium text-right">#</th>
                   {COLUMNS.map((c) => (
-                    <th key={c.key} className={cn('px-3 py-2 text-[10px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap', c.align === 'right' ? 'text-right' : 'text-left')}>{c.label}</th>
+                    <th key={c.key} className={cn('px-3 py-2 text-[10px] text-on-surface-variant uppercase tracking-wider font-medium whitespace-nowrap', c.align === 'right' ? 'text-right' : 'text-left')}>{c.label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map((r, ri) => (
-                  <tr key={r.customerId} className="border-b border-app-border/60 hover:bg-app-card/60 transition-colors">
-                    <td className="px-3 py-2 text-[10px] font-mono text-gray-600 text-right">{page * PAGE_SIZE + ri + 1}</td>
+                  <tr key={r.customerId} className="border-b border-outline/60 hover:bg-surface-container-lowest/60 transition-colors">
+                    <td className="px-3 py-2 text-[10px] font-mono text-on-surface-variant/90 text-right">{page * PAGE_SIZE + ri + 1}</td>
                     {COLUMNS.map((c) => {
                       const v = c.value(r)
                       const display = c.key === 'mrr' || c.key === 'revrisk' ? formatCurrency(Number(v))
                         : c.key === 'churn' ? `${v}%`
                         : typeof v === 'number' ? v.toLocaleString('pt-BR') : v
                       return (
-                        <td key={c.key} className={cn('px-3 py-2 text-xs whitespace-nowrap', c.align === 'right' ? 'text-right font-mono text-gray-300' : 'text-gray-300')}
-                          style={c.key === 'health' ? { color: HEALTH_COLORS[r.classification], fontWeight: 700 } : undefined}>
+                        <td key={c.key} className={cn('px-3 py-2 text-xs whitespace-nowrap', c.align === 'right' ? 'text-right font-mono text-on-surface/85' : 'text-on-surface/85')}
+                          style={c.key === 'health' ? { color: palette[r.classification], fontWeight: 700 } : undefined}>
                           {c.key === 'class'
-                            ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color: HEALTH_COLORS[r.classification], background: `${HEALTH_COLORS[r.classification]}15` }}>{display}</span>
+                            ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color: palette[r.classification], background: softenColor(palette[r.classification], 0.08) }}>{display}</span>
                             : display}
                         </td>
                       )
@@ -196,7 +199,7 @@ export function WorstHealthModal({ open, onClose, cities }: { open: boolean; onC
                   </tr>
                 ))}
                 {pageRows.length === 0 && (
-                  <tr><td colSpan={COLUMNS.length + 1} className="px-3 py-10 text-center text-xs text-gray-500">Nenhum cliente com esses filtros.</td></tr>
+                  <tr><td colSpan={COLUMNS.length + 1} className="px-3 py-10 text-center text-xs text-on-surface-variant">Nenhum cliente com esses filtros.</td></tr>
                 )}
               </tbody>
             </table>
@@ -204,14 +207,14 @@ export function WorstHealthModal({ open, onClose, cities }: { open: boolean; onC
         </div>
 
         {/* Footer / paginação */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-app-border shrink-0">
-          <span className="text-[10px] text-gray-500">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-outline shrink-0">
+          <span className="text-[10px] text-on-surface-variant">
             {filtered.length === 0 ? '0' : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, filtered.length)}`} de {filtered.length.toLocaleString('pt-BR')}
           </span>
           <div className="flex gap-1.5">
-            <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="text-[10px] px-2.5 py-1 rounded border border-app-border text-gray-400 disabled:opacity-30 hover:border-app-borderLight transition-all">Anterior</button>
-            <span className="text-[10px] text-gray-500 px-1 py-1 font-mono">{page + 1}/{totalPages}</span>
-            <button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} className="text-[10px] px-2.5 py-1 rounded border border-app-border text-gray-400 disabled:opacity-30 hover:border-app-borderLight transition-all">Próxima</button>
+            <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="text-[10px] px-2.5 py-1 rounded border border-outline text-on-surface/70 disabled:opacity-30 hover:border-outline-strong transition-all">Anterior</button>
+            <span className="text-[10px] text-on-surface-variant px-1 py-1 font-mono">{page + 1}/{totalPages}</span>
+            <button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} className="text-[10px] px-2.5 py-1 rounded border border-outline text-on-surface/70 disabled:opacity-30 hover:border-outline-strong transition-all">Próxima</button>
           </div>
         </div>
       </div>

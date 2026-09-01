@@ -1,7 +1,9 @@
-import { Bell, Settings, AlertTriangle, LogOut } from 'lucide-react'
+import { useState } from 'react'
+import { Bell, Settings, AlertTriangle, LogOut, Sun, Moon } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { useRole } from '@/features/auth/access'
+import { getPreferredTheme, toggleTheme, type ThemeMode } from '@/utils/theme'
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/': { title: 'Dashboard Executivo', subtitle: 'Resumo dos Health Scores por módulo' },
@@ -23,19 +25,29 @@ export function TopBar() {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const { isPowerUser } = useRole()
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getPreferredTheme())
   const handleLogout = () => { logout(); navigate('/login', { replace: true }) }
 
   const page = PAGE_TITLES[location.pathname] ?? { title: 'Health Score Sebratel', subtitle: '' }
 
   return (
-    <header className="h-14 flex items-center justify-between px-6 border-b border-app-border bg-app-surface/90 backdrop-blur-sm sticky top-0 z-30">
+    <header className="h-14 flex items-center justify-between px-6 border-b border-outline bg-surface-container-low/90 backdrop-blur-sm sticky top-0 z-30">
       <div className="flex flex-col leading-tight">
-        <h1 className="text-sm font-semibold text-white">{page.title}</h1>
-        <p className="text-[11px] text-gray-500">{page.subtitle}</p>
+        <h1 className="text-sm font-semibold text-on-surface">{page.title}</h1>
+        <p className="text-[11px] text-on-surface-variant">{page.subtitle}</p>
       </div>
 
       <div className="flex items-center gap-2">
-        <button className="relative h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all">
+        <button
+          onClick={() => setThemeMode(toggleTheme())}
+          title={themeMode === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+          aria-label={themeMode === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+          className="h-7 w-7 flex items-center justify-center rounded-lg bg-surface-container-lowest border border-outline text-on-surface/70 hover:text-on-surface hover:border-outline-strong transition-all"
+        >
+          {themeMode === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
+        </button>
+
+        <button className="relative h-7 w-7 flex items-center justify-center rounded-lg bg-surface-container-lowest border border-outline text-on-surface/70 hover:text-on-surface hover:border-outline-strong transition-all">
           <Bell size={13} />
           <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-risk-critical animate-pulse-slow" />
         </button>
@@ -50,25 +62,25 @@ export function TopBar() {
 
         {/* Configurações (SQL + limiares) — só power_user+ */}
         {isPowerUser && (
-          <button onClick={() => navigate('/configuracoes')} className="h-7 w-7 flex items-center justify-center rounded-lg bg-app-card border border-app-border text-gray-400 hover:text-gray-100 hover:border-app-borderLight transition-all" aria-label="Configurações">
+          <button onClick={() => navigate('/configuracoes')} className="h-7 w-7 flex items-center justify-center rounded-lg bg-surface-container-lowest border border-outline text-on-surface/70 hover:text-on-surface hover:border-outline-strong transition-all" aria-label="Configurações">
             <Settings size={13} />
           </button>
         )}
 
-        <div className="flex items-center gap-2 h-7 pl-1 pr-1 rounded-lg bg-app-card border border-app-border">
+        <div className="flex items-center gap-2 h-7 pl-1 pr-1 rounded-lg bg-surface-container-lowest border border-outline">
           {user?.picture ? (
             <img src={user.picture} alt="" className="w-5 h-5 rounded-full" referrerPolicy="no-referrer" />
           ) : (
-            <div className="w-5 h-5 rounded-full bg-gradient-brand flex items-center justify-center text-[10px] font-bold text-white">
+            <div className="w-5 h-5 rounded-full bg-gradient-brand flex items-center justify-center text-[10px] font-bold text-on-primary">
               {(user?.name ?? 'U')[0].toUpperCase()}
             </div>
           )}
-          <span className="text-xs text-gray-700 hidden md:block max-w-[120px] truncate">{user?.name ?? 'Usuário'}</span>
+          <span className="text-xs text-on-surface-variant/75 hidden md:block max-w-[120px] truncate">{user?.name ?? 'Usuário'}</span>
           <button
             onClick={handleLogout}
             title="Sair"
             aria-label="Sair"
-            className="h-6 w-6 flex items-center justify-center rounded-md text-gray-500 hover:text-risk-critical hover:bg-risk-critical/10 transition-all"
+            className="h-6 w-6 flex items-center justify-center rounded-md text-on-surface-variant hover:text-risk-critical hover:bg-risk-critical/10 transition-all"
           >
             <LogOut size={13} />
           </button>

@@ -4,7 +4,10 @@ import { Activity, AlertTriangle, DollarSign, Users, Gauge as GaugeIcon, Chevron
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { Card, CardHeader } from '@/components/ui/Card'
-import { HealthGauge, HEALTH_COLORS, HEALTH_LABELS, scoreToHealthClass } from '@/components/ui/HealthGauge'
+import { HealthGauge, scoreToHealthClass } from '@/components/ui/HealthGauge'
+import { HEALTH_LABELS, softenColor, type HealthPalette } from '@/utils/healthColors'
+import { useHealthColors } from '@/hooks/useHealthColors'
+import { useChartTokens } from '@/hooks/useChartTokens'
 import { formatCurrency, cn } from '@/utils/cn'
 import { useAppStore } from '@/store/appStore'
 import { coverageLabelFromMeta } from '@/features/engines/engineApi'
@@ -15,26 +18,28 @@ import { ContractFilters, type ContractFilterState } from '@/components/ui/Contr
 import { WorstHealthModal } from './WorstHealthModal'
 
 const DIST_ORDER: HealthClassification[] = ['critical', 'high_risk', 'attention', 'healthy', 'excellent']
-const scoreColor = (v: number) => HEALTH_COLORS[scoreToHealthClass(v)]
+// Recebe a paleta por parâmetro: hooks só podem ser chamados dentro de componentes.
+const scoreColor = (palette: HealthPalette, v: number) => palette[scoreToHealthClass(v)]
 
 const CompTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-app-surface border border-app-border rounded-lg p-2.5 text-xs shadow-xl">
-      <p className="text-gray-400 mb-1 font-medium">{label}</p>
+    <div className="bg-surface-container-low border border-outline rounded-lg p-2.5 text-xs shadow-xl">
+      <p className="text-on-surface/70 mb-1 font-medium">{label}</p>
       <p style={{ color: payload[0].color }}>Health Score: <strong>{payload[0].value}</strong></p>
     </div>
   )
 }
 
 function DistBar({ dist, total }: { dist: Record<HealthClassification, number>; total: number }) {
-  if (!total) return <div className="h-1.5 rounded-full bg-app-border" />
+  const palette = useHealthColors()
+  if (!total) return <div className="h-1.5 rounded-full bg-outline" />
   return (
     <div className="flex h-1.5 rounded-full overflow-hidden gap-px">
       {DIST_ORDER.map((cls) => {
         const pct = (dist[cls] / total) * 100
         if (pct <= 0) return null
-        return <div key={cls} className="h-full" style={{ width: `${pct}%`, background: HEALTH_COLORS[cls] }} title={`${HEALTH_LABELS[cls]}: ${dist[cls]}`} />
+        return <div key={cls} className="h-full" style={{ width: `${pct}%`, background: palette[cls] }} title={`${HEALTH_LABELS[cls]}: ${dist[cls]}`} />
       })}
     </div>
   )
@@ -45,24 +50,25 @@ type RiskItem = DashboardResponse['ranking']['top'][number]
 // Linha do ranking de risco — clicável, abre a timeline de health do cliente.
 function RiskRow({ c, rank }: { c: RiskItem; rank: number }) {
   const [open, setOpen] = useState(false)
-  const color = HEALTH_COLORS[c.classification]
+  const palette = useHealthColors()
+  const color = palette[c.classification]
   return (
     <div>
-      <div className="flex items-center gap-3 px-5 py-2.5 cursor-pointer hover:bg-app-surface/60 transition-colors" onClick={() => setOpen((v) => !v)}>
-        <span className="text-[10px] font-mono text-gray-600 w-4">{rank}</span>
-        <div className="w-8 h-8 rounded-full border flex items-center justify-center text-[11px] font-bold shrink-0" style={{ backgroundColor: color + '15', borderColor: color + '30', color }}>{c.customerName[0]}</div>
+      <div className="flex items-center gap-3 px-5 py-2.5 cursor-pointer hover:bg-surface-container-low/60 transition-colors" onClick={() => setOpen((v) => !v)}>
+        <span className="text-[10px] font-mono text-on-surface-variant/90 w-4">{rank}</span>
+        <div className="w-8 h-8 rounded-full border flex items-center justify-center text-[11px] font-bold shrink-0" style={{ backgroundColor: softenColor(color, 0.08), borderColor: softenColor(color, 0.19), color }}>{c.customerName[0]}</div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-gray-100 truncate">{c.customerName}</p>
-          <p className="text-[10px] text-gray-500">
-            {c.contractNumber && <><span className="font-mono text-gray-400" title="Nº do contrato">#{c.contractNumber}</span> · </>}{c.city} · {c.plan}
+          <p className="text-xs font-semibold text-on-surface truncate">{c.customerName}</p>
+          <p className="text-[10px] text-on-surface-variant">
+            {c.contractNumber && <><span className="font-mono text-on-surface/70" title="Nº do contrato">#{c.contractNumber}</span> · </>}{c.city} · {c.plan}
           </p>
         </div>
-        <div className="hidden sm:flex flex-col items-center"><span className="text-[9px] text-gray-600">{c.enginesPresent} módulos</span></div>
-        <div className="flex flex-col items-end"><span style={{ color }} className="text-sm font-bold tabular-nums leading-none">{c.overallHealth}</span><span className="text-[9px] text-gray-600">health</span></div>
+        <div className="hidden sm:flex flex-col items-center"><span className="text-[9px] text-on-surface-variant/90">{c.enginesPresent} módulos</span></div>
+        <div className="flex flex-col items-end"><span style={{ color }} className="text-sm font-bold tabular-nums leading-none">{c.overallHealth}</span><span className="text-[9px] text-on-surface-variant/90">health</span></div>
         <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color, background: `${color}15` }}>{HEALTH_LABELS[c.classification]}</span>
       </div>
       {open && (
-        <div className="px-5 pb-3 pt-1 bg-app-surface/40">
+        <div className="px-5 pb-3 pt-1 bg-surface-container-low/40">
           <ScoreTimeline clientId={c.customerId} />
         </div>
       )}
@@ -72,6 +78,8 @@ function RiskRow({ c, rank }: { c: RiskItem; rank: number }) {
 
 export default function DashboardPage() {
   const navigate = useNavigate()
+  const tokens = useChartTokens()
+  const palette = useHealthColors()
   const financialConfig = useAppStore((s) => s.financialConfig)
   const commercialConfig = useAppStore((s) => s.commercialConfig)
   const connectionConfig = useAppStore((s) => s.connectionConfig)
@@ -116,20 +124,20 @@ export default function DashboardPage() {
   )
 
   if (loading && !data) {
-    return <div className="flex items-center gap-2 rounded-xl border border-app-border bg-app-card px-5 py-16 text-sm text-gray-400 animate-slide-up"><Loader2 size={16} className="animate-spin" /> Calculando os scores no servidor…</div>
+    return <div className="flex items-center gap-2 rounded-xl border border-outline bg-surface-container-lowest px-5 py-16 text-sm text-on-surface/70 animate-slide-up"><Loader2 size={16} className="animate-spin" /> Calculando os scores no servidor…</div>
   }
   if (error && !data) {
     return (
-      <div className="rounded-xl border border-app-border bg-app-card px-5 py-6 space-y-3 animate-slide-up">
-        <div className="flex items-start gap-2.5 text-sm text-rose-300">
+      <div className="rounded-xl border border-outline bg-surface-container-lowest px-5 py-6 space-y-3 animate-slide-up">
+        <div className="flex items-start gap-2.5 text-sm text-risk-critical">
           {error.status === 401 ? <Lock size={16} className="mt-0.5 shrink-0" /> : <AlertTriangle size={16} className="mt-0.5 shrink-0" />}
           <div>
-            <p className="font-medium text-gray-100">{error.status === 0 ? 'Servidor indisponível' : error.status === 401 ? 'Sessão expirada' : 'Não foi possível carregar o dashboard'}</p>
-            <p className="mt-0.5 text-[12px] text-gray-400">{error.message}</p>
-            {error.status === 0 && <p className="mt-1.5 text-[11px] text-gray-500">Depende do backend (<span className="font-mono">/api</span>). Suba com <span className="font-mono">npm run api</span>.</p>}
+            <p className="font-medium text-on-surface">{error.status === 0 ? 'Servidor indisponível' : error.status === 401 ? 'Sessão expirada' : 'Não foi possível carregar o dashboard'}</p>
+            <p className="mt-0.5 text-[12px] text-on-surface/70">{error.message}</p>
+            {error.status === 0 && <p className="mt-1.5 text-[11px] text-on-surface-variant">Depende do backend (<span className="font-mono">/api</span>). Suba com <span className="font-mono">npm run api</span>.</p>}
           </div>
         </div>
-        <button onClick={() => setReloadKey((k) => k + 1)} className="flex items-center gap-1.5 rounded-md border border-app-border px-3 py-1.5 text-[12px] text-gray-300 hover:border-app-borderLight hover:text-gray-100 transition-colors"><RefreshCw size={13} /> Tentar novamente</button>
+        <button onClick={() => setReloadKey((k) => k + 1)} className="flex items-center gap-1.5 rounded-md border border-outline px-3 py-1.5 text-[12px] text-on-surface/85 hover:border-outline-strong hover:text-on-surface transition-colors"><RefreshCw size={13} /> Tentar novamente</button>
       </div>
     )
   }
@@ -150,7 +158,7 @@ export default function DashboardPage() {
         resultCount={data?.ranking.visibleTotal}
         totalCount={data?.ranking.total}
       />
-      {loading && <div className="flex items-center justify-end gap-1.5 text-[11px] text-gray-500 -mb-3"><Loader2 size={11} className="animate-spin" /> atualizando…</div>}
+      {loading && <div className="flex items-center justify-end gap-1.5 text-[11px] text-on-surface-variant -mb-3"><Loader2 size={11} className="animate-spin" /> atualizando…</div>}
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Clientes Ativos" value={(totals?.clients ?? 0).toLocaleString('pt-BR')} subtitle={`${(totals?.contracts ?? 0).toLocaleString('pt-BR')} contratos`} icon={<Users size={14} />} variant="brand" />
@@ -162,24 +170,24 @@ export default function DashboardPage() {
       {/* Resumo por engine */}
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <GaugeIcon size={14} className="text-brand-cyan" />
-          <h2 className="text-sm font-bold text-white">Resumo dos Health Scores por Módulo</h2>
+          <GaugeIcon size={14} className="text-primary-strong" />
+          <h2 className="text-sm font-bold text-on-surface">Resumo dos Health Scores por Módulo</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {data.summaries.map((e) => {
             const cls = scoreToHealthClass(e.avgHealthScore)
             return (
-              <button key={e.key} onClick={() => navigate(e.route)} className="text-left bg-app-card border border-app-border rounded-2xl p-4 shadow-card hover:shadow-card-md hover:border-app-borderLight hover:-translate-y-0.5 transition-all duration-200 group">
+              <button key={e.key} onClick={() => navigate(e.route)} className="text-left bg-surface-container-lowest border border-outline rounded-2xl p-4 shadow-card hover:shadow-card-md hover:border-outline-strong hover:-translate-y-0.5 transition-all duration-200 group">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-gray-200">{e.label}</span>
-                  <ChevronRight size={13} className="text-gray-600 group-hover:text-brand-blue transition-colors" />
+                  <span className="text-xs font-bold text-on-surface">{e.label}</span>
+                  <ChevronRight size={13} className="text-on-surface-variant/90 group-hover:text-primary transition-colors" />
                 </div>
                 <div className="flex items-center gap-3">
                   <HealthGauge score={Math.round(e.avgHealthScore)} size={72} showLabel={false} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: HEALTH_COLORS[cls] }}>{HEALTH_LABELS[cls]}</p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">{e.analyzed.toLocaleString('pt-BR')} analisados</p>
-                    <p className="text-[10px] text-gray-500">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: palette[cls] }}>{HEALTH_LABELS[cls]}</p>
+                    <p className="text-[10px] text-on-surface-variant mt-0.5">{e.analyzed.toLocaleString('pt-BR')} analisados</p>
+                    <p className="text-[10px] text-on-surface-variant">
                       <span className="text-risk-critical font-mono">{e.criticalCount}</span> crít. ·{' '}
                       <span className="text-risk-high font-mono">{e.highRiskCount}</span> alto
                     </p>
@@ -190,10 +198,10 @@ export default function DashboardPage() {
             )
           })}
 
-          <div className="bg-gradient-to-br from-brand-blue/10 to-brand-violet/10 border border-brand-blue/25 rounded-2xl p-4 flex flex-col items-center justify-center">
-            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Health Global</p>
+          <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/25 rounded-2xl p-4 flex flex-col items-center justify-center">
+            <p className="text-[10px] text-on-surface/70 uppercase tracking-widest mb-1">Health Global</p>
             <HealthGauge score={globalHealth} size={96} />
-            <p className="text-[10px] text-gray-500 mt-1">{enginesAtRisk} de {data.summaries.length} módulos abaixo de 60</p>
+            <p className="text-[10px] text-on-surface-variant mt-1">{enginesAtRisk} de {data.summaries.length} módulos abaixo de 60</p>
           </div>
         </div>
       </div>
@@ -205,12 +213,12 @@ export default function DashboardPage() {
           <div className="p-4 h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={compData} layout="vertical" margin={{ top: 4, right: 16, left: 24, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--app-border))" horizontal={false} />
-                <XAxis type="number" domain={[0, 100]} tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={92} />
-                <Tooltip content={<CompTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={tokens.grid} horizontal={false} />
+                <XAxis type="number" domain={[0, 100]} tick={{ fill: tokens.axis, fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fill: tokens.axisStrong, fontSize: 11 }} axisLine={false} tickLine={false} width={92} />
+                <Tooltip content={<CompTooltip />} cursor={{ fill: softenColor(tokens.onSurface, 0.05) }} />
                 <Bar dataKey="score" name="Health Score" radius={[0, 4, 4, 0]} barSize={18}>
-                  {compData.map((d, i) => <Cell key={i} fill={scoreColor(d.score)} />)}
+                  {compData.map((d, i) => <Cell key={i} fill={scoreColor(palette, d.score)} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -224,15 +232,15 @@ export default function DashboardPage() {
             icon={<AlertTriangle size={14} />}
             action={
               <div className="flex items-center gap-3">
-                <button onClick={() => setWorstOpen(true)} className="text-[11px] text-brand-blue hover:text-brand-blueLight flex items-center gap-1"><ListFilter size={11} /> Ver todos / Exportar</button>
-                <button onClick={() => navigate('/ia')} className="text-[11px] text-brand-blue hover:text-brand-blueLight flex items-center gap-1"><Brain size={11} /> Análise de IA →</button>
+                <button onClick={() => setWorstOpen(true)} className="text-[11px] text-primary hover:text-primary-container flex items-center gap-1"><ListFilter size={11} /> Ver todos / Exportar</button>
+                <button onClick={() => navigate('/ia')} className="text-[11px] text-primary hover:text-primary-container flex items-center gap-1"><Brain size={11} /> Análise de IA →</button>
               </div>
             }
           />
-          <div className="divide-y divide-app-border">
+          <div className="divide-y divide-outline">
             {rk.top.map((c, i) => <RiskRow key={c.customerId} c={c} rank={i + 1} />)}
             {rk.top.length === 0 && (
-              <div className="px-5 py-10 text-center text-xs text-gray-500">
+              <div className="px-5 py-10 text-center text-xs text-on-surface-variant">
                 {hasFilter ? 'Nenhum cliente encontrado com esse filtro.' : 'Sem clientes para exibir.'}
               </div>
             )}
@@ -240,7 +248,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <p className="text-[10px] text-gray-500 text-center">
+      <p className="text-[10px] text-on-surface-variant text-center">
         {coverageLabelFromMeta(data.meta)} · pontuado no servidor · atualizado em {data.meta.generatedAt ? new Date(data.meta.generatedAt).toLocaleString('pt-BR') : '—'}
       </p>
 

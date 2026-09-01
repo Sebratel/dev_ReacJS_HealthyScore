@@ -26,13 +26,14 @@ export function RiskBadge({ level, score, size = 'md' }: RiskBadgeProps) {
 }
 
 export function ScoreBar({ score }: { score: number }) {
-  const color = score >= 75 ? '#ef4444' : score >= 55 ? '#f97316' : score >= 35 ? '#f59e0b' : '#10b981'
+  // Classe em vez de `style`: a barra é um div, então o token resolve sozinho no tema.
+  const fill = score >= 75 ? 'bg-risk-critical' : score >= 55 ? 'bg-risk-high' : score >= 35 ? 'bg-risk-medium' : 'bg-risk-low'
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-app-surface rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, backgroundColor: color }} />
+      <div className="flex-1 h-1.5 bg-surface-container-low rounded-full overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all', fill)} style={{ width: `${score}%` }} />
       </div>
-      <span className="text-xs font-mono tabular-nums text-gray-300 w-8 text-right">{score}</span>
+      <span className="text-xs font-mono tabular-nums text-on-surface/85 w-8 text-right">{score}</span>
     </div>
   )
 }

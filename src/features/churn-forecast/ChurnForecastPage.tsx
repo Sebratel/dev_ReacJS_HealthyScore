@@ -8,7 +8,11 @@ import { KpiCard } from '@/components/ui/KpiCard'
 import { cn, formatCurrency } from '@/utils/cn'
 import { useAppStore } from '@/store/appStore'
 import { realByCity } from '@/data/realClients'
-import { HEALTH_COLORS, HEALTH_LABELS } from '@/components/ui/HealthGauge'
+import { HEALTH_LABELS } from '@/components/ui/HealthGauge'
+import { useHealthColors } from '@/hooks/useHealthColors'
+import { useChartTokens } from '@/hooks/useChartTokens'
+import { softenColor } from '@/utils/healthColors'
+import type { ChartTokens } from '@/utils/chartTokens'
 import { fetchChurnForecast, ApiError, type ForecastRow } from './churnForecastApi'
 import type { HealthClassification } from '@/types'
 
@@ -22,11 +26,13 @@ const CLASS_OPTS: { key: 'all' | HealthClassification; label: string }[] = [
 ]
 
 // Cor da urgência pela janela mediana (dias): quanto menor, mais urgente.
-function urgencyColor(days: number): string {
-  if (days <= 30) return '#ef4444'
-  if (days <= 90) return '#f97316'
-  if (days <= 180) return '#f59e0b'
-  return '#eab308'
+// Reaproveita a rampa ordinal de risco — aqui "low" significa "menos urgente",
+// não "saudável": todas as linhas desta tela já são clientes em risco.
+function urgencyColor(t: ChartTokens, days: number): string {
+  if (days <= 30) return t.riskCritical
+  if (days <= 90) return t.riskHigh
+  if (days <= 180) return t.riskMedium
+  return t.riskLow
 }
 const fmtWindow = (d: number) => (d <= 0 ? 'iminente' : d < 60 ? `~${d} dias` : `~${Math.round(d / 30)} meses`)
 const fmtTenure = (d: number) => (d >= 365 ? `${(d / 365).toFixed(1)} anos` : `${Math.round(d / 30)} meses`)
@@ -46,7 +52,7 @@ function TypewriterText({ text, speed = 8 }: { text: string; speed?: number }) {
     }, speed)
     return () => clearInterval(id)
   }, [text, speed])
-  return <span>{shown}{!done && <span className="inline-block w-0.5 h-3.5 bg-brand-blue ml-0.5 align-middle animate-pulse" />}</span>
+  return <span>{shown}{!done && <span className="inline-block w-0.5 h-3.5 bg-primary ml-0.5 align-middle animate-pulse" />}</span>
 }
 
 // Narrativa (grounded): enquadramento, sinais que mais pesam, janela + confiança
@@ -97,42 +103,44 @@ function toCsv(rows: ForecastRow[]): string {
 
 function Row({ r, rank }: { r: ForecastRow; rank: number }) {
   const [open, setOpen] = useState(false)
-  const uc = urgencyColor(r.windowMedianDays)
+  const tokens = useChartTokens()
+  const palette = useHealthColors()
+  const uc = urgencyColor(tokens, r.windowMedianDays)
   return (
     <>
-      <tr className="border-b border-app-border hover:bg-app-surface/60 cursor-pointer transition-colors" onClick={() => setOpen((v) => !v)}>
-        <td className="px-3 py-2.5 text-[10px] font-mono text-gray-600 text-right">{rank}</td>
+      <tr className="border-b border-outline hover:bg-surface-container-low/60 cursor-pointer transition-colors" onClick={() => setOpen((v) => !v)}>
+        <td className="px-3 py-2.5 text-[10px] font-mono text-on-surface-variant/90 text-right">{rank}</td>
         <td className="px-3 py-2.5">
           <div className="flex items-center gap-1.5">
-            {open ? <ChevronDown size={11} className="text-gray-600 shrink-0" /> : <ChevronRight size={11} className="text-gray-600 shrink-0" />}
+            {open ? <ChevronDown size={11} className="text-on-surface-variant/90 shrink-0" /> : <ChevronRight size={11} className="text-on-surface-variant/90 shrink-0" />}
             <div className="min-w-0">
-              <p className="text-xs font-medium text-gray-200 truncate max-w-[190px]">{r.customerName}</p>
-              <p className="text-[10px] text-gray-500 font-mono">#{r.contractNumber || r.customerId} · {r.city}</p>
+              <p className="text-xs font-medium text-on-surface truncate max-w-[190px]">{r.customerName}</p>
+              <p className="text-[10px] text-on-surface-variant font-mono">#{r.contractNumber || r.customerId} · {r.city}</p>
             </div>
           </div>
         </td>
         <td className="px-3 py-2.5">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold tabular-nums" style={{ color: uc }}>{fmtWindow(r.windowMedianDays)}</span>
-            <span className="text-[10px] text-gray-500">{r.windowP25Days}–{r.windowP75Days}d</span>
+            <span className="text-[10px] text-on-surface-variant">{r.windowP25Days}–{r.windowP75Days}d</span>
           </div>
         </td>
         <td className="px-3 py-2.5 text-right">
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color: HEALTH_COLORS[r.classification as HealthClassification], background: `${HEALTH_COLORS[r.classification as HealthClassification]}15` }}>
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color: palette[r.classification as HealthClassification], background: softenColor(palette[r.classification as HealthClassification], 0.08) }}>
             {HEALTH_LABELS[r.classification as HealthClassification]}
           </span>
         </td>
-        <td className="px-3 py-2.5 text-right text-xs font-mono" style={{ color: HEALTH_COLORS[r.classification as HealthClassification], fontWeight: 700 }}>{r.overallHealth}</td>
-        <td className="px-3 py-2.5 text-right text-xs font-mono text-gray-400">{fmtTenure(r.tenureDays)}</td>
-        <td className="px-3 py-2.5 text-right text-xs font-mono text-gray-300">{formatCurrency(r.monthlyValue)}</td>
-        <td className="px-3 py-2.5 text-right text-[10px] text-gray-500">{confLabel(r.sampleN)}</td>
+        <td className="px-3 py-2.5 text-right text-xs font-mono" style={{ color: palette[r.classification as HealthClassification], fontWeight: 700 }}>{r.overallHealth}</td>
+        <td className="px-3 py-2.5 text-right text-xs font-mono text-on-surface/70">{fmtTenure(r.tenureDays)}</td>
+        <td className="px-3 py-2.5 text-right text-xs font-mono text-on-surface/85">{formatCurrency(r.monthlyValue)}</td>
+        <td className="px-3 py-2.5 text-right text-[10px] text-on-surface-variant">{confLabel(r.sampleN)}</td>
       </tr>
       {open && (
-        <tr className="border-b border-app-border bg-app-surface/40">
+        <tr className="border-b border-outline bg-surface-container-low/40">
           <td colSpan={8} className="px-5 py-3">
-            <div className="flex items-start gap-2 rounded-lg bg-brand-blue/5 border border-brand-blue/15 px-3 py-2.5">
-              <Sparkles size={14} className="mt-0.5 shrink-0 text-brand-blue" />
-              <p className="text-[12px] text-gray-300 leading-relaxed"><TypewriterText text={narrative(r)} /></p>
+            <div className="flex items-start gap-2 rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5">
+              <Sparkles size={14} className="mt-0.5 shrink-0 text-primary" />
+              <p className="text-[12px] text-on-surface/85 leading-relaxed"><TypewriterText text={narrative(r)} /></p>
             </div>
           </td>
         </tr>
@@ -199,17 +207,17 @@ export default function ChurnForecastPage() {
   return (
     <div className="space-y-5 animate-slide-up">
       {/* Cabeçalho */}
-      <div className="rounded-2xl border border-app-border bg-app-card shadow-card-md px-5 py-4">
+      <div className="rounded-2xl border border-outline bg-surface-container-lowest shadow-card-md px-5 py-4">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-danger flex items-center justify-center shadow-glow-danger shrink-0"><AlarmClock size={16} className="text-white" /></div>
+          <div className="w-9 h-9 rounded-xl bg-gradient-danger flex items-center justify-center shadow-glow-danger shrink-0"><AlarmClock size={16} className="text-on-primary" /></div>
           <div>
             <h1 className="text-lg font-bold gradient-text tracking-tight leading-none">Previsão de Cancelamento</h1>
-            <p className="text-[11px] text-gray-500 mt-1">Clientes em risco ordenados por urgência — janela estimada de cancelamento a partir de hoje</p>
+            <p className="text-[11px] text-on-surface-variant mt-1">Clientes em risco ordenados por urgência — janela estimada de cancelamento a partir de hoje</p>
           </div>
         </div>
-        <div className="mt-3 flex items-start gap-2 rounded-lg bg-brand-blue/5 border border-brand-blue/15 px-3 py-2 text-[11px] text-gray-500 leading-relaxed">
-          <Info size={13} className="text-brand-blue shrink-0 mt-0.5" />
-          <p>A janela vem da <strong className="text-gray-400">sobrevivência real dos cancelados</strong> com perfil semelhante (mediana e faixa p25–p75), medida a partir do tempo de contrato atual. É uma <strong className="text-gray-400">faixa de risco</strong>, não uma data garantida. Clique numa linha para o racional.</p>
+        <div className="mt-3 flex items-start gap-2 rounded-lg bg-primary/5 border border-primary/15 px-3 py-2 text-[11px] text-on-surface-variant leading-relaxed">
+          <Info size={13} className="text-primary shrink-0 mt-0.5" />
+          <p>A janela vem da <strong className="text-on-surface/70">sobrevivência real dos cancelados</strong> com perfil semelhante (mediana e faixa p25–p75), medida a partir do tempo de contrato atual. É uma <strong className="text-on-surface/70">faixa de risco</strong>, não uma data garantida. Clique numa linha para o racional.</p>
         </div>
       </div>
 
@@ -225,36 +233,36 @@ export default function ChurnForecastPage() {
         <CardHeader title="Fila de risco" subtitle="Ordenado do prazo mais curto para o mais longo" icon={<AlarmClock size={14} />} />
 
         {/* Filtros */}
-        <div className="flex items-end justify-between gap-3 px-5 py-3 border-b border-app-border flex-wrap">
+        <div className="flex items-end justify-between gap-3 px-5 py-3 border-b border-outline flex-wrap">
           <div className="flex items-end gap-2 flex-wrap">
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500">Quantidade</span>
-              <select value={qty} onChange={(e) => setQty(Number(e.target.value))} className="h-8 px-2 text-xs bg-app-surface border border-app-border rounded-lg text-gray-200 focus:outline-none focus:border-brand-blue/50">
+              <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Quantidade</span>
+              <select value={qty} onChange={(e) => setQty(Number(e.target.value))} className="h-8 px-2 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface focus:outline-none focus:border-primary/50">
                 {QTY_OPTS.map((n) => <option key={n} value={n}>{n} clientes</option>)}
               </select>
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500">Classificação</span>
-              <select value={classification} onChange={(e) => setClassification(e.target.value as any)} className="h-8 px-2 text-xs bg-app-surface border border-app-border rounded-lg text-gray-200 focus:outline-none focus:border-brand-blue/50">
+              <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Classificação</span>
+              <select value={classification} onChange={(e) => setClassification(e.target.value as any)} className="h-8 px-2 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface focus:outline-none focus:border-primary/50">
                 {CLASS_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
               </select>
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500">Cidade</span>
-              <select value={city} onChange={(e) => setCity(e.target.value)} className="h-8 px-2 text-xs bg-app-surface border border-app-border rounded-lg text-gray-200 focus:outline-none focus:border-brand-blue/50">
+              <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Cidade</span>
+              <select value={city} onChange={(e) => setCity(e.target.value)} className="h-8 px-2 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface focus:outline-none focus:border-primary/50">
                 <option value="">Todas</option>
                 {cities.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </label>
             <div className="relative flex items-center">
-              <Search size={13} className="absolute left-2.5 text-gray-500 pointer-events-none" />
+              <Search size={13} className="absolute left-2.5 text-on-surface-variant pointer-events-none" />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar (nome, contrato, cidade)…"
-                className="pl-8 pr-3 h-8 w-56 text-xs bg-app-surface border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50" />
+                className="pl-8 pr-3 h-8 w-56 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface/85 placeholder-on-surface-variant/90 focus:outline-none focus:border-primary/50" />
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-gray-500 font-mono">{filtered.length.toLocaleString('pt-BR')} clientes</span>
-            <button onClick={exportCsv} disabled={filtered.length === 0} className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-brand-blue/15 text-brand-blue border border-brand-blue/30 hover:bg-brand-blue/25 transition-all font-medium disabled:opacity-30">
+            <span className="text-[11px] text-on-surface-variant font-mono">{filtered.length.toLocaleString('pt-BR')} clientes</span>
+            <button onClick={exportCsv} disabled={filtered.length === 0} className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-all font-medium disabled:opacity-30">
               <Download size={12} /> Exportar CSV
             </button>
           </div>
@@ -262,37 +270,37 @@ export default function ChurnForecastPage() {
 
         {/* Conteúdo */}
         {state.status === 'loading' ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-gray-400"><Loader2 size={16} className="animate-spin" /> Calculando as janelas de cancelamento…</div>
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-on-surface/70"><Loader2 size={16} className="animate-spin" /> Calculando as janelas de cancelamento…</div>
         ) : state.status === 'error' ? (
           <div className="px-5 py-8 space-y-3">
-            <div className="flex items-start gap-2.5 text-sm text-rose-300"><AlertTriangle size={16} className="mt-0.5 shrink-0" /><div><p className="font-medium text-gray-100">Não foi possível calcular a previsão</p><p className="mt-0.5 text-[12px] text-gray-400">{state.msg}</p></div></div>
-            <button onClick={() => setReloadKey((k) => k + 1)} className="flex items-center gap-1.5 rounded-md border border-app-border px-3 py-1.5 text-[12px] text-gray-300 hover:border-app-borderLight hover:text-gray-100 transition-colors"><RefreshCw size={13} /> Tentar novamente</button>
+            <div className="flex items-start gap-2.5 text-sm text-risk-critical"><AlertTriangle size={16} className="mt-0.5 shrink-0" /><div><p className="font-medium text-on-surface">Não foi possível calcular a previsão</p><p className="mt-0.5 text-[12px] text-on-surface/70">{state.msg}</p></div></div>
+            <button onClick={() => setReloadKey((k) => k + 1)} className="flex items-center gap-1.5 rounded-md border border-outline px-3 py-1.5 text-[12px] text-on-surface/85 hover:border-outline-strong hover:text-on-surface transition-colors"><RefreshCw size={13} /> Tentar novamente</button>
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-app-border bg-app-surface/50">
+                  <tr className="border-b border-outline bg-surface-container-low/50">
                     {['#', 'Cliente', 'Janela estimada', 'Classificação', 'Health', 'Contrato', 'Mensalidade', 'Confiança'].map((h, i) => (
-                      <th key={h} className={cn('px-3 py-2.5 text-[10px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap', i >= 3 ? 'text-right' : i === 0 ? 'text-right' : 'text-left')}>{h}</th>
+                      <th key={h} className={cn('px-3 py-2.5 text-[10px] text-on-surface-variant uppercase tracking-wider font-medium whitespace-nowrap', i >= 3 ? 'text-right' : i === 0 ? 'text-right' : 'text-left')}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {pageRows.map((r, i) => <Row key={r.customerId} r={r} rank={page * PAGE_SIZE + i + 1} />)}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-gray-500">Nenhum cliente em risco com janela calculável para esses filtros.</td></tr>
+                    <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-on-surface-variant">Nenhum cliente em risco com janela calculável para esses filtros.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
-            <div className="flex items-center justify-between px-5 py-3 border-t border-app-border">
-              <span className="text-[10px] text-gray-500">{filtered.length === 0 ? '0' : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, filtered.length)}`} de {filtered.length.toLocaleString('pt-BR')}</span>
+            <div className="flex items-center justify-between px-5 py-3 border-t border-outline">
+              <span className="text-[10px] text-on-surface-variant">{filtered.length === 0 ? '0' : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, filtered.length)}`} de {filtered.length.toLocaleString('pt-BR')}</span>
               <div className="flex gap-1.5">
-                <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="text-[10px] px-2.5 py-1 rounded border border-app-border text-gray-400 disabled:opacity-30 hover:border-app-borderLight transition-all">Anterior</button>
-                <span className="text-[10px] text-gray-500 px-1 py-1 font-mono">{page + 1}/{totalPages}</span>
-                <button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} className="text-[10px] px-2.5 py-1 rounded border border-app-border text-gray-400 disabled:opacity-30 hover:border-app-borderLight transition-all">Próxima</button>
+                <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="text-[10px] px-2.5 py-1 rounded border border-outline text-on-surface/70 disabled:opacity-30 hover:border-outline-strong transition-all">Anterior</button>
+                <span className="text-[10px] text-on-surface-variant px-1 py-1 font-mono">{page + 1}/{totalPages}</span>
+                <button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} className="text-[10px] px-2.5 py-1 rounded border border-outline text-on-surface/70 disabled:opacity-30 hover:border-outline-strong transition-all">Próxima</button>
               </div>
             </div>
           </>
