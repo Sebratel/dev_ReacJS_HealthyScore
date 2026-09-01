@@ -486,6 +486,16 @@ export interface RealClient {
   // Conexão — quedas de PPPoE: mudanças de status da ONU por status (AutoISP).
   // Opcional para compatibilidade com snapshots antigos (sem o sinal).
   onuStatusCounts?: Record<string, number>
+  // Conexão — qualidade do enlace na carga (AutoISP). Todos opcionais: um
+  // snapshot gerado antes desta versão, ou com o AutoISP fora do ar, simplesmente
+  // não traz os campos e os indicadores ficam sem pontuar.
+  connRxPower?: number | null        // potência óptica recebida (dBm, negativa)
+  connOnuStatus?: string             // status corrente da ONU (OK, warning, …)
+  connLanMbps?: number | null        // maior velocidade negociada na LAN (Mbps)
+  connFiberDistanceM?: number | null // distância ONU → OLT (metros)
+  connOnuTempC?: number | null       // temperatura do módulo óptico (°C)
+  connCpeModel?: string              // modelo do CPE via TR-069
+  connCpeFirmware?: string           // firmware do CPE via TR-069
   // Field Engine — protocolos de manutenção
   protocolCount: number
   scheduleCount: number
@@ -622,6 +632,10 @@ export interface ConnectionScoreFactor {
 // modelo) + quedas de PPPoE (presença por status da ONU, banco AutoISP).
 export type ConnectionIndicatorKey =
   | 'equipment'
+  // Qualidade do enlace — foto atual do cliente (AutoISP)
+  | 'opticalPower' | 'lanSpeed' | 'wifiGeneration' | 'onuStatusNow'
+  | 'fiberDistance' | 'onuTemperature'
+  // Quedas de PPPoE — eventos acumulados no período
   | 'onuPowerFail' | 'onuLossSignal' | 'onuCritical' | 'onuWarning' | 'onuOk' | 'onuUp'
 
 export interface ConnectionIndicatorConfig {
@@ -650,6 +664,14 @@ export interface ConnectionEngineScore {
   equipment: string[]
   onuStatusCounts: Record<string, number>
   onuDrops: number         // power_fail + loss_signal (quedas de PPPoE)
+  // Qualidade do enlace na carga (AutoISP) — repassados para a tabela/detalhe.
+  rxPower: number | null
+  lanMbps: number | null
+  wifiGen: string
+  cpeModel: string
+  onuStatus: string
+  fiberDistanceM: number | null
+  onuTempC: number | null
   healthScore: number
   churnRisk: number
   revenueRisk: number
@@ -679,6 +701,16 @@ export interface ConnectionEngineData {
   indicatorSummary: ConnectionIndicatorSummary[]
   cityBreakdown: { city: string; avgScore: number; avgRisk: number; count: number }[]
   modelBreakdown: { model: string; count: number; avgScore: number }[]
+  // Qualidade do enlace — distribuições prontas para os cards da aba. `withLink`
+  // é quantos clientes têm leitura óptica; sem ele os percentuais enganam.
+  withLink: number
+  avgRxPower: number | null
+  poorSignalCount: number      // atenuação pior que −26 dBm
+  cappedLanCount: number       // porta LAN negociando 10 ou 100 Mbps
+  legacyWifiCount: number      // Wi-Fi 4 (n) ou anterior
+  rxPowerBreakdown: { key: string; label: string; count: number; avgScore: number }[]
+  lanSpeedBreakdown: { key: string; label: string; count: number; avgScore: number }[]
+  wifiGenBreakdown: { key: string; label: string; count: number; avgScore: number }[]
 }
 
 // ─── Network Engine (100% real + config · massivas cross-DB) ───

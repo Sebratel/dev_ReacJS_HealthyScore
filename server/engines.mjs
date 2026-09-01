@@ -21,7 +21,10 @@ import { getVersion } from './dataset.mjs'
 const ENGINES = {
   financial:    { base: (c) => c.totalInvoices > 0 || c.trustReleases > 0 || c.renegotiations > 0, build: buildFinancialEngineData, wantsMonthly: true },
   commercial:   { base: () => true, build: buildCommercialEngineData },
-  connection:   { base: (c) => c.equipment.length > 0 || Object.values(c.onuStatusCounts || {}).some((n) => n > 0), build: buildConnectionEngineData },
+  // Conexão: entra quem tem equipamento, quedas de PPPoE OU leitura de enlace
+  // (óptica / porta LAN / CPE). Sem a última condição, o cliente com sinal
+  // péssimo mas sem equipamento cadastrado ficava de fora da engine inteira.
+  connection:   { base: (c) => c.equipment.length > 0 || Object.values(c.onuStatusCounts || {}).some((n) => n > 0) || c.connRxPower != null || c.connLanMbps != null || !!c.connCpeModel, build: buildConnectionEngineData },
   network:      { base: (c) => c.netMassiveCount > 0 || !!c.netSite, build: buildNetworkEngineData },
   field:        { base: (c) => c.protocolCount > 0, build: buildFieldEngineData },
   installation: { base: (c) => c.installProtocols > 0, build: buildInstallationEngineData },

@@ -604,6 +604,70 @@ group by c.contract_id, s.subsc_id, osc.new_status
 `,
   },
 
+  // ── Conexão — qualidade do enlace (AutoISP) ───────────────────
+  // As três queries abaixo são PASSADAS ÚNICAS sobre a base inteira, sem filtro
+  // por contrato. Não é descuido: medimos as duas formas contra o banco real e
+  // filtrar por `contract_id = any($1)` obriga o planner a varrer contracts +
+  // contracted_services a cada execução e sai ~5x MAIS CARO (11,8s para 2 mil
+  // contratos contra 2,3s para os 84 mil). O casamento com a base é feito no
+  // ETL, em memória, por contract_number.
+  //
+  // Também estão SEPARADAS de propósito. Juntar o óptico com a velocidade da
+  // porta numa query só faz o Postgres destoastar o jsonb `ethernet` das 215
+  // mil linhas de onu_statuses (a tabela tem 1,7 GB por causa dele) e a
+  // consulta estoura 10 min. Separadas, o filtro `jsonb_typeof = 'array'` corta
+  // para as ~87 mil que têm dado real e a mesma coisa sai em 1,5s.
+  {
+    id: 'Q_AUTOISP_ONU_HEALTH', engine: 'conexao', db: 'autoisp',
+    title: 'Qualidade do enlace óptico — sinal, distância e temperatura (AutoISP)',
+    description:
+      'Foto ATUAL do enlace de cada contrato: potência óptica recebida (dBm), potência transmitida, status corrente da ONU, distância da fibra em metros e temperatura óptica. Uma linha por contrato. Passada única sobre onu_statuses + onu_infos (sem filtro por contrato — ver comentário acima).',
+    params: [],
+    sql: `
+select cs.contract_id::text contract_id,
+  os.calculated_rx_power, os.tx_power, os.calculated_status,
+  oi.distance, oi.optical_temperature
+from onu_statuses os
+join gpon_clients gc on gc.id = os.gpon_client_id
+join contracted_services cs on cs.id = gc.contracted_service_id
+left join onu_infos oi on oi.gpon_client_id = gc.id
+where cs.contract_id is not null
+`,
+  },
+
+  {
+    id: 'Q_AUTOISP_ONU_LAN', engine: 'conexao', db: 'autoisp',
+    title: 'Velocidade negociada da porta LAN da ONU (AutoISP)',
+    description:
+      'Maior velocidade negociada (Mbps) entre as portas ethernet da ONU que estão com link ativo. Serve para achar o cliente de plano alto ligado numa porta de 100 ou 10 Mbps — que nunca vai ver a velocidade que assina. Lê o jsonb `ethernet` de onu_statuses, restrito às linhas em que ele é um array de verdade.',
+    params: [],
+    sql: `
+select cs.contract_id::text contract_id,
+  (select max(nullif(regexp_replace(p->>'negotiated_speed','[^0-9]','','g'),'')::int)
+     from jsonb_array_elements(os.ethernet) p where p->>'link' = 'up') lan_mbps
+from onu_statuses os
+join gpon_clients gc on gc.id = os.gpon_client_id
+join contracted_services cs on cs.id = gc.contracted_service_id
+where cs.contract_id is not null and jsonb_typeof(os.ethernet) = 'array'
+`,
+  },
+
+  {
+    id: 'Q_AUTOISP_CPE', engine: 'conexao', db: 'autoisp',
+    title: 'Equipamento do cliente — modelo e firmware via TR-069 (AutoISP)',
+    description:
+      'Modelo e firmware do CPE reportados por TR-069. O modelo é o que define a geração do Wi-Fi (ax / ac / n) — o ETL faz esse de-para. Usa só COLUNAS de acs_clients: a mesma informação existe no jsonb de acs_device_statuses, mas lê-lo custa mais de 10 min contra 2,3s aqui.',
+    params: [],
+    sql: `
+select cs.contract_id::text contract_id,
+  ac.router_model_name, ac.firmware_version
+from acs_clients ac
+join gpon_clients gc on gc.id = ac.gpon_client_id
+join contracted_services cs on cs.id = gc.contracted_service_id
+where cs.contract_id is not null
+`,
+  },
+
   // ── Retiradas de equipamento — protocolos de retirada (motoboys) ─
   // Uma linha por PROTOCOLO. Cada relato (report) que casa com os filtros é uma
   // "visita"; o desfecho (retirado × não retirado) e o motoboy vêm do relato

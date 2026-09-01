@@ -59,7 +59,7 @@ const {
   Q_REL_PROT, Q_REL_DIM, Q_REL_TYPE_LIST, Q_REL_ATT_LIST,
   Q_MARIA_SPLITTER, Q_NET_INFRA, Q_NET_INFRA_CANCELLED,
   Q_INV_AGG, Q_RENEG_AGG, Q_TRUST_AGG,
-  Q_AUTOISP_ONU_STATUS,
+  Q_AUTOISP_ONU_STATUS, Q_AUTOISP_ONU_HEALTH, Q_AUTOISP_ONU_LAN, Q_AUTOISP_CPE,
   Q_WD_PROT,
 } = buildEffectiveQueries({ full: FULL })
 
@@ -239,35 +239,115 @@ try {
     // carga já passou), aqui a gente RETENTA com backoff antes de desistir — e,
     // se desistir, avisa ALTO (não some calado). Nº de tentativas: AUTOISP_RETRIES.
     const ATTEMPTS = Math.max(1, Number(process.env.AUTOISP_RETRIES) || 3)
-    let onuRes = null
-    for (let attempt = 1; attempt <= ATTEMPTS && !onuRes; attempt++) {
-      const autoisp = makeAutoIspPool()
-      try {
-        onuRes = await autoisp.query(Q_AUTOISP_ONU_STATUS, [FROM_DATE])
-      } catch (e) {
-        console.warn(`ONU (AutoISP): tentativa ${attempt}/${ATTEMPTS} falhou — ${e.message}`)
-        if (attempt < ATTEMPTS) await new Promise((r) => setTimeout(r, attempt * 15000)) // backoff 15s, 30s…
-      } finally { await autoisp.end() }
-    }
-    if (onuRes) {
-      for (const r of onuRes.rows) {
-        const status = (r.new_status || '').trim()
-        const qty = Number(r.qty) || 0
-        if (!status || !qty) continue
-        if (r.contract_id != null) {
-          const m = onuByContract.get(String(r.contract_id)) || {}
-          m[status] = (m[status] || 0) + qty
-          onuByContract.set(String(r.contract_id), m)
-        }
-        if (r.client_id != null) {
-          const m = onuByClient.get(String(r.client_id)) || {}
-          m[status] = (m[status] || 0) + qty
-          onuByClient.set(String(r.client_id), m)
+    // Um pool só para TODAS as consultas do AutoISP, e elas rodam em SÉRIE.
+    // Em paralelo seriam 4 varreduras simultâneas no banco deles — o oposto do
+    // que queremos. Em série o conjunto todo leva ~15s fora a query de quedas.
+    const autoisp = makeAutoIspPool()
+    // Retenta por consulta, não pelo bloco: assim uma falha no sinal de enlace
+    // não custa 3 re-execuções da query de quedas (que varre 4,3 mi de linhas).
+    const tryQuery = async (label, sql, params = []) => {
+      for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+        try {
+          const t0 = Date.now()
+          const res = await autoisp.query(sql, params)
+          console.log(`  ${label}: ${res.rows.length} linhas em ${((Date.now() - t0) / 1000).toFixed(1)}s`)
+          return res
+        } catch (e) {
+          console.warn(`  ${label}: tentativa ${attempt}/${ATTEMPTS} falhou — ${e.message}`)
+          if (attempt < ATTEMPTS) await new Promise((r) => setTimeout(r, attempt * 15000)) // backoff 15s, 30s…
         }
       }
-    } else {
-      console.warn(`⚠️  ONU (AutoISP): FALHOU em ${ATTEMPTS} tentativa(s) — o snapshot vai SEM as quedas de PPPoE. Provável carga/janela do banco AutoISP no horário do ETL (ETL_HOUR=${process.env.ETL_HOUR ?? '3'}).`)
+      return null
     }
+    try {
+      console.log('AutoISP — coletando sinais de conexão…')
+      const onuRes = await tryQuery('quedas de PPPoE', Q_AUTOISP_ONU_STATUS, [FROM_DATE])
+      if (onuRes) {
+        for (const r of onuRes.rows) {
+          const status = (r.new_status || '').trim()
+          const qty = Number(r.qty) || 0
+          if (!status || !qty) continue
+          if (r.contract_id != null) {
+            const m = onuByContract.get(String(r.contract_id)) || {}
+            m[status] = (m[status] || 0) + qty
+            onuByContract.set(String(r.contract_id), m)
+          }
+          if (r.client_id != null) {
+            const m = onuByClient.get(String(r.client_id)) || {}
+            m[status] = (m[status] || 0) + qty
+            onuByClient.set(String(r.client_id), m)
+          }
+        }
+      } else {
+        console.warn(`⚠️  ONU (AutoISP): FALHOU em ${ATTEMPTS} tentativa(s) — o snapshot vai SEM as quedas de PPPoE. Provável carga/janela do banco AutoISP no horário do ETL (ETL_HOUR=${process.env.ETL_HOUR ?? '3'}).`)
+      }
+
+      // ── Qualidade do enlace (foto atual) ──
+      // As três consultas varrem a base INTEIRA do AutoISP (215 mil ONUs), mas
+      // gravamos direto no objeto do cliente via byContract: nada de mapa
+      // intermediário, então o pico de memória é só o resultado da consulta da
+      // vez (~42 MB na maior) em vez de um índice de 215 mil entradas.
+      let hits = { health: 0, lan: 0, cpe: 0 }
+      const healthRes = await tryQuery('enlace óptico', Q_AUTOISP_ONU_HEALTH)
+      if (healthRes) {
+        for (const r of healthRes.rows) {
+          const c = byContract.get(String(r.contract_id))
+          if (!c) continue
+          // Leitura óptica válida fica entre −5 e −40 dBm. O AutoISP guarda
+          // milhares de linhas entre −9 e 0 (e zeros) que são ONU sem leitura,
+          // não sinal excelente — se entrassem, virariam "atenuação ótima".
+          const rx0 = r.calculated_rx_power != null ? Number(r.calculated_rx_power) : null
+          const rx = rx0 != null && rx0 <= -5 && rx0 >= -40 ? rx0 : null
+          // Um contrato pode ter MAIS DE UMA ONU (contracted_services distintos).
+          // Sem critério, a última linha lida ganhava e o score do cliente
+          // dependia da ordem do banco. Fica com a PIOR leitura: é ela que
+          // explica a reclamação, e o pior enlace é o que limita o cliente.
+          const pior = c.connRxPower == null || (rx != null && rx < c.connRxPower)
+          if (pior) {
+            if (rx != null) c.connRxPower = rx
+            c.connOnuStatus = (r.calculated_status || '').trim() || 'sem_leitura'
+          } else if (c.connOnuStatus === undefined) {
+            c.connOnuStatus = (r.calculated_status || '').trim() || 'sem_leitura'
+          }
+          const dist = r.distance != null ? Number(r.distance) : null
+          if (dist != null && dist > 0) c.connFiberDistanceM = Math.max(c.connFiberDistanceM ?? 0, dist)
+          const temp = r.optical_temperature != null ? Number(r.optical_temperature) : null
+          if (temp != null && temp > 0) c.connOnuTempC = Math.max(c.connOnuTempC ?? 0, temp)
+          hits.health++
+        }
+      }
+      const lanRes = await tryQuery('velocidade da porta LAN', Q_AUTOISP_ONU_LAN)
+      if (lanRes) {
+        for (const r of lanRes.rows) {
+          const c = byContract.get(String(r.contract_id))
+          if (!c) continue
+          // Idem multi-ONU: fica com a MAIOR velocidade negociada, que é a
+          // melhor porta disponível ao cliente. 0 = nenhuma porta com link.
+          const mbps = r.lan_mbps != null ? Number(r.lan_mbps) : 0
+          c.connLanMbps = Math.max(c.connLanMbps ?? 0, mbps)
+          hits.lan++
+        }
+      }
+      const cpeRes = await tryQuery('equipamento (TR-069)', Q_AUTOISP_CPE)
+      if (cpeRes) {
+        for (const r of cpeRes.rows) {
+          const c = byContract.get(String(r.contract_id))
+          if (!c) continue
+          // Só o modelo cru. A geração do Wi-Fi (ac/ax) é derivada dele no
+          // motor, em connectionConfig.ts — o de-para mora num lugar só, e um
+          // modelo novo aparece na tela como "Modelo não identificado" em vez
+          // de exigir um ETL novo.
+          // Primeiro modelo não vazio: se o contrato tem dois CPEs, qualquer um
+          // serve para a geração do Wi-Fi (são do mesmo padrão na prática).
+          if (!c.connCpeModel) {
+            c.connCpeModel = (r.router_model_name || '').trim()
+            c.connCpeFirmware = (r.firmware_version || '').trim()
+          }
+          hits.cpe++
+        }
+      }
+      console.log(`AutoISP — enlace casado com a base: ${hits.health} ópticos, ${hits.lan} portas LAN, ${hits.cpe} equipamentos.`)
+    } finally { await autoisp.end() }
   } else {
     console.log('ONU (AutoISP): DB_AUTOISP_* ausentes no .env — sinal pulado.')
   }
