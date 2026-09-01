@@ -175,7 +175,7 @@ export default function LoginPage() {
               <div className="relative space-y-6 p-7 sm:p-8">
                 <header className="space-y-2">
                   <span className="inline-flex rounded-full border border-primary/40 bg-primary/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-strong">
-                    Operação Sebratel
+                    Health Score
                   </span>
                   <h1 className="text-2xl font-bold tracking-tight text-on-surface sm:text-[1.65rem]">Acessar plataforma</h1>
                   <p className="text-sm leading-relaxed text-on-surface-variant">
