@@ -52,6 +52,7 @@ function Gradiente({ p }: { p: AccuracyPoint }) {
 }
 
 export function AccuracyCard() {
+  const palette = useHealthColors()
   const [data, setData] = useState<AccuracyResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
@@ -87,37 +88,51 @@ export function AccuracyCard() {
     <Card>
       <CardHeader
         title="Assertividade do Health Score"
-        subtitle={`Dos que cancelaram após ${p.asOf}, quantos já estavam sinalizados como risco`}
+        subtitle={`Dos clientes que marcamos como risco, quantos saíram da base nos ${p.diasAcompanhados ?? '—'} dias seguintes`}
         icon={<Target size={14} />}
       />
       <div className="p-4 space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-on-surface-variant">Já sinalizados</p>
-            <p className="text-2xl font-bold text-on-surface leading-tight">{p.recall ?? '—'}%</p>
-            <p className="text-[10px] text-on-surface-variant">{p.sinalizados} de {p.cancelados} que saíram</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-on-surface-variant">Ganho sobre o acaso</p>
-            <p className={`text-2xl font-bold leading-tight ${corLift}`}>{p.lift ?? '—'}x</p>
-            <p className="text-[10px] text-on-surface-variant">alerta cobre {p.taxaSinalizada}% da base</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-on-surface-variant">Precisão do alerta</p>
-            <p className="text-2xl font-bold text-on-surface leading-tight">{p.precisao ?? '—'}%</p>
-            <p className="text-[10px] text-on-surface-variant">dos {p.sinalizadosNaBase} sinalizados saíram</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-on-surface-variant">Acompanhamento</p>
-            <p className="text-2xl font-bold text-on-surface leading-tight">{p.diasAcompanhados ?? '—'}d</p>
-            <p className="text-[10px] text-on-surface-variant">{p.coorte.toLocaleString('pt-BR')} clientes na coorte</p>
+        {/* Leitura principal: a pergunta que a operação faz de verdade —
+            "marquei como crítico, e aí?". A taxa sozinha não diz nada, então
+            vem sempre colada à taxa média da base, que é o ponto de comparação. */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(['critical', 'high_risk'] as const).map((cls) => {
+            const l = p.porClassificacao.find((x) => x.classificacao === cls)
+            if (!l) return null
+            const vezes = p.taxaCancelamento && l.taxa ? l.taxa / p.taxaCancelamento : null
+            return (
+              <div key={cls} className="rounded-xl bg-surface-container-lowest border border-outline p-3">
+                <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: palette[cls] }}>
+                  Marcados como {HEALTH_LABELS[cls]}
+                </p>
+                <p className="text-3xl font-bold text-on-surface leading-tight mt-0.5">{l.taxa ?? '—'}%</p>
+                <p className="text-[11px] text-on-surface/80">
+                  <span className="font-mono">{l.cancelaram.toLocaleString('pt-BR')}</span> dos{' '}
+                  <span className="font-mono">{l.naBase.toLocaleString('pt-BR')}</span> saíram
+                </p>
+                {vezes && (
+                  <p className="text-[10px] text-on-surface-variant mt-1">
+                    <span className="font-semibold text-on-surface/80">{vezes.toFixed(1)}x</span> a média da base
+                  </p>
+                )}
+              </div>
+            )
+          })}
+          <div className="rounded-xl bg-surface/60 border border-outline p-3">
+            <p className="text-[10px] uppercase tracking-wider font-semibold text-on-surface-variant">Média da base</p>
+            <p className="text-3xl font-bold text-on-surface-variant leading-tight mt-0.5">{p.taxaCancelamento ?? '—'}%</p>
+            <p className="text-[11px] text-on-surface-variant">
+              <span className="font-mono">{p.cancelados.toLocaleString('pt-BR')}</span> dos{' '}
+              <span className="font-mono">{p.coorte.toLocaleString('pt-BR')}</span> saíram
+            </p>
+            <p className="text-[10px] text-on-surface-variant mt-1">é contra isto que as taxas acima se comparam</p>
           </div>
         </div>
 
         <div>
           <p className="text-[11px] font-semibold text-on-surface mb-2">
-            Taxa de cancelamento por classificação
-            <span className="font-normal text-on-surface-variant"> — a prova de que a nota ordena risco</span>
+            Quantos saíram, por classificação
+            <span className="font-normal text-on-surface-variant"> — quanto pior a nota, mais gente sai</span>
           </p>
           <Gradiente p={p} />
         </div>
@@ -141,6 +156,15 @@ export function AccuracyCard() {
             </div>
           </div>
         )}
+
+        {/* Recall e lift continuam verdadeiros e úteis, mas respondem a
+            pergunta inversa ("dos que saíram, quantos tínhamos marcado?").
+            Ficam como leitura de apoio para não competir com a principal. */}
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-[10px] text-on-surface-variant border-t border-outline pt-2.5">
+          <span>Cobertura: <span className="font-mono text-on-surface/80">{p.recall ?? '—'}%</span> dos {p.cancelados.toLocaleString('pt-BR')} que saíram já estavam marcados</span>
+          <span>Ganho sobre o acaso: <span className={`font-mono ${corLift}`}>{p.lift ?? '—'}x</span></span>
+          <span>Alerta cobre <span className="font-mono text-on-surface/80">{p.taxaSinalizada}%</span> da base</span>
+        </div>
 
         {poucosCasos && (
           <div className="flex items-start gap-2 rounded-lg bg-risk-medium/10 border border-risk-medium/25 px-3 py-2">
