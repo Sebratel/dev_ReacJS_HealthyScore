@@ -18,3 +18,6 @@ public/history/
 # Build de produção: a imagem Docker roda `npm run build` por dentro
 # (ver Dockerfile), então o dist versionado nunca era usado no deploy.
 dist/
+
+# Relatórios gerados pelo scripts/perfil-cancelamentos.mjs (regeráveis)
+perfil-cancelamentos-*.md
