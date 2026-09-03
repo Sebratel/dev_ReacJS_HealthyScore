@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Activity, AlertTriangle, DollarSign, Users, Gauge as GaugeIcon, ChevronRight, Brain, Loader2, Lock, RefreshCw, ListFilter } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { KpiCard } from '@/components/ui/KpiCard'
+import { AccuracyCard } from './AccuracyCard'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { HealthGauge, scoreToHealthClass } from '@/components/ui/HealthGauge'
 import { HEALTH_LABELS, softenColor, type HealthPalette } from '@/utils/healthColors'
@@ -166,6 +167,9 @@ export default function DashboardPage() {
         <KpiCard label="Health Score Global" value={`${globalHealth}/100`} subtitle="Média dos 7 módulos" icon={<Activity size={14} />} variant={globalHealth < 50 ? 'danger' : globalHealth < 70 ? 'warning' : 'success'} iconColor={globalHealth < 50 ? 'text-risk-critical' : 'text-risk-low'} />
         <KpiCard label="Clientes em Risco" value={rk.atRiskCount.toLocaleString('pt-BR')} subtitle={`Receita em risco: ${formatCurrency(rk.revenueAtRiskMonthly)}/mês`} icon={<AlertTriangle size={14} />} variant="danger" iconColor="text-risk-critical" />
       </div>
+
+      {/* Assertividade — a plataforma acerta? Fica na primeira dobra de propósito. */}
+      <AccuracyCard />
 
       {/* Resumo por engine */}
       <div>

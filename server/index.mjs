@@ -23,9 +23,10 @@ dns.setDefaultResultOrder('ipv4first')
 import { getCatalog, ENGINE_LABELS } from '../scripts/queries/index.mjs'
 import { writeOverride, deleteOverride, OVERRIDES_PATH } from '../scripts/queries/overrides.mjs'
 import { getQueryDef } from '../scripts/queries/registry.mjs'
-import { getStatus as datasetStatus, getClients, getCancelledClients, getDataset } from './dataset.mjs'
+import { getStatus as datasetStatus, getClients, getCancelledClients, getDataset, getVersion } from './dataset.mjs'
 import { runEngine, runDashboard, ENGINE_KEYS } from './engines.mjs'
 import { getClientHistory, getScoreHistoryStatus } from './scoreHistory.mjs'
+import { computeAccuracy } from './accuracy.mjs'
 import { buildSuggestions, deriveLists } from '../src/features/cancellation-profiles/suggestionEngine.ts'
 import { resolveRole, atLeast, listRoles, setRole, deleteRole } from './roles.mjs'
 import { getOfficialConfig, setOfficialConfigs, setOfficialThresholds } from './officialConfig.mjs'
@@ -240,6 +241,19 @@ app.get('/api/score-history/status', requireAuth(), (_req, res) => {
 app.get('/api/clients/:id/score-history', requireAuth(), (req, res) => {
   const series = getClientHistory(req.params.id)
   res.json({ clientId: req.params.id, points: series, status: getScoreHistoryStatus() })
+})
+
+// Assertividade: dos que cancelaram, quantos a plataforma já sinalizava ANTES?
+// Calculado só sobre o histórico congelado — pontuar hoje quem já cancelou
+// usaria dados gerados pelo próprio cancelamento (ver server/accuracy.mjs).
+// Cache curto: a resposta varre o índice inteiro e só muda quando entra
+// snapshot ou ponto de histórico novo.
+let accCache = { key: '', value: null }
+app.get('/api/accuracy', requireAuth(), (_req, res) => {
+  const st = getScoreHistoryStatus()
+  const key = `${getVersion()}:${st.points}:${st.to ?? ''}`
+  if (accCache.key !== key) accCache = { key, value: computeAccuracy() }
+  res.json(accCache.value)
 })
 
 // Catálogo de queries — a tela de SQL é área do power_user (view + edit).
