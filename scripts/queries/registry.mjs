@@ -738,14 +738,31 @@ order by c.id, sp.selling_price desc nulls last
 `,
   },
   {
+    // Sem o filtro de v_stage, 41% da coorte (27.654 de 67.124 na janela de 2
+    // anos) eram contratos que NUNCA foram instalados: endereço com pendência,
+    // falta de contato, desistência e inviabilidade técnica. Eles entram como
+    // "cancelamento" no ELLEVEN, mas nunca foram clientes — e distorciam tempo
+    // de casa, ticket e qualquer perfil montado sobre a coorte.
     id: 'Q_COH_CANCELLED_BASE', engine: 'cancelados', db: 'postgres',
     title: 'Coorte — base de CANCELADOS (janela)',
-    description: 'Identidade/plano/endereço dos contratos cancelados na janela. $1 = from, $2 = to (datas).',
+    description:
+      'Identidade/plano/endereço dos contratos cancelados na janela, restrita a CANCELAMENTO DE CLIENTE DE VERDADE. Três filtros, iguais aos do relatório de cancelamento já em uso: v_stage = Aprovado (contrato chegou a ser instalado), contract_type_id <> 19 (exclui Contrato Telefonia, que é outro produto) e último evento de cancelamento <> OTR.CAN.006 (contrato duplicado). Traz também o código do último evento, que é a classificação AUTORITATIVA do motivo — melhor que o texto livre de cancellation_motive. $1 = from, $2 = to (datas).',
     params: ['$1 = from', '$2 = to'],
     sql: `
-select distinct on (c.id) ${COHORT_BASE_COLUMNS}
+with ultimo_evento_cancelamento as (
+  select ce.contract_id, cet.code,
+         row_number() over (partition by ce.contract_id order by ce.created desc) rn
+  from contract_events ce
+  join contract_event_types cet on cet.id = ce.contract_event_type_id
+  where cet.title ilike '%cancelamento%'
+)
+select distinct on (c.id) ${COHORT_BASE_COLUMNS}, uec.code cancellation_code
 ${COHORT_BASE_JOINS}
+left join ultimo_evento_cancelamento uec on uec.contract_id = c.id and uec.rn = 1
 where c.v_status = 'Cancelado'
+  and c.v_stage = 'Aprovado'
+  and c.contract_type_id <> 19
+  and uec.code is distinct from 'OTR.CAN.006'
   and c.cancellation_date >= $1::date and c.cancellation_date < ($2::date + 1)
 order by c.id, sp.selling_price desc nulls last
 `,

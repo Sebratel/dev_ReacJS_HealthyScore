@@ -39,6 +39,9 @@ function baseRow(r) {
     contractDate: toDate(r.created_contract),
     cancellationDate: toDate(r.cancellation_date),
     cancellationMotive: r.cancellation_motive != null && String(r.cancellation_motive).trim() ? String(r.cancellation_motive).trim() : null,
+    // Código do último evento de cancelamento — classificação estruturada do
+    // motivo, preferida ao texto livre acima (ver cancellationMotive.ts).
+    cancellationCode: r.cancellation_code != null && String(r.cancellation_code).trim() ? String(r.cancellation_code).trim() : null,
     plan: r.plan_name?.trim() || 'Sem plano',
     monthlyValue: Number(r.selling_price) || 0,
     paymentForm: r.payment_form?.trim() || 'Não informado',

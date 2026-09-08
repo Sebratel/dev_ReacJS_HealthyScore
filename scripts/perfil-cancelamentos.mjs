@@ -158,7 +158,7 @@ function blocoPerfil(rows, titulo, hint) {
 
 // ─── Montagem do relatório ─────────────────────────────────────
 const porGrupo = new Map(MOTIVE_GROUP_ORDER.map((g) => [g, []]))
-for (const c of mes) porGrupo.get(motiveGroupOf(c.cancellationMotive)).push(c)
+for (const c of mes) porGrupo.get(motiveGroupOf(c.cancellationMotive, c.cancellationCode)).push(c)
 
 const mrrMes = mes.reduce((a, c) => a + (c.monthlyValue || 0), 0)
 const meses = [...new Set(todos.map((c) => c.cancellationDate.slice(0, 7)))].sort()
@@ -175,9 +175,11 @@ md.push(`Gerado em ${new Date().toISOString().slice(0, 10)} a partir do snapshot
 md.push('')
 md.push(`**${n0(mes.length)} cancelamentos** no mês, somando **${brl(mrrMes)}** de MRR.`)
 md.push('')
-md.push('## Antes de tudo: um terço não era cliente')
+md.push('## Composição do mês')
 md.push('')
-md.push('O motivo do cancelamento vem como texto livre e mistura coisas incomparáveis. A separação abaixo é o achado mais importante deste relatório — sem ela, qualquer persona sai distorcida.')
+md.push("A coorte já exclui, na origem, contratos que nunca chegaram a ser instalados: a query da base filtra `v_stage = 'Aprovado'`, além de contrato de telefonia e contrato duplicado. Sem esse corte, 41% dos \"cancelamentos\" da janela eram vendas que morreram antes da instalação (endereço com pendência, falta de contato, desistência, inviabilidade técnica) — nunca foram clientes, e distorciam tempo de casa, ticket e qualquer persona.")
+md.push('')
+md.push('Se a linha "Não chegou a instalar" abaixo estiver acima de zero, é sinal de contrato reaprovado depois de um evento de pré-instalação — vale investigar, mas é raro.')
 md.push('')
 md.push(tabela(
   ['Grupo', 'Clientes', '% do mês', 'MRR', 'Tempo de casa (mediana)', 'Sem fatura'],
@@ -188,7 +190,7 @@ md.push(tabela(
   }),
 ))
 md.push('')
-md.push('Repare na linha **Não chegou a instalar**: tempo de casa em dias e nenhuma fatura. São vendas que morreram antes da instalação — contam como cancelamento no ELLEVEN, mas não são churn. Incluí-los puxa o tempo de casa médio do mês para baixo e inventa um perfil que não existe.')
+md.push('O grupo de cada contrato vem do **código do último evento de cancelamento** (`contract_event_types.code`), não do texto livre — classificação estruturada, sem heurística sobre string.')
 md.push('')
 md.push('## Cancelamentos por mês')
 md.push('')
@@ -221,7 +223,8 @@ md.push('---')
 md.push('')
 md.push('## Limites deste relatório')
 md.push('')
-md.push('- O motivo é preenchido por quem registra o cancelamento e tem preenchimento desigual; o agrupamento é heurístico sobre texto livre (ver `src/features/cancellation-profiles/cancellationMotive.ts`).')
+md.push('- O agrupamento usa o código do evento de cancelamento (autoritativo); o texto livre de `cancellation_motive` só entra quando não há evento registrado. De-para em `src/features/cancellation-profiles/cancellationMotive.ts`.')
+md.push("- A coorte exclui quem nunca instalou (`v_stage <> 'Aprovado'`), contrato de telefonia (`contract_type_id = 19`) e contrato duplicado (`OTR.CAN.006`) — os mesmos filtros do relatório de cancelamento já em uso. Para ver a base sem filtro, edite `Q_COH_CANCELLED_BASE` na tela de Configurações → Queries.")
 md.push('- Sinais de conexão do AutoISP (sinal óptico, porta LAN, geração do Wi-Fi) **não** estão disponíveis para cancelados: o ETL só os aplica à base ativa. Por isso não aparecem aqui.')
 md.push('- Contagens de protocolo, fatura e massiva respeitam a data de corte do ETL, não a vida inteira do contrato.')
 md.push('- Perfis com poucos clientes têm percentuais instáveis — confira a coluna de contagem antes de tirar conclusão.')

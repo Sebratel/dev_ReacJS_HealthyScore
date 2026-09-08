@@ -52,7 +52,7 @@ function medirPonto(asOf, index, canceladosDepois, todosCancelados) {
   for (const c of coorte) {
     const canc = canceladosDepois.get(c.id)
     if (!canc) continue
-    eventos.push({ ...c, grupo: motiveGroupOf(canc.cancellationMotive), mrr: canc.monthlyValue || 0 })
+    eventos.push({ ...c, grupo: motiveGroupOf(canc.cancellationMotive, canc.cancellationCode), mrr: canc.monthlyValue || 0 })
   }
 
   const resumo = (rows) => {
