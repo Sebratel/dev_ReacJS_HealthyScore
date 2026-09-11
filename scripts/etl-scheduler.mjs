@@ -18,10 +18,13 @@ import { dirname, resolve } from 'node:path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ETL = resolve(__dirname, 'fetch-clients.mjs')
 const SCORER = resolve(__dirname, 'score-history.mjs')
+const OUTCOMES_JOB = resolve(__dirname, 'evaluate-outcomes.mjs')
 const OUT = process.env.SNAPSHOT_OUT ? resolve(process.env.SNAPSHOT_OUT) : resolve(__dirname, '../public/realClients.data')
 const HOUR = Math.min(23, Math.max(0, Number(process.env.ETL_HOUR ?? 3)))
 // Histórico de score ligado por padrão; desligue com SCORE_HISTORY=off.
 const SCORE_HISTORY = (process.env.SCORE_HISTORY ?? 'on').toLowerCase() !== 'off'
+// Reavaliação de impacto dos Planos de Ação; desligue com ACTION_PLAN_OUTCOMES=off.
+const OUTCOMES = (process.env.ACTION_PLAN_OUTCOMES ?? 'on').toLowerCase() !== 'off'
 
 // Anexa um ponto ao histórico de score (roda sob tsx — importa as engines .ts).
 // A própria trava de cadência (HISTORY_MIN_DAYS) decide se grava ou pula.
@@ -29,8 +32,19 @@ function runScoreHistory() {
   if (!SCORE_HISTORY) return
   console.log('[etl] pontuando histórico de score…')
   const child = spawn(process.execPath, ['--import', 'tsx', SCORER], { stdio: 'inherit', env: process.env })
-  child.on('exit', (code) => console.log(`[etl] score-history finalizado (code ${code})`))
-  child.on('error', (e) => console.error(`[etl] score-history falhou ao iniciar: ${e.message}`))
+  child.on('exit', (code) => { console.log(`[etl] score-history finalizado (code ${code})`); runOutcomes() })
+  child.on('error', (e) => { console.error(`[etl] score-history falhou ao iniciar: ${e.message}`); runOutcomes() })
+}
+
+// Reavaliação de impacto dos Planos de Ação. Roda DEPOIS do ETL de propósito:
+// o score "depois" só é novo quando o snapshot é novo. Falha aqui não derruba
+// o ciclo do ETL — o módulo pode nem estar configurado neste ambiente.
+function runOutcomes() {
+  if (!OUTCOMES) return
+  console.log('[etl] reavaliando impacto dos planos de ação…')
+  const child = spawn(process.execPath, ['--import', 'tsx', OUTCOMES_JOB], { stdio: 'inherit', env: process.env })
+  child.on('exit', (code) => console.log(`[etl] reavaliação finalizada (code ${code})`))
+  child.on('error', (e) => console.error(`[etl] reavaliação falhou ao iniciar: ${e.message}`))
 }
 
 let running = false

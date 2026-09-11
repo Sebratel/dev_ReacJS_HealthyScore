@@ -31,6 +31,7 @@ import { buildSuggestions, deriveLists } from '../src/features/cancellation-prof
 import { resolveRole, atLeast, listRoles, setRole, deleteRole } from './roles.mjs'
 import { getOfficialConfig, setOfficialConfigs, setOfficialThresholds } from './officialConfig.mjs'
 import { runChurnForecast } from './churnForecast.mjs'
+import { actionPlanRoutes } from './actionPlans/routes.mjs'
 
 const PORT = Number(process.env.API_PORT) || 8787
 const ALLOWED_DOMAIN = (process.env.ALLOWED_DOMAIN || 'sebratel.com.br').toLowerCase()
@@ -47,7 +48,7 @@ app.use((req, res, next) => {
   const origin = req.headers.origin
   if (origin) res.setHeader('Access-Control-Allow-Origin', origin)
   res.setHeader('Vary', 'Origin')
-  res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
   if (req.method === 'OPTIONS') return res.sendStatus(204)
   next()
@@ -421,7 +422,33 @@ app.get('/api/cancelled-clients', requireAuth(), (req, res) => {
   })
 })
 
+// ─── Planos de Ação (IA) + provedores ──────────────────────────
+// Único bloco do backend que fala com um BANCO de aplicação (MariaDB). Fica
+// atrás do mesmo requireAuth, e degrada sozinho: sem banco configurado, o
+// /status responde "indisponível" e a tela explica o que falta.
+app.use('/api', actionPlanRoutes(requireAuth))
+
+// Migrations no boot: o deploy é pelo Portainer, onde não há passo de "rodar
+// o migrate" antes de subir. É idempotente (schema_migrations decide o que
+// falta) e NÃO derruba a API se falhar — o resto do sistema não depende deste
+// banco, e a tela do módulo mostra o que está faltando.
+// Desligue com RUN_MIGRATIONS_ON_BOOT=false.
+async function migrateOnBoot() {
+  if (String(process.env.RUN_MIGRATIONS_ON_BOOT ?? 'true').toLowerCase() === 'false') return
+  if (!process.env.DB_APP_HOST && !process.env.DB_MARIA_HOST) {
+    console.log('[migrate] banco da aplicação não configurado — módulo de Planos de Ação indisponível.')
+    return
+  }
+  try {
+    const { runMigrations } = await import('../scripts/migrate.mjs')
+    await runMigrations()
+  } catch (e) {
+    console.warn(`[migrate] não aplicado: ${e.message}`)
+  }
+}
+
 app.listen(PORT, () => {
+  void migrateOnBoot()
   console.log(`ChurnIQ API ouvindo em :${PORT}`)
   console.log(`  domínio permitido: @${ALLOWED_DOMAIN}`)
   console.log(`  papéis: ADMIN_EMAILS/POWER_USER_EMAILS (env) + data/roles.json (tela)`)

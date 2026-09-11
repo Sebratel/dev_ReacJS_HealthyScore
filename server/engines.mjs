@@ -186,6 +186,19 @@ export function scoreAllClients(clients, opts = {}) {
   return out
 }
 
+// ─── Score de UMA engine para TODOS os clientes ────────────────
+// runEngine devolve uma página; isto devolve o array inteiro, reusando o mesmo
+// cache. Usado pela reavaliação de impacto dos Planos de Ação, que precisa
+// comparar o score de hoje com o congelado no dossiê — e comparar exige a
+// MESMA régua (mesma engine, mesma config), não um score aproximado.
+export function scoreEngineAllClients(key, opts = {}) {
+  const eng = ENGINES[key]
+  if (!eng) throw new Error(`Engine desconhecida: ${key}`)
+  if (!opts.config || typeof opts.config !== 'object') throw new Error('Campo "config" (objeto) é obrigatório.')
+  const { data } = scoredEngineData(key, opts.clients || [], opts.config, opts.thresholds, opts.monthly || [])
+  return data.scores
+}
+
 // ─── Dashboard / IA — roda as 7 engines e combina o risco por cliente ──
 // Substitui o cálculo client-side (useEngineSummaries + buildClientRiskRanking)
 // que hoje roda no navegador sobre a base inteira.

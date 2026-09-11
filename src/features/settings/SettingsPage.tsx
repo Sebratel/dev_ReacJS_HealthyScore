@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SlidersHorizontal, RotateCcw, Info, Database, Tag, ShieldCheck } from 'lucide-react'
+import { SlidersHorizontal, RotateCcw, Info, Database, Tag, ShieldCheck, Bot } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { HEALTH_LABELS } from '@/utils/healthColors'
 import { useHealthColors } from '@/hooks/useHealthColors'
@@ -11,6 +11,7 @@ import { cn } from '@/utils/cn'
 import { QueriesPanel } from './queries/QueriesPanel'
 import { IndicatorNamesTab } from './IndicatorNamesTab'
 import { AccessPanel } from './AccessPanel'
+import { AiProviderPanel } from './AiProviderPanel'
 import { useRole } from '@/features/auth/access'
 
 // Chaves editáveis (limite inferior de cada faixa), de cima para baixo.
@@ -40,12 +41,13 @@ function PreviewBar({ t }: { t: HealthThresholds }) {
   )
 }
 
-type Tab = 'health' | 'names' | 'queries' | 'access'
+type Tab = 'health' | 'names' | 'queries' | 'ia' | 'access'
 
 const TABS: { key: Tab; label: string; icon: typeof SlidersHorizontal; adminOnly?: boolean }[] = [
   { key: 'health', label: 'Health Score', icon: SlidersHorizontal },
   { key: 'names', label: 'Nomenclaturas', icon: Tag },
   { key: 'queries', label: 'Queries do Sistema', icon: Database },
+  { key: 'ia', label: 'Provedor de IA', icon: Bot, adminOnly: true },
   { key: 'access', label: 'Usuários e Acessos', icon: ShieldCheck, adminOnly: true },
 ]
 
@@ -55,7 +57,7 @@ export default function SettingsPage() {
   const tabs = TABS.filter((t) => !t.adminOnly || isAdmin)
   // Se um não-admin cair na aba de acessos (ex.: estado antigo), volta pra health.
   const active = tabs.some((t) => t.key === tab) ? tab : 'health'
-  const wide = active === 'queries' || active === 'access'
+  const wide = active === 'queries' || active === 'access' || active === 'ia'
   return (
     <div className={cn('space-y-5', wide ? 'max-w-5xl' : 'max-w-3xl')}>
       {/* Seletor de abas */}
@@ -78,6 +80,7 @@ export default function SettingsPage() {
       {active === 'health' ? <HealthThresholdsTab />
         : active === 'names' ? <IndicatorNamesTab />
         : active === 'queries' ? <QueriesPanel />
+        : active === 'ia' ? <AiProviderPanel />
         : <AccessPanel />}
     </div>
   )
