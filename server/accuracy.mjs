@@ -52,7 +52,7 @@ function medirPonto(asOf, index, canceladosDepois, todosCancelados) {
   for (const c of coorte) {
     const canc = canceladosDepois.get(c.id)
     if (!canc) continue
-    eventos.push({ ...c, grupo: motiveGroupOf(canc.cancellationMotive, canc.cancellationCode), mrr: canc.monthlyValue || 0 })
+    eventos.push({ ...c, data: canc.cancellationDate, grupo: motiveGroupOf(canc.cancellationMotive, canc.cancellationCode), mrr: canc.monthlyValue || 0 })
   }
 
   const resumo = (rows) => {
@@ -77,7 +77,23 @@ function medirPonto(asOf, index, canceladosDepois, todosCancelados) {
   const real = eventos.filter((e) => e.grupo !== 'preInstall')
   const geral = resumo(real)
 
+  // "Em que mês eles saíram?" — sem isso o card mostra um total sem tempo, e
+  // 114 saídas concentradas em dois meses é notícia muito diferente de 114
+  // espalhadas por um ano. Também deixa ver se a saída vem logo após o alerta.
+  const meses = new Map()
+  for (const e of real) {
+    if (!e.data) continue
+    const mes = String(e.data).slice(0, 7)
+    let m = meses.get(mes)
+    if (!m) { m = { mes, cancelados: 0, sinalizados: 0, porCls: {} }; meses.set(mes, m) }
+    m.cancelados++
+    if (FLAGGED.has(e.cls)) m.sinalizados++
+    m.porCls[e.cls] = (m.porCls[e.cls] || 0) + 1
+  }
+  const porMes = [...meses.values()].sort((a, b) => a.mes.localeCompare(b.mes))
+
   return {
+    porMes,
     asOf,
     coorte: coorte.length,
     sinalizadosNaBase: sinalizadosBase,
@@ -132,7 +148,20 @@ export function computeAccuracy() {
   // O ponto MAIS ANTIGO é o que tem mais tempo de acompanhamento, então é o
   // mais informativo; os demais entram para mostrar a evolução.
   const principal = pontos[0]
-  const hoje = new Date().toISOString().slice(0, 10)
-  const diasAcompanhados = Math.round((new Date(hoje) - new Date(principal.asOf)) / 864e5)
-  return { available: true, principal: { ...principal, diasAcompanhados }, points: pontos, snapshotCoverage: ds.meta?.coverage ?? null }
+  // A janela termina onde os DADOS terminam, não hoje. Usar `new Date()` aqui
+  // inflava o período sempre que o ETL atrasava: o card dizia "53 dias" quando
+  // o snapshot só enxergava cancelamentos até 40 dias atrás — e a taxa saía
+  // dividida por um tempo de exposição que não existiu.
+  const observadoAte = ds.meta?.generatedAt
+    ? String(ds.meta.generatedAt).slice(0, 10)
+    : new Date().toISOString().slice(0, 10)
+  const diasAcompanhados = Math.round((new Date(observadoAte) - new Date(principal.asOf)) / 864e5)
+  return {
+    available: true,
+    principal: { ...principal, diasAcompanhados, observadoAte },
+    points: pontos,
+    datasHistorico: dates,
+    observadoAte,
+    snapshotCoverage: ds.meta?.coverage ?? null,
+  }
 }

@@ -22,9 +22,18 @@ export interface AccuracyByClass {
   taxa: number | null
 }
 
+export interface AccuracyMonth {
+  mes: string
+  cancelados: number
+  sinalizados: number
+  porCls: Partial<Record<HealthClassification, number>>
+}
+
 export interface AccuracyPoint {
   asOf: string
   diasAcompanhados?: number
+  observadoAte?: string
+  porMes: AccuracyMonth[]
   coorte: number
   sinalizadosNaBase: number
   taxaSinalizada: number | null
@@ -45,6 +54,8 @@ export interface AccuracyResponse {
   reason?: string
   principal?: AccuracyPoint
   points: AccuracyPoint[]
+  datasHistorico?: string[]
+  observadoAte?: string
   snapshotCoverage?: string | null
 }
 

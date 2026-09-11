@@ -14,6 +14,14 @@ const ORDEM = ['critical', 'high_risk', 'attention', 'healthy', 'excellent'] as 
 const DEFINICAO =
   'Tomamos a foto do score numa data passada, ficamos só com quem estava ativo ali e olhamos quem cancelou depois. A nota considerada é a que existia antes da saída — pontuar hoje quem já cancelou usaria dados criados pelo próprio cancelamento.'
 
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+// Meio-dia evita que o fuso jogue a data para o dia anterior na renderização.
+const fmtData = (iso?: string | null) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR') : '—')
+const fmtMes = (m: string) => {
+  const [ano, mes] = m.split('-')
+  return `${MESES_CURTOS[Number(mes) - 1] ?? m}/${ano.slice(2)}`
+}
+
 function Indisponivel({ motivo }: { motivo: string }) {
   return (
     <Card>
@@ -47,6 +55,52 @@ function Gradiente({ p }: { p: AccuracyPoint }) {
           <span className="text-[10px] font-mono text-on-surface-variant w-16 text-right tabular-nums">{l.cancelaram}/{l.naBase}</span>
         </div>
       ))}
+    </div>
+  )
+}
+
+// "114 saídas" sem eixo de tempo é um número que não decide nada: concentradas
+// logo após a foto significa que o alerta chegou tarde; espalhadas significa que
+// houve janela para agir. O mês do cancelamento é a pergunta que a operação faz.
+function QuandoSairam({ p }: { p: AccuracyPoint }) {
+  const palette = useHealthColors()
+  const meses = p.porMes ?? []
+  if (!meses.length) return null
+  const maior = Math.max(...meses.map((m) => m.cancelados), 1)
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-on-surface mb-2">
+        Quando saíram
+        <span className="font-normal text-on-surface-variant"> — mês do cancelamento, sempre depois da foto</span>
+      </p>
+      <div className="flex items-end gap-1.5 h-24">
+        {meses.map((m) => {
+          const pctSinalizado = m.cancelados ? (100 * m.sinalizados) / m.cancelados : 0
+          return (
+            <div key={m.mes} className="flex-1 min-w-0 h-full flex flex-col items-center justify-end gap-1">
+              <span className="text-[10px] font-mono text-on-surface tabular-nums leading-none">{m.cancelados}</span>
+              <div
+                className="w-full rounded-sm overflow-hidden bg-surface flex flex-col justify-end"
+                style={{ height: `${Math.max(6, (100 * m.cancelados) / maior)}%` }}
+                title={`${fmtMes(m.mes)}: ${m.cancelados} saíram, ${m.sinalizados} já sinalizados`}
+              >
+                <div className="w-full" style={{ height: `${100 - pctSinalizado}%`, backgroundColor: palette.healthy }} />
+                <div className="w-full" style={{ height: `${pctSinalizado}%`, backgroundColor: palette.critical }} />
+              </div>
+              <span className="text-[9px] text-on-surface-variant leading-none truncate w-full text-center">{fmtMes(m.mes)}</span>
+            </div>
+          )
+        })}
+      </div>
+      {/* Duas séries no mesmo visual pedem legenda: a cor sozinha não diz qual é qual. */}
+      <div className="flex items-center gap-3 mt-2 text-[10px] text-on-surface-variant">
+        <span className="inline-flex items-center gap-1">
+          <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: palette.critical }} /> já estavam sinalizados
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: palette.healthy }} /> passaram despercebidos
+        </span>
+      </div>
     </div>
   )
 }
@@ -88,10 +142,20 @@ export function AccuracyCard() {
     <Card>
       <CardHeader
         title="Assertividade do Health Score"
-        subtitle={`Dos clientes que marcamos como risco, quantos saíram da base nos ${p.diasAcompanhados ?? '—'} dias seguintes`}
+        subtitle={`Foto de ${fmtData(p.asOf)} · acompanhados até ${fmtData(p.observadoAte)} (${p.diasAcompanhados ?? '—'} dias)`}
         icon={<Target size={14} />}
       />
       <div className="p-4 space-y-4">
+        {/* A janela é a primeira coisa a dizer. Sem ela, "114 de 1.319" é lido
+            como "cancelamentos do mês" — que é outro número, muito menor. */}
+        <p className="text-[11px] text-on-surface/85 leading-relaxed rounded-lg bg-surface-container-lowest border border-outline px-3 py-2">
+          Congelamos a classificação de <span className="font-mono">{p.coorte.toLocaleString('pt-BR')}</span> clientes que estavam
+          ativos em <span className="font-semibold">{fmtData(p.asOf)}</span> e olhamos quem cancelou entre essa data e{' '}
+          <span className="font-semibold">{fmtData(p.observadoAte)}</span>. Os números abaixo são acumulados da janela inteira, não de um mês.
+          {data.datasHistorico && data.datasHistorico.length > 1 && (
+            <> Há {data.datasHistorico.length} fotos gravadas; esta é a mais antiga, por ter mais tempo decorrido.</>
+          )}
+        </p>
         {/* Leitura principal: a pergunta que a operação faz de verdade —
             "marquei como crítico, e aí?". A taxa sozinha não diz nada, então
             vem sempre colada à taxa média da base, que é o ponto de comparação. */}
@@ -106,9 +170,9 @@ export function AccuracyCard() {
                   Marcados como {HEALTH_LABELS[cls]}
                 </p>
                 <p className="text-3xl font-bold text-on-surface leading-tight mt-0.5">{l.taxa ?? '—'}%</p>
-                <p className="text-[11px] text-on-surface/80">
-                  <span className="font-mono">{l.cancelaram.toLocaleString('pt-BR')}</span> dos{' '}
-                  <span className="font-mono">{l.naBase.toLocaleString('pt-BR')}</span> saíram
+                <p className="text-[11px] text-on-surface/80 leading-snug">
+                  <span className="font-mono">{l.cancelaram.toLocaleString('pt-BR')}</span> já cancelaram, dos{' '}
+                  <span className="font-mono">{l.naBase.toLocaleString('pt-BR')}</span> que estavam nesta faixa em {fmtData(p.asOf)}
                 </p>
                 {vezes && (
                   <p className="text-[10px] text-on-surface-variant mt-1">
@@ -121,9 +185,9 @@ export function AccuracyCard() {
           <div className="rounded-xl bg-surface/60 border border-outline p-3">
             <p className="text-[10px] uppercase tracking-wider font-semibold text-on-surface-variant">Média da base</p>
             <p className="text-3xl font-bold text-on-surface-variant leading-tight mt-0.5">{p.taxaCancelamento ?? '—'}%</p>
-            <p className="text-[11px] text-on-surface-variant">
-              <span className="font-mono">{p.cancelados.toLocaleString('pt-BR')}</span> dos{' '}
-              <span className="font-mono">{p.coorte.toLocaleString('pt-BR')}</span> saíram
+            <p className="text-[11px] text-on-surface-variant leading-snug">
+              <span className="font-mono">{p.cancelados.toLocaleString('pt-BR')}</span> já cancelaram, dos{' '}
+              <span className="font-mono">{p.coorte.toLocaleString('pt-BR')}</span> ativos em {fmtData(p.asOf)}
             </p>
             <p className="text-[10px] text-on-surface-variant mt-1">é contra isto que as taxas acima se comparam</p>
           </div>
@@ -132,10 +196,12 @@ export function AccuracyCard() {
         <div>
           <p className="text-[11px] font-semibold text-on-surface mb-2">
             Quantos saíram, por classificação
-            <span className="font-normal text-on-surface-variant"> — quanto pior a nota, mais gente sai</span>
+            <span className="font-normal text-on-surface-variant"> — taxa, e ao lado cancelaram / estavam na faixa</span>
           </p>
           <Gradiente p={p} />
         </div>
+
+        <QuandoSairam p={p} />
 
         {p.porGrupo.length > 0 && (
           <div>
@@ -176,7 +242,13 @@ export function AccuracyCard() {
           </div>
         )}
 
-        <p className="text-[10px] text-on-surface-variant leading-relaxed border-t border-outline pt-2.5">{DEFINICAO}</p>
+        {/* Censura à direita: quem foi marcado e ainda está na base pode cancelar
+            amanhã. Omitir isso faz a taxa ser lida como resultado final, quando é
+            piso — e alguém acaba comparando janelas de tamanhos diferentes. */}
+        <p className="text-[10px] text-on-surface-variant leading-relaxed border-t border-outline pt-2.5">
+          A janela ainda está aberta: quem foi marcado e continua na base pode cancelar depois, então estas taxas tendem a subir
+          conforme o tempo passa. Só compare com janelas de duração parecida. {DEFINICAO}
+        </p>
       </div>
     </Card>
   )

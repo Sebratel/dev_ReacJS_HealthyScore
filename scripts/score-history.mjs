@@ -18,7 +18,7 @@
 //
 //   SNAPSHOT_OUT / SNAPSHOT_PATH  caminho do snapshot (arg posicional tem prioridade)
 //   HISTORY_DIR                   destino (default: <dir do snapshot>/history)
-//   HISTORY_MIN_DAYS              intervalo mínimo entre pontos (default 7)
+//   HISTORY_MIN_DAYS              intervalo mínimo entre pontos (default 30)
 // ─────────────────────────────────────────────────────────────────────────
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs'
 import { gunzipSync, gzipSync } from 'node:zlib'
