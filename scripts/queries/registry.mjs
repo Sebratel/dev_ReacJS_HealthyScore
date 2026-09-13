@@ -706,6 +706,69 @@ where cs.contract_id is not null
 `,
   },
 
+  // ── Conexão — Wi-Fi dentro da casa e saúde do CPE (TR-069, AutoISP) ─
+  // O RSSI de cada aparelho do cliente mora no jsonb do TR-069, nas chaves
+  // proprietárias da Int6: ...WLANConfiguration.<radio>.AssociatedDevice.<n>.
+  // X_INT6_RSSI (rádio 1 = 2.4 GHz, 5 = 5 GHz). É a mesma fonte do relatório de
+  // qualidade de Wi-Fi que a Int6 envia.
+  //
+  // Esta é a ÚNICA query do grupo que filtra por data — e o filtro é o que a
+  // torna viável. `last_inform` é coluna normal, avaliada antes de destoastar o
+  // jsonb (1,7 GB na tabela): com ela, 9s; sem ela, a consulta abre o jsonb das
+  // 119 mil linhas. Como RSSI é foto do instante, leitura de três dias atrás não
+  // valeria nada de qualquer forma.
+  //
+  // As tabelas prontas analytics_device_dailies / _rollup_stats teriam isto
+  // agregado por dia (e o "tempo conectado" do relatório), mas nesta instância
+  // estão VAZIAS e fora do grant — por isso o dado sai do jsonb.
+  {
+    id: 'Q_AUTOISP_WIFI', engine: 'conexao', db: 'autoisp',
+    title: 'Wi-Fi na casa do cliente — RSSI, memória e temperatura do CPE (AutoISP)',
+    description:
+      'Uma linha por contrato: mediana do RSSI dos aparelhos conectados ao Wi-Fi (o agregador honesto — o pior aparelho mede quantos aparelhos a casa tem), pior aparelho, quantidade por banda, e memória/temperatura do roteador. Cobre ~20% dos contratos: depende do firmware do CPE, não do plano.',
+    params: [],
+    sql: `
+select cs.contract_id::text contract_id,
+  r.rssi_mediano, r.pior_rssi, r.devices_wifi, r.devices_24g, r.devices_5g,
+  nullif(f.d->>'InternetGatewayDevice.DeviceInfo.X_INT6_MEMUSED_PERCENT','')::numeric cpe_mem_pct,
+  nullif(f.d->>'InternetGatewayDevice.DeviceInfo.X_INT6_TEMPERATURE','')::numeric cpe_temp_c
+from (
+  select ads.device_id, ads.last_analytics_data_translated d
+  from acs_device_statuses ads
+  where ads.last_inform >= now() - interval '48 hours'
+    and ads.last_analytics_data_translated is not null
+) f
+left join (
+  select x.device_id,
+    percentile_cont(0.5) within group (order by x.rssi) rssi_mediano,
+    min(x.rssi) pior_rssi, count(*) devices_wifi,
+    count(*) filter (where x.radio = '1') devices_24g,
+    count(*) filter (where x.radio = '5') devices_5g
+  from (
+    select ads.device_id,
+      substring(e.key from 'WLANConfiguration\\.(\\d+)\\.') radio,
+      e.value::numeric rssi
+    from acs_device_statuses ads,
+      lateral jsonb_each_text(ads.last_analytics_data_translated) e
+    where ads.last_inform >= now() - interval '48 hours'
+      and ads.last_analytics_data_translated is not null
+      and e.key like '%.AssociatedDevice.%.X_INT6_RSSI'
+      and e.value ~ '^-[0-9]+$'
+  ) x
+  -- Fora de [-100, -10] é lixo de firmware, não aparelho colado no roteador.
+  where x.rssi between -100 and -10
+  group by x.device_id
+) r on r.device_id = f.device_id
+join acs_clients ac on ac.device_id = f.device_id
+join gpon_clients gc on gc.id = ac.gpon_client_id
+join contracted_services cs on cs.id = gc.contracted_service_id
+where cs.contract_id is not null
+  and (r.device_id is not null
+       or f.d ? 'InternetGatewayDevice.DeviceInfo.X_INT6_MEMUSED_PERCENT'
+       or f.d ? 'InternetGatewayDevice.DeviceInfo.X_INT6_TEMPERATURE')
+`,
+  },
+
   // ── Retiradas de equipamento — protocolos de retirada (motoboys) ─
   // Uma linha por PROTOCOLO. Cada relato (report) que casa com os filtros é uma
   // "visita"; o desfecho (retirado × não retirado) e o motoboy vêm do relato

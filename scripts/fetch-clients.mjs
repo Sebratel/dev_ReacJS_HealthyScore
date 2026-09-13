@@ -59,7 +59,7 @@ const {
   Q_REL_PROT, Q_REL_DIM, Q_REL_TYPE_LIST, Q_REL_ATT_LIST,
   Q_MARIA_SPLITTER, Q_NET_INFRA, Q_NET_INFRA_CANCELLED,
   Q_INV_AGG, Q_RENEG_AGG, Q_TRUST_AGG,
-  Q_AUTOISP_ONU_STATUS, Q_AUTOISP_ONU_HEALTH, Q_AUTOISP_ONU_LAN, Q_AUTOISP_CPE,
+  Q_AUTOISP_ONU_STATUS, Q_AUTOISP_ONU_HEALTH, Q_AUTOISP_ONU_LAN, Q_AUTOISP_CPE, Q_AUTOISP_WIFI,
   Q_WD_PROT,
 } = buildEffectiveQueries({ full: FULL })
 
@@ -287,7 +287,7 @@ try {
       // gravamos direto no objeto do cliente via byContract: nada de mapa
       // intermediário, então o pico de memória é só o resultado da consulta da
       // vez (~42 MB na maior) em vez de um índice de 215 mil entradas.
-      let hits = { health: 0, lan: 0, cpe: 0 }
+      let hits = { health: 0, lan: 0, cpe: 0, wifi: 0 }
       const healthRes = await tryQuery('enlace óptico', Q_AUTOISP_ONU_HEALTH)
       if (healthRes) {
         for (const r of healthRes.rows) {
@@ -346,7 +346,32 @@ try {
           hits.cpe++
         }
       }
-      console.log(`AutoISP — enlace casado com a base: ${hits.health} ópticos, ${hits.lan} portas LAN, ${hits.cpe} equipamentos.`)
+      // ── Wi-Fi dentro da casa + saúde do CPE (TR-069) ──
+      const wifiRes = await tryQuery('Wi-Fi na casa (TR-069)', Q_AUTOISP_WIFI)
+      if (wifiRes) {
+        for (const r of wifiRes.rows) {
+          const c = byContract.get(String(r.contract_id))
+          if (!c) continue
+          const rssi = r.rssi_mediano != null ? Number(r.rssi_mediano) : null
+          // Multi-CPE no mesmo contrato: fica com o PIOR Wi-Fi mediano — é ele
+          // que explica a reclamação, mesma regra da potência óptica.
+          if (rssi != null && (c.connWifiRssi == null || rssi < c.connWifiRssi)) {
+            c.connWifiRssi = rssi
+            c.connWifiWorstRssi = r.pior_rssi != null ? Number(r.pior_rssi) : null
+            c.connWifiDevices = r.devices_wifi != null ? Number(r.devices_wifi) : null
+            c.connWifiDevices24g = r.devices_24g != null ? Number(r.devices_24g) : null
+            c.connWifiDevices5g = r.devices_5g != null ? Number(r.devices_5g) : null
+          }
+          // Memória e temperatura vêm de quase 100% dos CPEs: fica com o pior
+          // (maior) valor entre os equipamentos do contrato.
+          const mem = r.cpe_mem_pct != null ? Number(r.cpe_mem_pct) : null
+          if (mem != null && mem > 0) c.connCpeMemPct = Math.max(c.connCpeMemPct ?? 0, mem)
+          const ctemp = r.cpe_temp_c != null ? Number(r.cpe_temp_c) : null
+          if (ctemp != null && ctemp > 0) c.connCpeTempC = Math.max(c.connCpeTempC ?? 0, ctemp)
+          hits.wifi++
+        }
+      }
+      console.log(`AutoISP — enlace casado com a base: ${hits.health} ópticos, ${hits.lan} portas LAN, ${hits.cpe} equipamentos, ${hits.wifi} leituras de Wi-Fi/CPE.`)
     } finally { await autoisp.end() }
   } else {
     console.log('ONU (AutoISP): DB_AUTOISP_* ausentes no .env — sinal pulado.')

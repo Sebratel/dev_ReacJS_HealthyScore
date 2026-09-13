@@ -20,6 +20,20 @@ import { HealthThresholds, DEFAULT_HEALTH_THRESHOLDS, applyHealthThresholds } fr
 
 type IndexEntry = { key: string; label: string }
 
+// Config salva (localStorage ou a oficial do servidor) sobre o DEFAULT do
+// código: mantém as notas já definidas e garante que indicador NOVO — que não
+// existia quando aquela config foi gravada — apareça na tela em vez de sumir.
+// Sem isso, um indicador adicionado depois da última publicação da config
+// oficial ficava invisível para todo mundo que usa a oficial.
+const mergeIndicatorConfig = <T extends { indicators: Record<string, any> }>(def: T, saved?: T): T => {
+  if (!saved?.indicators) return def
+  const indicators: Record<string, any> = { ...def.indicators }
+  for (const k of Object.keys(def.indicators)) {
+    if (saved.indicators[k]) indicators[k] = saved.indicators[k]
+  }
+  return { ...def, indicators } as T
+}
+
 interface AppState {
   selectedCustomer: Customer | null
   setSelectedCustomer: (c: Customer | null) => void
@@ -120,13 +134,14 @@ export const useAppStore = create<AppState>()(
         set(() => {
           const c = (official.configs ?? {}) as Record<string, any>
           const patch: Record<string, unknown> = {}
-          if (c.financial) patch.financialConfig = c.financial
-          if (c.commercial) patch.commercialConfig = c.commercial
-          if (c.connection) patch.connectionConfig = c.connection
-          if (c.network) patch.networkConfig = c.network
-          if (c.field) patch.fieldConfig = c.field
-          if (c.installation) patch.installationConfig = c.installation
-          if (c.relationship) patch.relationshipConfig = c.relationship
+          // Sempre sobre o default do código — ver mergeIndicatorConfig.
+          if (c.financial) patch.financialConfig = mergeIndicatorConfig(cloneDefaultFinancialConfig(), c.financial)
+          if (c.commercial) patch.commercialConfig = mergeIndicatorConfig(cloneDefaultCommercialConfig(), c.commercial)
+          if (c.connection) patch.connectionConfig = mergeIndicatorConfig(cloneDefaultConnectionConfig(), c.connection)
+          if (c.network) patch.networkConfig = mergeIndicatorConfig(cloneDefaultNetworkConfig(), c.network)
+          if (c.field) patch.fieldConfig = mergeIndicatorConfig(cloneDefaultFieldConfig(), c.field)
+          if (c.installation) patch.installationConfig = mergeIndicatorConfig(cloneDefaultInstallationConfig(), c.installation)
+          if (c.relationship) patch.relationshipConfig = mergeIndicatorConfig(cloneDefaultRelationshipConfig(), c.relationship)
           if (official.thresholds) patch.healthThresholds = { ...DEFAULT_HEALTH_THRESHOLDS, ...official.thresholds }
           return patch
         }),
@@ -383,14 +398,7 @@ export const useAppStore = create<AppState>()(
       // NOVOS (adicionados após o último save) existam, preservando as notas salvas.
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>
-        const mergeConfig = <T extends { indicators: Record<string, any> }>(def: T, saved?: T): T => {
-          if (!saved?.indicators) return def
-          const indicators: Record<string, any> = { ...def.indicators }
-          for (const k of Object.keys(def.indicators)) {
-            if (saved.indicators[k]) indicators[k] = saved.indicators[k]
-          }
-          return { ...def, indicators } as T
-        }
+        const mergeConfig = mergeIndicatorConfig
         return {
           ...current,
           ...p,

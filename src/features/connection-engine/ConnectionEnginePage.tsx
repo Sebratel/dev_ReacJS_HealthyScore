@@ -29,6 +29,10 @@ const DATA_COLUMNS: DataColumn[] = [
   { key: 'onuStatus', label: 'Status da ONU', value: (c) => c.onuStatus || '—' },
   { key: 'dist', label: 'Distância da fibra', align: 'right', value: (c) => fmtKm(c.fiberDistanceM) },
   { key: 'temp', label: 'Temp. ONU', align: 'right', value: (c) => (c.onuTempC == null ? '—' : `${c.onuTempC.toFixed(1)} °C`) },
+  { key: 'rssi', label: 'Wi-Fi na casa (RSSI)', align: 'right', value: (c) => (c.wifiRssi == null ? '—' : `${c.wifiRssi.toFixed(0)} dBm`) },
+  { key: 'rssiDev', label: 'Aparelhos no Wi-Fi', align: 'right', value: (c) => c.wifiDevices ?? '—' },
+  { key: 'cpeMem', label: 'Memória do CPE', align: 'right', value: (c) => (c.cpeMemPct == null ? '—' : `${c.cpeMemPct.toFixed(0)}%`) },
+  { key: 'cpeTemp', label: 'Temp. CPE', align: 'right', value: (c) => (c.cpeTempC == null ? '—' : `${c.cpeTempC.toFixed(1)} °C`) },
   { key: 'equip', label: 'Equipamentos', value: (c) => c.equipment.join(', ') || '—' },
   { key: 'onuDrops', label: 'Quedas ONU (período)', align: 'right', value: (c) => c.onuDrops },
 ]
@@ -56,7 +60,7 @@ export default function ConnectionEnginePage() {
       analyzedLabel="c/ dado de conexão"
       rankingTitle="Ranking de Conexão"
       rankingSubtitle="Clientes ordenados por Health Score de conexão (pior primeiro)"
-      tableHeaders={['Sinal', 'Porta LAN', 'Wi-Fi', 'Quedas']}
+      tableHeaders={['Sinal', 'Porta LAN', 'Wi-Fi', 'Wi-Fi na casa', 'Quedas']}
       columns={[
         {
           header: 'Sinal', sortKey: 'rxPower',
@@ -75,6 +79,16 @@ export default function ConnectionEnginePage() {
         {
           header: 'Wi-Fi', sortKey: 'wifiGen',
           cell: (s) => <span className={`text-[10px] font-mono ${s.wifiGen === 'n' ? 'text-risk-high' : 'text-on-surface-variant'}`}>{WIFI_SHORT[s.wifiGen] ?? '—'}</span>,
+        },
+        {
+          // Mediana dos aparelhos do cliente (ver WIFI_RSSI_RANGES). O traço
+          // aqui é "CPE não reporta", que é a maioria — não "Wi-Fi bom".
+          header: 'Wi-Fi na casa', sortKey: 'wifiRssi',
+          cell: (s) => s.wifiRssi == null
+            ? <span className="text-[10px] text-on-surface-variant/90 font-mono">—</span>
+            : <span className={`text-[10px] font-mono ${s.wifiRssi < -72 ? 'text-risk-critical' : s.wifiRssi < -67 ? 'text-risk-high' : 'text-on-surface-variant'}`}>
+                {s.wifiRssi.toFixed(0)} dBm{s.wifiDevices ? <span className="text-on-surface-variant"> · {s.wifiDevices}ap</span> : null}
+              </span>,
         },
         {
           header: 'Quedas', sortKey: 'onuDrops',
@@ -139,6 +153,22 @@ export default function ConnectionEnginePage() {
           const total = agg.wifiGenBreakdown.reduce((a, d) => a + d.count, 0)
           linkGroups.push({ title: 'Geração do Wi-Fi (ac/ax)', entries: dist(agg.wifiGenBreakdown, total) })
         }
+        // Wi-Fi da casa: o denominador é `withWifiRssi`, não o total da aba —
+        // só ~20% dos CPEs reportam RSSI, e usar o total diria que o Wi-Fi da
+        // base inteira é ótimo.
+        if (agg?.withWifiRssi) {
+          linkGroups.push({
+            title: 'Wi-Fi na casa do cliente — visão geral',
+            entries: [
+              { label: 'Clientes com leitura de RSSI', value: agg.withWifiRssi.toLocaleString('pt-BR') },
+              { label: 'RSSI mediano da base', value: agg.avgWifiRssi != null ? `${agg.avgWifiRssi.toFixed(1)} dBm` : '—' },
+              { label: 'Wi-Fi pior que −72 dBm', value: `${agg.poorWifiCount.toLocaleString('pt-BR')}${pct(agg.poorWifiCount, agg.withWifiRssi)}` },
+            ],
+          })
+        }
+        if (agg?.wifiRssiBreakdown?.length) {
+          linkGroups.push({ title: 'Sinal do Wi-Fi na casa — distribuição', entries: dist(agg.wifiRssiBreakdown, agg.withWifiRssi) })
+        }
 
         return [
           ...linkGroups,
@@ -147,7 +177,7 @@ export default function ConnectionEnginePage() {
         ]
       }}
       renderConfigModal={(open, onClose) => <ConnectionEngineConfigModal open={open} onClose={onClose} />}
-      footerNote="Sinal óptico, porta LAN e equipamento vêm do AutoISP na carga do ETL (foto do momento). A geração do Wi-Fi é derivada do modelo do CPE reportado por TR-069."
+      footerNote="Sinal óptico, porta LAN e equipamento vêm do AutoISP na carga do ETL (foto do momento). A geração do Wi-Fi é derivada do modelo do CPE reportado por TR-069. O sinal do Wi-Fi na casa é a mediana dos aparelhos conectados (não o pior, que só mediria quantos aparelhos a casa tem) e existe para ~20% dos clientes — depende do firmware do CPE, e '—' quer dizer sem leitura, não Wi-Fi bom."
     />
   )
 }

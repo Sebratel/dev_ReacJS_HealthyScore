@@ -5,7 +5,8 @@ import type {
 } from '@/types'
 import {
   DEFAULT_CONNECTION_CONFIG, CONNECTION_INDICATOR_ORDER, ONU_INDICATOR_KEYS, ONU_STATUS_OF,
-  RX_POWER_RANGES, DISTANCE_RANGES, TEMPERATURE_RANGES, bucketByMax, wifiGenerationOf,
+  RX_POWER_RANGES, DISTANCE_RANGES, TEMPERATURE_RANGES, WIFI_RSSI_RANGES,
+  CPE_MEMORY_RANGES, CPE_TEMPERATURE_RANGES, bucketByMax, wifiGenerationOf,
 } from './connectionConfig'
 import { scoreToHealthClass } from '@/utils/health'
 const clamp = (v: number, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(v)))
@@ -30,6 +31,11 @@ export const linkKeysOf = (c: RealClient): Partial<Record<ConnectionIndicatorKey
   onuStatusNow: c.connOnuStatus || '',
   fiberDistance: c.connFiberDistanceM != null ? bucketByMax(c.connFiberDistanceM, DISTANCE_RANGES).key : '',
   onuTemperature: c.connOnuTempC != null ? bucketByMax(c.connOnuTempC, TEMPERATURE_RANGES).key : '',
+  // Wi-Fi: mediana (não o pior dispositivo — ver WIFI_RSSI_RANGES), sobre o
+  // módulo, como a potência óptica.
+  wifiRssi: c.connWifiRssi != null ? bucketByMax(Math.abs(c.connWifiRssi), WIFI_RSSI_RANGES).key : '',
+  cpeMemory: c.connCpeMemPct != null ? bucketByMax(c.connCpeMemPct, CPE_MEMORY_RANGES).key : '',
+  cpeTemperature: c.connCpeTempC != null ? bucketByMax(c.connCpeTempC, CPE_TEMPERATURE_RANGES).key : '',
 })
 
 // ─── Score por cliente — 100% real + config ────────────────────
@@ -101,6 +107,13 @@ const linkDisplay = (c: RealClient, key: ConnectionIndicatorKey, matchKey: strin
     case 'wifiGeneration': return `${labelOfIndex(matchKey)}${c.connCpeModel ? ` · ${c.connCpeModel}` : ''}`
     case 'fiberDistance': return c.connFiberDistanceM != null ? `${(c.connFiberDistanceM / 1000).toFixed(2)} km` : 'Sem leitura'
     case 'onuTemperature': return c.connOnuTempC != null ? `${c.connOnuTempC.toFixed(1)} °C` : 'Sem leitura'
+    // Mostra a mediana com o pior aparelho ao lado: é o que o técnico precisa
+    // para saber se o problema é a casa toda ou um aparelho longe do roteador.
+    case 'wifiRssi': return c.connWifiRssi == null ? 'Sem leitura'
+      : `${c.connWifiRssi.toFixed(0)} dBm (mediana de ${c.connWifiDevices ?? 0} aparelho(s)`
+        + `${c.connWifiWorstRssi != null ? `, pior ${c.connWifiWorstRssi.toFixed(0)}` : ''})`
+    case 'cpeMemory': return c.connCpeMemPct != null ? `${c.connCpeMemPct.toFixed(0)}%` : 'Sem leitura'
+    case 'cpeTemperature': return c.connCpeTempC != null ? `${c.connCpeTempC.toFixed(1)} °C` : 'Sem leitura'
     default: return labelOfIndex(matchKey)
   }
 }
@@ -145,6 +158,11 @@ export function buildEngineScores(clients: RealClient[], config: ConnectionEngin
       onuStatus: c.connOnuStatus || '',
       fiberDistanceM: c.connFiberDistanceM ?? null,
       onuTempC: c.connOnuTempC ?? null,
+      wifiRssi: c.connWifiRssi ?? null,
+      wifiWorstRssi: c.connWifiWorstRssi ?? null,
+      wifiDevices: c.connWifiDevices ?? null,
+      cpeMemPct: c.connCpeMemPct ?? null,
+      cpeTempC: c.connCpeTempC ?? null,
       healthScore: s.healthScore,
       churnRisk: s.churnRisk,
       revenueRisk: s.revenueRisk,
@@ -232,6 +250,10 @@ export function buildConnectionEngineData(
 
   const withLink = scores.filter((s) => s.rxPower != null).length
   const rxSum = scores.reduce((a, s) => a + (s.rxPower ?? 0), 0)
+  // Wi-Fi tem denominador PRÓPRIO: só ~20% dos CPEs reportam RSSI, então a
+  // média sobre o total da aba diria que o Wi-Fi da base é ótimo.
+  const withWifiRssi = scores.filter((s) => s.wifiRssi != null).length
+  const rssiSum = scores.reduce((a, s) => a + (s.wifiRssi ?? 0), 0)
 
   return {
     scores,
@@ -252,5 +274,9 @@ export function buildConnectionEngineData(
     rxPowerBreakdown: distOf('opticalPower', (s) => (s.rxPower != null ? bucketByMax(Math.abs(s.rxPower), RX_POWER_RANGES).key : '')),
     lanSpeedBreakdown: distOf('lanSpeed', (s) => (s.lanMbps !== null ? lanKeyOf(s.lanMbps) : '')),
     wifiGenBreakdown: distOf('wifiGeneration', (s) => s.wifiGen),
+    withWifiRssi,
+    avgWifiRssi: withWifiRssi ? parseFloat((rssiSum / withWifiRssi).toFixed(1)) : null,
+    poorWifiCount: scores.filter((s) => s.wifiRssi != null && s.wifiRssi < -72).length,
+    wifiRssiBreakdown: distOf('wifiRssi', (s) => (s.wifiRssi != null ? bucketByMax(Math.abs(s.wifiRssi), WIFI_RSSI_RANGES).key : '')),
   }
 }

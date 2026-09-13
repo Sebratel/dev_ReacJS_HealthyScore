@@ -496,6 +496,16 @@ export interface RealClient {
   connOnuTempC?: number | null       // temperatura do módulo óptico (°C)
   connCpeModel?: string              // modelo do CPE via TR-069
   connCpeFirmware?: string           // firmware do CPE via TR-069
+  // Wi-Fi dentro da casa (TR-069, chaves X_INT6_). Só ~20% dos CPEs reportam —
+  // depende do firmware, não do plano —, por isso `undefined` é esperado e
+  // significa "sem leitura", nunca "Wi-Fi bom".
+  connWifiRssi?: number | null       // MEDIANA do RSSI dos dispositivos (dBm)
+  connWifiWorstRssi?: number | null  // pior dispositivo — só exibição, não pontua
+  connWifiDevices?: number | null    // dispositivos com leitura de RSSI
+  connWifiDevices24g?: number | null // … quantos no rádio de 2.4 GHz
+  connWifiDevices5g?: number | null  // … quantos no rádio de 5 GHz
+  connCpeMemPct?: number | null      // memória RAM usada no CPE (%)
+  connCpeTempC?: number | null       // temperatura do CPE (≠ módulo óptico)
   // Field Engine — protocolos de manutenção
   protocolCount: number
   scheduleCount: number
@@ -635,6 +645,8 @@ export type ConnectionIndicatorKey =
   // Qualidade do enlace — foto atual do cliente (AutoISP)
   | 'opticalPower' | 'lanSpeed' | 'wifiGeneration' | 'onuStatusNow'
   | 'fiberDistance' | 'onuTemperature'
+  // Wi-Fi dentro da casa e saúde do CPE (TR-069 / X_INT6_)
+  | 'wifiRssi' | 'cpeMemory' | 'cpeTemperature'
   // Quedas de PPPoE — eventos acumulados no período
   | 'onuPowerFail' | 'onuLossSignal' | 'onuCritical' | 'onuWarning' | 'onuOk' | 'onuUp'
 
@@ -672,6 +684,11 @@ export interface ConnectionEngineScore {
   onuStatus: string
   fiberDistanceM: number | null
   onuTempC: number | null
+  wifiRssi: number | null      // mediana do RSSI dos dispositivos do cliente
+  wifiWorstRssi: number | null // pior dispositivo (exibição — ver wifiRssi)
+  wifiDevices: number | null
+  cpeMemPct: number | null
+  cpeTempC: number | null
   healthScore: number
   churnRisk: number
   revenueRisk: number
@@ -711,6 +728,12 @@ export interface ConnectionEngineData {
   rxPowerBreakdown: { key: string; label: string; count: number; avgScore: number }[]
   lanSpeedBreakdown: { key: string; label: string; count: number; avgScore: number }[]
   wifiGenBreakdown: { key: string; label: string; count: number; avgScore: number }[]
+  // Wi-Fi dentro da casa. `withWifiRssi` é o denominador honesto: a cobertura
+  // é de ~20% da base, então percentual sobre o total da aba mentiria.
+  withWifiRssi: number
+  avgWifiRssi: number | null
+  poorWifiCount: number        // mediana pior que −72 dBm
+  wifiRssiBreakdown: { key: string; label: string; count: number; avgScore: number }[]
 }
 
 // ─── Network Engine (100% real + config · massivas cross-DB) ───

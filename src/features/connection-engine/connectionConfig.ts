@@ -26,8 +26,8 @@ export const ONU_STATUS_OF: Record<OnuIndicatorKey, string> = {
 // Indicadores de QUALIDADE DO ENLACE — a foto atual do cliente, não o histórico
 // de quedas. Vêm das queries Q_AUTOISP_ONU_HEALTH / _ONU_LAN / _CPE.
 export const LINK_INDICATOR_KEYS: ConnectionIndicatorKey[] = [
-  'opticalPower', 'lanSpeed', 'wifiGeneration', 'onuStatusNow',
-  'fiberDistance', 'onuTemperature',
+  'opticalPower', 'lanSpeed', 'wifiGeneration', 'wifiRssi', 'onuStatusNow',
+  'fiberDistance', 'onuTemperature', 'cpeMemory', 'cpeTemperature',
 ]
 
 export const CONNECTION_INDICATOR_ORDER: ConnectionIndicatorKey[] = [
@@ -62,6 +62,48 @@ export const DISTANCE_RANGES: ConnRange[] = [
   { key: '5a10k', label: '5 a 10 km', max: 10000, defaultPoints: -5 },
   { key: '10a15k', label: '10 a 15 km', max: 15000, defaultPoints: -10 },
   { key: 'acima15k', label: 'Acima de 15 km', max: Infinity, defaultPoints: -15 },
+]
+
+// RSSI do Wi-Fi dentro da casa, em dBm (sempre negativo). Bucket sobre o valor
+// ABSOLUTO, como a potência óptica — −74 dBm vira 74 e cai em "ruim".
+//
+// O valor pontuado é a MEDIANA dos dispositivos do cliente, nunca o pior. Medido
+// contra o banco: agregar pelo pior marca 15% dos contratos de 1 dispositivo e
+// 77% dos de 6+ — mediria quantos aparelhos a casa tem, não a qualidade do
+// Wi-Fi (toda casa com 6 aparelhos tem um celular no quintal). Pela mediana a
+// marcação fica estável em ~10-15% qualquer que seja o número de dispositivos.
+//
+// Os cortes seguem o que o cliente sente: acima de −60 dBm o Wi-Fi entrega a
+// banda do plano; entre −67 e −72 a taxa já cai pela metade; abaixo de −80 a
+// conexão vive caindo. Distribuição real da base: 55% boa, 21% aceitável,
+// 11% fraca, 9% ruim, 4% crítica.
+export const WIFI_RSSI_RANGES: ConnRange[] = [
+  { key: 'boa', label: 'Boa (≥ −60 dBm)', max: 60, defaultPoints: 0 },
+  { key: 'aceitavel', label: 'Aceitável (−60 a −67 dBm)', max: 67, defaultPoints: -3 },
+  { key: 'fraca', label: 'Fraca (−67 a −72 dBm)', max: 72, defaultPoints: -10 },
+  { key: 'ruim', label: 'Ruim (−72 a −80 dBm)', max: 80, defaultPoints: -18 },
+  { key: 'critica', label: 'Crítica (< −80 dBm)', max: Infinity, defaultPoints: -30 },
+]
+
+// Memória RAM em uso no CPE (%). É o "INT6 - AUTO ISP/MEMORIA RAM ALTA -
+// ONT/ROTEADOR" que a Int6 abre como chamado. Roteador sem memória trava e
+// derruba a navegação mesmo com sinal perfeito.
+// Marca pouca gente de propósito: 96% da base fica abaixo de 70%.
+export const CPE_MEMORY_RANGES: ConnRange[] = [
+  { key: 'ate70', label: 'Até 70%', max: 70, defaultPoints: 0 },
+  { key: '70a80', label: '70 a 80%', max: 80, defaultPoints: -3 },
+  { key: '80a90', label: '80 a 90%', max: 90, defaultPoints: -8 },
+  { key: 'acima90', label: 'Acima de 90%', max: Infinity, defaultPoints: -15 },
+]
+
+// Temperatura do CPE (°C) — o roteador inteiro, NÃO o módulo óptico da ONU
+// (esse é o `onuTemperature`, que vem de onu_infos). 98% da base fica abaixo de
+// 45 °C; acima de 55 °C é equipamento em local abafado ou já degradado.
+export const CPE_TEMPERATURE_RANGES: ConnRange[] = [
+  { key: 'ate45', label: 'Até 45 °C', max: 45, defaultPoints: 0 },
+  { key: '45a55', label: '45 a 55 °C', max: 55, defaultPoints: -3 },
+  { key: '55a65', label: '55 a 65 °C', max: 65, defaultPoints: -8 },
+  { key: 'acima65', label: 'Acima de 65 °C', max: Infinity, defaultPoints: -15 },
 ]
 
 // Temperatura do módulo óptico da ONU (°C). Acima de ~65 °C o transceptor
@@ -169,6 +211,8 @@ const Q_LAN = "SELECT cs.contract_id,\n  (SELECT max(nullif(regexp_replace(p->>'
 
 const Q_CPE = 'SELECT cs.contract_id, ac.router_model_name, ac.firmware_version\nFROM acs_clients ac\nJOIN gpon_clients gc ON gc.id = ac.gpon_client_id\nJOIN contracted_services cs ON cs.id = gc.contracted_service_id; -- banco AutoISP'
 
+const Q_WIFI = "-- banco AutoISP (TR-069). RSSI por dispositivo associado ao Wi-Fi:\n-- ...WLANConfiguration.<radio>.AssociatedDevice.<n>.X_INT6_RSSI\n-- (radio 1 = 2.4 GHz, 5 = 5 GHz). O filtro por last_inform e' o que segura o\n-- custo: e' coluna normal, avaliada ANTES de abrir o jsonb de 1,7 GB.\nSELECT cs.contract_id,\n  percentile_cont(0.5) WITHIN GROUP (ORDER BY rssi) rssi_mediano,\n  min(rssi) pior_rssi, count(*) devices_wifi,\n  d->>'InternetGatewayDevice.DeviceInfo.X_INT6_MEMUSED_PERCENT' cpe_mem_pct,\n  d->>'InternetGatewayDevice.DeviceInfo.X_INT6_TEMPERATURE' cpe_temp_c\nFROM acs_device_statuses ads, LATERAL jsonb_each_text(ads.last_analytics_data_translated) e\nJOIN acs_clients ac ON ac.device_id = ads.device_id\nJOIN gpon_clients gc ON gc.id = ac.gpon_client_id\nJOIN contracted_services cs ON cs.id = gc.contracted_service_id\nWHERE ads.last_inform >= now() - interval '48 hours'\n  AND e.key LIKE '%.AssociatedDevice.%.X_INT6_RSSI'\nGROUP BY cs.contract_id;"
+
 // Configuração padrão. Os índices de "Equipamento" são preenchidos dinamicamente
 // em runtime a partir dos modelos reais alocados (store.syncConnectionLists).
 // Pontuação padrão 0 — você define a nota de cada modelo no modal.
@@ -194,6 +238,15 @@ export const DEFAULT_CONNECTION_CONFIG: ConnectionEngineConfig = {
     wifiGeneration: catIndicator('wifiGeneration', 'Geração do Wi-Fi (ac/ax)',
       'Padrão de Wi-Fi que o equipamento do cliente suporta, derivado do modelo reportado por TR-069. Wi-Fi 4 (n) num plano de centenas de megas é gargalo garantido dentro da casa.',
       WIFI_GEN_INDICES, Q_CPE),
+    wifiRssi: rangeIndicator('wifiRssi', 'Sinal do Wi-Fi na casa (RSSI)',
+      'Força do sinal que os aparelhos do cliente recebem do roteador, em dBm — o Wi-Fi de dentro da casa, não o enlace de fibra. Pontua a MEDIANA dos dispositivos: o pior aparelho sozinho só diria quantos aparelhos a casa tem. Só ~20% dos CPEs reportam (depende do firmware); quem não reporta não pontua.',
+      WIFI_RSSI_RANGES, Q_WIFI),
+    cpeMemory: rangeIndicator('cpeMemory', 'Memória do roteador (CPE)',
+      'Percentual de memória RAM em uso no roteador do cliente. É o mesmo sinal que a Int6 usa para abrir o chamado "MEMORIA RAM ALTA - ONT/ROTEADOR": roteador sem memória trava e derruba a navegação mesmo com o sinal óptico perfeito.',
+      CPE_MEMORY_RANGES, Q_WIFI),
+    cpeTemperature: rangeIndicator('cpeTemperature', 'Temperatura do roteador (CPE)',
+      'Temperatura do roteador do cliente, reportada por TR-069. Diferente da "Temperatura da ONU", que é a do módulo óptico: esta é a do equipamento inteiro e denuncia aparelho em local abafado (dentro de armário, atrás da TV) antes de ele começar a reiniciar sozinho.',
+      CPE_TEMPERATURE_RANGES, Q_WIFI),
     onuStatusNow: catIndicator('onuStatusNow', 'Status atual da ONU',
       'Como a ONU do contrato está no momento da carga — diferente dos indicadores de PPPoE abaixo, que contam eventos acumulados no período.',
       ONU_STATUS_NOW_INDICES, Q_HEALTH),
