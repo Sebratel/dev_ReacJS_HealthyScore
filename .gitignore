@@ -21,3 +21,6 @@ dist/
 
 # Relatórios gerados pelo scripts/perfil-cancelamentos.mjs (regeráveis)
 perfil-cancelamentos-*.md
+
+# Coorte mensal (gerada pelo monthly-cohort.mjs; refaz a qualquer momento)
+public/monthly-cohort.json

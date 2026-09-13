@@ -15,7 +15,8 @@
     "migrate:status": "node scripts/migrate.mjs --status",
     "outcomes": "node --import tsx scripts/evaluate-outcomes.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "cohort:mensal": "node --import tsx scripts/monthly-cohort.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.0",
