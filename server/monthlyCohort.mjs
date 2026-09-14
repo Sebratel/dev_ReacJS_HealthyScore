@@ -88,7 +88,7 @@ export function wilson95(hits, n) {
  *                                — cancelamentos ocorridos na janela de desfecho
  * @param {number|null} conexoes  conexões provisionadas no último dia do mês
  */
-export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janelaDesfecho, minEngines = MIN_ENGINES }) {
+export function pontoMensal({ mes, scored, cancelDepois, conexoesInicio = null, conexoesFim = null, janelaDesfecho, minEngines = MIN_ENGINES }) {
   // Contrato pontuado por UMA engine só não tem nota — tem palpite. Na prática
   // é sempre a comercial (plano, vendedor, tempo de casa), que roda para todo
   // mundo e, sozinha, joga quase todos em "excelente". Incluir esses contratos
@@ -175,12 +175,27 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janela
   const recall = cancelados ? (100 * cancelSinalizados) / cancelados : null
 
   return {
+    // ── Dois meses, e confundi-los inverte a leitura ─────────────────────
+    // `mesIndicador` é o mês a que o indicador SE REFERE: aquele em que os
+    // cancelamentos aconteceram. É o rótulo da tela — no dia 1º de setembro o
+    // que se publica é "o indicador de agosto".
+    // `mes` é quando a NOTA foi congelada: o fim do mês anterior. Tem que ser
+    // antes, senão a nota usaria dados criados pelo próprio cancelamento.
+    mesIndicador: janelaDesfecho,
     mes,
+    notaCongeladaEm: fimDoMes(mes),
     fimDoMes: fimDoMes(mes),
     janelaDesfecho,
-    // Denominadores lado a lado: conexão é o número que a operação reconhece,
-    // contrato é o que tem identidade. Divergem ~2% e isso é esperado.
-    conexoes,
+    // Conexões provisionadas nas duas pontas do mês do indicador.
+    // `conexoesInicio` (fim do mês anterior) é o denominador CERTO para taxa de
+    // cancelamento: é quem estava lá para poder sair. `conexoesFim` já exclui
+    // quem saiu, então dividir por ele infla a taxa. Os dois ficam expostos
+    // porque a operação reconhece o número de fechamento do mês, e esconder um
+    // deles só gera a pergunta "esse número não bate com o meu".
+    conexoesInicio,
+    conexoesFim,
+    // Contrato é o que tem identidade; conexão é o que a operação reconhece.
+    // Divergem ~2% de forma estável e isso é esperado.
     contratosAtivos: base,
     // Transparência da exclusão: quantos ficaram de fora por não ter sinal
     // suficiente, e quantos DESSES cancelaram. Se o segundo número for alto, a
@@ -254,8 +269,9 @@ export function resumirSerie(pontos) {
     pontos,
     resumo: {
       meses: comDesfecho.length,
-      primeiroMes: comDesfecho[0].mes,
-      ultimoMes: comDesfecho[comDesfecho.length - 1].mes,
+      // Pelo mês do INDICADOR, que é como a série é lida e rotulada.
+      primeiroMes: comDesfecho[0].mesIndicador,
+      ultimoMes: comDesfecho[comDesfecho.length - 1].mesIndicador,
       cancelamentos: somaCancel,
       taxaMedia: somaBase ? round((100 * somaCancel) / somaBase) : null,
       recallMedio: somaCancel ? round((100 * somaSinal) / somaCancel, 1) : null,

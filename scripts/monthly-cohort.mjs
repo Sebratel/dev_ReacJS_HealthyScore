@@ -11,13 +11,14 @@
 //   npm run cohort:mensal -- --de 2026-01 --ate 2026-08
 //
 // Opções:
+//   --mes-anterior   só o mês passado (modo do agendamento do dia 1º)
 //   --de / --ate     faixa de meses (default: últimos 6 fechados)
 //   --limite N       amostra aleatória de N contratos por mês (teste rápido)
 //   --janela N       dias de histórico de sinal por mês (default 180)
 //   --saida CAMINHO  default: public/monthly-cohort.json
 // ─────────────────────────────────────────────────────────────────────────
 import 'dotenv/config'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { makePool } from './db.mjs'
@@ -64,11 +65,38 @@ function mesesPadrao() {
   return { de: ym(ini), ate: ym(fim) }
 }
 
+// Modo do agendamento: no dia 1º publica-se o indicador do mês que acabou.
+// Em 01/09 o indicador é o de AGOSTO — cancelamentos de agosto contra a nota
+// congelada em 31/07. A nota tem que ser anterior às saídas, senão usaria dado
+// criado pelo próprio cancelamento.
+function mesAnterior() {
+  const h = new Date()
+  const d = new Date(Date.UTC(h.getUTCFullYear(), h.getUTCMonth() - 1, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+// O mês do ESCORE é dois atrás: em 01/09, nota de 31/07 → indicador de agosto.
+function mesAnteriorDoEscore() {
+  const h = new Date()
+  const d = new Date(Date.UTC(h.getUTCFullYear(), h.getUTCMonth() - 2, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+const MES_ANTERIOR = process.argv.includes('--mes-anterior')
 const padrao = mesesPadrao()
-const DE = arg('--de', padrao.de)
-const ATE = arg('--ate', padrao.ate)
+// `mesEscore` é o mês em que a nota congela; o indicador sai rotulado com o
+// mês SEGUINTE, que é quando os cancelamentos acontecem.
+const alvo = MES_ANTERIOR ? mesAnteriorDoEscore() : null
+const DE = MES_ANTERIOR ? alvo : arg('--de', padrao.de)
+const ATE = MES_ANTERIOR ? alvo : arg('--ate', padrao.ate)
 const LIMITE = Number(arg('--limite', '0')) || 0
-const SAIDA = resolve(arg('--saida', resolve(__dirname, '../public/monthly-cohort.json')))
+// Saída ao lado do snapshot (volume compartilhado), como o score-history faz
+// com HISTORY_DIR. Gravar dentro do contêiner perderia a série a cada deploy e
+// a API não enxergaria o arquivo.
+const SNAP_BASE = process.env.SNAPSHOT_OUT || process.env.SNAPSHOT_PATH
+const PADRAO_SAIDA = SNAP_BASE
+  ? resolve(dirname(resolve(SNAP_BASE)), 'monthly-cohort.json')
+  : resolve(__dirname, '../public/monthly-cohort.json')
+const SAIDA = resolve(arg('--saida', PADRAO_SAIDA))
 const JANELA_DIAS = Number(arg('--janela', String(SIGNAL_WINDOW_DAYS))) || SIGNAL_WINDOW_DAYS
 
 // Amostra aleatória sem reposição (Fisher-Yates parcial sobre uma cópia).
@@ -109,7 +137,10 @@ try {
 }
 
 const meses = mesesEntre(DE, ATE)
-console.log(`[mensal] processando ${meses.length} mês(es): ${meses.join(', ')}`)
+if (MES_ANTERIOR) {
+  console.log(`[mensal] modo agendado: publicando o indicador de ${mesAnterior()} (nota congelada em ${fimDoMes(alvo)}).`)
+}
+console.log(`[mensal] processando ${meses.length} mês(es) de escore: ${meses.join(', ')}`)
 if (LIMITE) console.log(`[mensal] LIMITE=${LIMITE} contratos/mês — resultado é amostra, não a base.`)
 
 const pontos = []
@@ -153,7 +184,10 @@ for (const mes of meses) {
     mes,
     scored,
     cancelDepois,
-    conexoes: conexoesPorMes.get(mes) ?? null,
+    // Denominador do mês do indicador: base no começo dele = fim do mês do
+    // escore. E a base de fechamento, que é o número que a operação reconhece.
+    conexoesInicio: conexoesPorMes.get(mes) ?? null,
+    conexoesFim: conexoesPorMes.get(janela) ?? null,
     janelaDesfecho: janela,
   })
   // Cobertura de engine: quantas das 7 realmente pontuaram. Conexão e Rede não
@@ -166,23 +200,58 @@ for (const mes of meses) {
 
   console.log(
     `[mensal] ${mes}: ${ponto.contratosAtivos} avaliáveis (+${ponto.semSinalSuficiente} sem sinal) · ` +
-    `${ponto.conexoes ?? '—'} conexões · ${ponto.cancelamentos} saíram em ${janela} (${ponto.taxaCancelamento}%) · ` +
+    `${ponto.conexoesInicio ?? '—'} conexões · indicador de ${ponto.mesIndicador}: ${ponto.cancelamentos} saíram (${ponto.taxaCancelamento}%) · ` +
     `recall ${ponto.recall ?? '—'}% · engines ${ponto.enginesMedia} · ${((Date.now() - t0) / 1000).toFixed(1)}s`
   )
 }
 
-const { resumo } = resumirSerie(pontos)
+// ─── Acumula a série, não sobrescreve ──────────────────────────
+// O agendamento do dia 1º roda UM mês. Se isso gravasse só o que acabou de
+// calcular, a primeira execução agendada apagaria todo o histórico anterior.
+// Ponto do mesmo mês é substituído (recálculo vale mais que o antigo).
+let anteriores = []
+if (existsSync(SAIDA)) {
+  try {
+    const velho = JSON.parse(readFileSync(SAIDA, 'utf8'))
+    if (Array.isArray(velho.pontos)) {
+      // Normaliza o formato antigo, em que o ponto era rotulado pelo mês do
+      // ESCORE e não existia `mesIndicador`. Sem isso o merge não reconhece o
+      // ponto como já calculado e grava o mesmo mês duas vezes — foi o que
+      // aconteceu na primeira execução agendada.
+      anteriores = velho.pontos
+        .map((p) => (p.mesIndicador ? p : { ...p, mesIndicador: p.janelaDesfecho ?? null }))
+        .filter((p) => {
+          if (p.mesIndicador) return true
+          console.warn('[mensal] ponto sem mês identificável no artefato antigo — descartado.')
+          return false
+        })
+    }
+  } catch (e) {
+    console.warn(`[mensal] artefato existente ilegível (${e.message}) — recomeçando a série.`)
+  }
+}
+const novosPor = new Set(pontos.map((p) => p.mesIndicador))
+const serie = [...anteriores.filter((p) => !novosPor.has(p.mesIndicador)), ...pontos]
+  .sort((a, b) => String(a.mesIndicador).localeCompare(String(b.mesIndicador)))
+if (anteriores.length) {
+  console.log(`[mensal] série: ${anteriores.length} ponto(s) já gravado(s) + ${pontos.length} novo(s) = ${serie.length}`)
+}
+
+const { resumo } = resumirSerie(serie)
 const payload = {
   geradoEm: new Date().toISOString(),
   configVersion: CONFIG_VERSION,
-  de: DE,
-  ate: ATE,
+  // Faixa da SÉRIE acumulada (pelo mês do indicador), não da execução — o
+  // agendamento roda um mês por vez e o artefato guarda todos.
+  de: serie[0]?.mesIndicador ?? DE,
+  ate: serie[serie.length - 1]?.mesIndicador ?? ATE,
+  mesesDestaExecucao: pontos.map((p) => p.mesIndicador),
   amostra: LIMITE || null,
   janelaSinalDias: JANELA_DIAS,
   // Dito no artefato, não só no README: quem ler o JSON precisa saber que o
   // score retroativo não tem as engines de estado atual.
   enginesIndisponiveisNoPassado: ['connection', 'network'],
-  pontos,
+  pontos: serie,
   resumo,
   avisos,
 }

@@ -62,7 +62,7 @@ const cancelDepois = new Map([
 ])
 
 describe('pontoMensal', () => {
-  const p = pontoMensal({ mes: '2026-05', scored, cancelDepois, conexoes: 9, janelaDesfecho: '2026-06' })
+  const p = pontoMensal({ mes: '2026-05', scored, cancelDepois, conexoesInicio: 9, conexoesFim: 11, janelaDesfecho: '2026-06' })
 
   it('conta base, saídas e MRR perdido', () => {
     expect(p.contratosAtivos).toBe(10)
@@ -72,8 +72,19 @@ describe('pontoMensal', () => {
   })
 
   it('mantém conexões e contratos como denominadores separados', () => {
-    expect(p.conexoes).toBe(9)
+    expect(p.conexoesInicio).toBe(9)
+    expect(p.conexoesFim).toBe(11)
     expect(p.contratosAtivos).toBe(10)
+  })
+
+  it('rotula o ponto pelo mês dos cancelamentos, não pelo da nota', () => {
+    // No dia 1º de junho publica-se "o indicador de junho"? Não: publica-se o
+    // de MAIO, se maio for o mês que fechou. Aqui a nota congela em 31/05 e os
+    // cancelamentos observados são os de junho, então o rótulo é junho.
+    expect(p.mesIndicador).toBe('2026-06')
+    expect(p.notaCongeladaEm).toBe('2026-05-31')
+    // A nota tem que ser anterior às saídas que ela é cobrada de prever.
+    expect(p.notaCongeladaEm < `${p.mesIndicador}-01`).toBe(true)
   })
 
   it('recall é sobre quem saiu, não sobre a base', () => {
