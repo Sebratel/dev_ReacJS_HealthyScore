@@ -79,7 +79,10 @@ const anthropic = (cfg) => ({
     const base = limpaBarra(cfg.baseUrl || 'https://api.anthropic.com')
     const json = await pedir(`${base}/v1/messages`, {
       model: cfg.modelo,
-      max_tokens: cfg.maxTokens || 8000,
+      // Teto folgado de propósito: nos modelos com raciocínio adaptativo (a
+      // linha Opus/Sonnet atual) o pensamento consome do mesmo orçamento, e
+      // resposta cortada no meio é o modo de falha mais comum e mais confuso.
+      max_tokens: cfg.maxTokens || 16000,
       system: sistema,
       messages: [{ role: 'user', content: pergunta }],
       output_config: {
@@ -127,7 +130,7 @@ const openai = (cfg) => ({
     const base = limpaBarra(cfg.baseUrl || 'https://api.openai.com/v1')
     const json = await pedir(`${base}/chat/completions`, {
       model: cfg.modelo,
-      max_completion_tokens: cfg.maxTokens || 8000,
+      max_completion_tokens: cfg.maxTokens || 16000,
       // Modo JSON: garante que a resposta é JSON analisável, não que ela
       // obedece ao schema. Quem cobra o schema é o validador do servidor.
       ...(schema ? { response_format: { type: 'json_object' } } : {}),
@@ -169,7 +172,7 @@ const gemini = (cfg) => ({
       systemInstruction: { parts: [{ text: sistema }] },
       contents: [{ role: 'user', parts: [{ text: pergunta }] }],
       generationConfig: {
-        maxOutputTokens: cfg.maxTokens || 8000,
+        maxOutputTokens: cfg.maxTokens || 16000,
         // Modo JSON, como no OpenAI: forma garantida, schema não.
         ...(schema ? { responseMimeType: 'application/json' } : {}),
       },
@@ -292,7 +295,7 @@ export function provedorDoEnv() {
     modelo: process.env.AI_MODEL || MODELO_PADRAO[tipo],
     chave,
     baseUrl: process.env.AI_BASE_URL || null,
-    maxTokens: Number(process.env.AI_MAX_TOKENS) || 8000,
+    maxTokens: Number(process.env.AI_MAX_TOKENS) || 16000,
     effort: process.env.AI_EFFORT || null,
     origem: 'env',
   }
