@@ -19,7 +19,6 @@
     "cohort:mensal": "node --import tsx scripts/monthly-cohort.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.71.0",
     "@tanstack/react-table": "^8.17.3",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",

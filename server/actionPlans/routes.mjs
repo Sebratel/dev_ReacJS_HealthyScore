@@ -20,9 +20,9 @@ import {
   listTemplates, createTemplateVersion, getActiveTemplate,
 } from './store.mjs'
 import {
-  listProviders, createProvider, updateProvider, deleteProvider, testProvider,
-} from './providerStore.mjs'
-import { hasSecret } from '../crypto.mjs'
+  estado as estadoIA, salvar as salvarIA, remover as removerIA,
+  listarModelos, testar as testarIA,
+} from '../ia/registro.mjs'
 
 // Erro → resposta. Falha de banco é 503 (o módulo está indisponível, não é
 // culpa de quem chamou); o resto é 400 com a mensagem original, que já é
@@ -42,20 +42,19 @@ export function actionPlanRoutes(requireAuth) {
   r.get('/action-plans/status', requireAuth(), async (_req, res) => {
     const db = await isReady()
     let prompt = null
-    let provedores = []
     if (db.ok) {
       try { prompt = await getActiveTemplate('financeiro') } catch { /* tabela ainda não migrada */ }
-      try { provedores = await listProviders() } catch { /* idem */ }
     }
-    const padrao = provedores.find((p) => p.padrao && p.ativo) || null
+    const ia = estadoIA()
     res.json({
       banco: db,
       promptAtivo: prompt ? { id: prompt.id, versao: prompt.versao, setor: prompt.setor } : null,
-      provedorPadrao: padrao ? { id: padrao.id, nome: padrao.nome, kind: padrao.kind, modelo: padrao.modelo, temChave: padrao.temChave } : null,
+      provedor: ia.configurado
+        ? { tipo: ia.tipo, modelo: ia.modelo, origem: ia.origem, dica: ia.dica }
+        : null,
       // Sem provedor cadastrado o módulo roda simulado: é útil para ver a
       // tela funcionando, e a UI precisa dizer isso em letras claras.
-      simulado: !padrao || !padrao.temChave,
-      segredoConfigurado: hasSecret(),
+      simulado: !ia.configurado || ia.tipo === 'simulado',
       criterioPadrao: DEFAULT_CRITERIO,
       concorrenciaMaxima: MAX_CONCURRENCY,
       prazoReavaliacaoDias: DEFAULT_PRAZO_DIAS,
@@ -84,7 +83,6 @@ export function actionPlanRoutes(requireAuth) {
       const out = await startRun({
         setor: req.body?.setor || 'financeiro',
         criterio: req.body?.criterio,
-        providerId: req.body?.providerId ?? null,
         iniciadoPor: req.user.email,
       })
       res.status(202).json(out)
@@ -163,7 +161,6 @@ export function actionPlanRoutes(requireAuth) {
         setor: rec.setor,
         dossie: rec.dossie,
         tentativa: rec.tentativa,
-        providerId: req.body?.providerId ?? null,
       })
       res.json(out)
     } catch (e) { fail(res, e) }
@@ -213,25 +210,27 @@ export function actionPlanRoutes(requireAuth) {
     } catch (e) { fail(res, e) }
   })
 
-  // ─── Provedores de IA ────────────────────────────────────────
-  r.get('/ai-providers', requireAuth({ minRole: 'admin' }), async (_req, res) => {
-    try { res.json({ providers: await listProviders(), segredoConfigurado: hasSecret() }) } catch (e) { fail(res, e) }
+  // ─── Provedor de IA ──────────────────────────────────────────
+  // Mesmo contrato do comercial_pbi: um provedor ativo, chave cifrada, e a
+  // listagem dos modelos que aquela chave alcança.
+  r.get('/ia', requireAuth({ minRole: 'admin' }), (_req, res) => {
+    try { res.json(estadoIA()) } catch (e) { fail(res, e) }
   })
 
-  r.post('/ai-providers', requireAuth({ minRole: 'admin' }), async (req, res) => {
-    try { res.json({ provider: await createProvider(req.body || {}, req.user.email) }) } catch (e) { fail(res, e) }
+  r.put('/ia', requireAuth({ minRole: 'admin' }), (req, res) => {
+    try { res.json(salvarIA(req.body || {}, req.user.email)) } catch (e) { fail(res, e) }
   })
 
-  r.put('/ai-providers/:id', requireAuth({ minRole: 'admin' }), async (req, res) => {
-    try { res.json({ provider: await updateProvider(req.params.id, req.body || {}, req.user.email) }) } catch (e) { fail(res, e) }
+  r.delete('/ia', requireAuth({ minRole: 'admin' }), (_req, res) => {
+    try { res.json(removerIA()) } catch (e) { fail(res, e) }
   })
 
-  r.delete('/ai-providers/:id', requireAuth({ minRole: 'admin' }), async (req, res) => {
-    try { res.json(await deleteProvider(req.params.id)) } catch (e) { fail(res, e) }
+  r.post('/ia/modelos', requireAuth({ minRole: 'admin' }), async (req, res) => {
+    try { res.json({ modelos: await listarModelos(req.body || {}) }) } catch (e) { fail(res, e) }
   })
 
-  r.post('/ai-providers/:id/test', requireAuth({ minRole: 'admin' }), async (req, res) => {
-    try { res.json(await testProvider(req.params.id)) } catch (e) { fail(res, e) }
+  r.post('/ia/testar', requireAuth({ minRole: 'admin' }), async (_req, res) => {
+    try { res.json(await testarIA()) } catch (e) { fail(res, e) }
   })
 
   return r

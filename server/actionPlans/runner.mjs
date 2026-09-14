@@ -9,9 +9,9 @@
 import { runEngine } from '../engines.mjs'
 import { getClients, getDataset } from '../dataset.mjs'
 import { getOfficialConfig } from '../officialConfig.mjs'
+import { provedorAtivo } from '../ia/registro.mjs'
 import { buildDossier, renderPrompt } from './dossier.mjs'
-import { validateRecommendation } from './schema.mjs'
-import { resolveProvider } from './providerStore.mjs'
+import { validateRecommendation, ACTION_PLAN_JSON_SCHEMA } from './schema.mjs'
 import {
   getActiveTemplate, createRun, updateRun, insertDossier, insertRecommendation,
 } from './store.mjs'
@@ -43,7 +43,7 @@ async function mapWithConcurrency(items, limit, worker) {
     while (true) {
       const i = next++
       if (i >= items.length) return
-      try { results[i] = await worker(items[i], i) } catch (e) { results[i] = { erro: e.message } }
+      try { results[i] = await worker(items[i], i) } catch (e) { results[i] = { ok: false, erro: e.message } }
     }
   })
   await Promise.all(runners)
@@ -89,9 +89,49 @@ export function selectClients(criterio = {}) {
   return { selecionados: filtrados.slice(0, qtd), criterio: c, disponiveis: filtrados.length }
 }
 
+// Uma geração: chama o provedor, valida e devolve o que gravar. Concentrada
+// aqui para a rodada e a "nova tentativa" percorrerem exatamente o caminho.
+async function gerarEValidar({ provedor, cfg, template, dossie }) {
+  const t0 = Date.now()
+  const sistema = renderPrompt(template.conteudo, dossie)
+  const base = { modelo: cfg.modelo || cfg.tipo, tokensEntrada: null, tokensSaida: null }
+
+  let r
+  try {
+    r = await provedor.gerar({
+      sistema,
+      pergunta: JSON.stringify(dossie),
+      schema: ACTION_PLAN_JSON_SCHEMA,
+      dossie, // só o simulado usa
+    })
+  } catch (e) {
+    return { ...base, duracaoMs: Date.now() - t0, status: 'falha_provedor', erroValidacao: e.message }
+  }
+
+  const comum = {
+    modelo: r.modelo || base.modelo,
+    tokensEntrada: r.tokensEntrada ?? null,
+    tokensSaida: r.tokensSaida ?? null,
+    duracaoMs: Date.now() - t0,
+  }
+
+  // Segunda barreira: o schema já foi pedido na origem, mas revalidamos. É o
+  // que pega prompt trocado, modelo trocado e provedor que ignora o campo.
+  let parsed = null
+  try { parsed = JSON.parse(r.texto) } catch { parsed = null }
+  if (!parsed) {
+    return { ...comum, status: 'falha_schema', respostaBruta: r.texto, erroValidacao: 'A resposta não é um JSON analisável.' }
+  }
+  const v = validateRecommendation(parsed)
+  if (!v.ok) {
+    return { ...comum, status: 'falha_schema', respostaBruta: r.texto, erroValidacao: v.errors.join(' · ') }
+  }
+  return { ...comum, status: 'valida', resposta: v.value }
+}
+
 // Cria a rodada e dispara a geração em segundo plano. Devolve o id na hora —
 // gerar 30 planos leva minutos, e segurar a requisição só produziria timeout.
-export async function startRun({ setor = 'financeiro', criterio, iniciadoPor, providerId = null }) {
+export async function startRun({ setor = 'financeiro', criterio, iniciadoPor }) {
   const template = await getActiveTemplate(setor)
   if (!template) throw new Error(`Nenhum prompt ativo para o setor "${setor}". Cadastre um em Configurações.`)
 
@@ -104,15 +144,15 @@ export async function startRun({ setor = 'financeiro', criterio, iniciadoPor, pr
   await updateRun(runId, { qtd_clientes: selecionados.length, status: 'gerando' })
 
   // Não aguardamos: a rodada segue e a tela acompanha por /runs/:id.
-  processRun({ runId, setor, template, selecionados, providerId }).catch(async (e) => {
+  processRun({ runId, setor, template, selecionados }).catch(async (e) => {
     await updateRun(runId, { status: 'falha', erro: e.message, concluido_em: new Date() })
   })
 
   return { runId, selecionados: selecionados.length, disponiveis, criterio: usado }
 }
 
-async function processRun({ runId, setor, template, selecionados, providerId }) {
-  const { provider, row, simulado } = await resolveProvider(providerId)
+async function processRun({ runId, setor, template, selecionados }) {
+  const { provedor, cfg, simulado } = provedorAtivo()
 
   const resultados = await mapWithConcurrency(selecionados, MAX_CONCURRENCY, async (score) => {
     const dossie = await buildDossier(score, { setor, versaoPrompt: template.versao })
@@ -125,45 +165,9 @@ async function processRun({ runId, setor, template, selecionados, providerId }) 
       classificacao: score.classification,
     })
 
-    const system = renderPrompt(template.conteudo, dossie)
-    const r = await provider.generatePlan({ system, dossie })
-
-    const base = {
-      dossierId,
-      promptTemplateId: template.id,
-      modelo: r.modelo || 'desconhecido',
-      providerId: row?.id ?? null,
-      tokensEntrada: r.tokensEntrada,
-      tokensSaida: r.tokensSaida,
-      duracaoMs: r.duracaoMs,
-    }
-
-    if (!r.ok) {
-      await insertRecommendation({ ...base, status: 'falha_provedor', erroValidacao: r.erro })
-      return { ok: false }
-    }
-
-    // Segunda barreira: o schema já foi forçado na origem, mas revalidamos.
-    let parsed = null
-    try { parsed = JSON.parse(r.rawText) } catch { parsed = null }
-    if (!parsed) {
-      await insertRecommendation({
-        ...base, status: 'falha_schema', respostaBruta: r.rawText,
-        erroValidacao: 'A resposta não é um JSON analisável.',
-      })
-      return { ok: false }
-    }
-    const v = validateRecommendation(parsed)
-    if (!v.ok) {
-      await insertRecommendation({
-        ...base, status: 'falha_schema', respostaBruta: r.rawText,
-        erroValidacao: v.errors.join(' · '),
-      })
-      return { ok: false }
-    }
-
-    await insertRecommendation({ ...base, status: 'valida', resposta: v.value })
-    return { ok: true }
+    const out = await gerarEValidar({ provedor, cfg, template, dossie })
+    await insertRecommendation({ ...out, dossierId, promptTemplateId: template.id })
+    return { ok: out.status === 'valida' }
   })
 
   const falhas = resultados.filter((x) => !x || !x.ok).length
@@ -178,40 +182,16 @@ async function processRun({ runId, setor, template, selecionados, providerId }) 
 // Nova tentativa para UM dossiê que falhou. A geração anterior continua
 // gravada (é o registro de que o prompt ou o provedor regrediu); esta entra
 // como tentativa seguinte, e a tela passa a mostrar a mais recente.
-export async function retryRecommendation({ dossierId, setor, dossie, tentativa, providerId = null }) {
+export async function retryRecommendation({ dossierId, setor, dossie, tentativa }) {
   const template = await getActiveTemplate(setor)
   if (!template) throw new Error(`Nenhum prompt ativo para o setor "${setor}".`)
 
-  const { provider, row } = await resolveProvider(providerId)
-  const system = renderPrompt(template.conteudo, dossie)
-  const r = await provider.generatePlan({ system, dossie })
-
-  const base = {
-    dossierId,
-    promptTemplateId: template.id,
-    modelo: r.modelo || 'desconhecido',
-    providerId: row?.id ?? null,
-    tokensEntrada: r.tokensEntrada,
-    tokensSaida: r.tokensSaida,
-    duracaoMs: r.duracaoMs,
-    tentativa: (Number(tentativa) || 1) + 1,
-  }
-
-  if (!r.ok) {
-    const id = await insertRecommendation({ ...base, status: 'falha_provedor', erroValidacao: r.erro })
-    return { id, status: 'falha_provedor', erro: r.erro }
-  }
-  let parsed = null
-  try { parsed = JSON.parse(r.rawText) } catch { parsed = null }
-  const v = parsed ? validateRecommendation(parsed) : { ok: false, errors: ['A resposta não é um JSON analisável.'] }
-  if (!v.ok) {
-    const id = await insertRecommendation({
-      ...base, status: 'falha_schema', respostaBruta: r.rawText, erroValidacao: v.errors.join(' · '),
-    })
-    return { id, status: 'falha_schema', erro: v.errors.join(' · ') }
-  }
-  const id = await insertRecommendation({ ...base, status: 'valida', resposta: v.value })
-  return { id, status: 'valida' }
+  const { provedor, cfg } = provedorAtivo()
+  const out = await gerarEValidar({ provedor, cfg, template, dossie })
+  const id = await insertRecommendation({
+    ...out, dossierId, promptTemplateId: template.id, tentativa: (Number(tentativa) || 1) + 1,
+  })
+  return { id, status: out.status, erro: out.erroValidacao }
 }
 
-export { processRun }
+export { processRun, gerarEValidar }

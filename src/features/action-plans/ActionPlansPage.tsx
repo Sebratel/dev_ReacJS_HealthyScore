@@ -129,9 +129,10 @@ export default function ActionPlansPage() {
           <div className="mt-3 flex items-start gap-2 rounded-lg bg-risk-medium/5 border border-risk-medium/20 px-3 py-2 text-[11px] text-on-surface-variant leading-relaxed">
             <FlaskConical size={13} className="text-risk-medium shrink-0 mt-0.5" />
             <p>
-              <strong className="text-on-surface/80">Modo simulado.</strong> Nenhum provedor de IA com chave está
-              cadastrado, então os planos são montados por uma resposta determinística — servem para ver o fluxo
-              funcionando, não para decidir. Um administrador cadastra o provedor em Configurações.
+              <strong className="text-on-surface/80">Modo simulado.</strong> Nenhum provedor de IA está cadastrado
+              (ou o escolhido é o simulado), então os planos são montados por uma resposta determinística — servem
+              para ver o fluxo funcionando, não para decidir. Um administrador cadastra o provedor em
+              Configurações → Provedor de IA.
             </p>
           </div>
         ) : (
@@ -141,8 +142,8 @@ export default function ActionPlansPage() {
               A seleção usa o <strong className="text-on-surface/70">mesmo ranking da tela Financeiro</strong>, com a
               config oficial. O plano só vira tarefa depois da decisão de um gestor, e o resultado é medido{' '}
               {status?.prazoReavaliacaoDias ?? 30} dias após a conclusão — comparando com a mesma régua.
-              {status?.provedorPadrao && (
-                <> Provedor: <span className="font-mono text-on-surface/70">{status.provedorPadrao.modelo}</span>.</>
+              {status?.provedor && (
+                <> Provedor: <span className="font-mono text-on-surface/70">{status.provedor.modelo}</span>.</>
               )}
             </p>
           </div>

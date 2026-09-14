@@ -23,7 +23,7 @@ const MIGRATIONS = resolve(__dirname, '../migrations')
 
 // Importados dinamicamente: os módulos leem DB_APP_DATABASE na primeira
 // conexão, então a env precisa estar posta antes do import.
-let store, closePool, MockActionPlanProvider, validateRecommendation
+let store, closePool, construirProvedor, validateRecommendation
 
 function cfg() {
   return {
@@ -60,7 +60,7 @@ describe.runIf(HABILITADO)('fluxo ponta a ponta dos Planos de Ação', () => {
 
     store = await import('./store.mjs')
     ;({ closePool } = await import('../db.mjs'))
-    ;({ MockActionPlanProvider } = await import('./provider.mjs'))
+    ;({ construir: construirProvedor } = await import('../ia/provedor.mjs'))
     ;({ validateRecommendation } = await import('./schema.mjs'))
   })
 
@@ -117,14 +117,14 @@ describe.runIf(HABILITADO)('fluxo ponta a ponta dos Planos de Ação', () => {
   })
 
   it('grava a recomendação do provedor mockado depois de validar o schema', async () => {
-    const r = await new MockActionPlanProvider().generatePlan({ dossie })
-    const v = validateRecommendation(JSON.parse(r.rawText))
+    const r = await construirProvedor({ tipo: 'simulado' }).gerar({ dossie })
+    const v = validateRecommendation(JSON.parse(r.texto))
     expect(v.ok).toBe(true)
 
     const tpl = await store.getActiveTemplate('financeiro')
     recId = await store.insertRecommendation({
       dossierId, promptTemplateId: tpl.id, modelo: r.modelo,
-      status: 'valida', resposta: v.value, duracaoMs: r.duracaoMs,
+      status: 'valida', resposta: v.value,
     })
     const rec = await store.getRecommendation(recId)
     expect(rec.status).toBe('valida')

@@ -109,9 +109,8 @@ export interface Task {
 export interface ModuleStatus {
   banco: { ok: boolean; error?: string }
   promptAtivo: { id: number; versao: string; setor: string } | null
-  provedorPadrao: { id: number; nome: string; kind: string; modelo: string; temChave: boolean } | null
+  provedor: { tipo: string; modelo: string; origem: 'env' | 'tela' | null; dica: string | null } | null
   simulado: boolean
-  segredoConfigurado: boolean
   criterioPadrao: Criterio
   concorrenciaMaxima: number
   prazoReavaliacaoDias: number

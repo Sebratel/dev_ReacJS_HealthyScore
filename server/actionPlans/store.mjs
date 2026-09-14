@@ -126,11 +126,11 @@ export async function insertDossier({ runId, clienteId, contratoId, dados, healt
 export async function insertRecommendation(rec) {
   const rows = await query(
     `insert into action_plan_recommendations
-       (dossier_id, prompt_template_id, modelo_ia, provider_id, status, resposta, resposta_bruta,
+       (dossier_id, prompt_template_id, modelo_ia, status, resposta, resposta_bruta,
         erro_validacao, tokens_entrada, tokens_saida, tokens_usados, duracao_ms, tentativa)
-     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      rec.dossierId, rec.promptTemplateId, rec.modelo, rec.providerId ?? null, rec.status,
+      rec.dossierId, rec.promptTemplateId, rec.modelo, rec.status,
       j(rec.resposta), rec.respostaBruta ?? null, rec.erroValidacao ?? null,
       rec.tokensEntrada ?? null, rec.tokensSaida ?? null,
       (rec.tokensEntrada ?? 0) + (rec.tokensSaida ?? 0) || null,
