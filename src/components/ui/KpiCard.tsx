@@ -1,5 +1,5 @@
 import { ReactNode } from 'react'
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, HelpCircle } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 interface KpiCardProps {
@@ -12,6 +12,9 @@ interface KpiCardProps {
   iconColor?: string
   variant?: 'default' | 'danger' | 'success' | 'warning' | 'brand'
   size?: 'sm' | 'md'
+  /** Definição do indicador, no ícone de ajuda ao lado do rótulo. Nome de KPI
+   *  raramente basta: "receita em risco" já foi lida como prejuízo a realizar. */
+  hint?: string
   className?: string
 }
 
@@ -23,14 +26,21 @@ const VARIANT_STYLES = {
   brand: 'border-primary/20 bg-primary/5',
 }
 
-export function KpiCard({ label, value, subtitle, delta, deltaLabel, icon, iconColor = 'text-primary', variant = 'default', size = 'md', className }: KpiCardProps) {
+export function KpiCard({ label, value, subtitle, delta, deltaLabel, icon, iconColor = 'text-primary', variant = 'default', size = 'md', hint, className }: KpiCardProps) {
   const isPositive = delta !== undefined && delta > 0
   const isNegative = delta !== undefined && delta < 0
 
   return (
     <div className={cn('group bg-surface-container-lowest border border-outline rounded-2xl p-4 sm:p-5 flex flex-col gap-3 shadow-card transition-[box-shadow,transform,border-color] duration-300 ease-nexa hover:shadow-card-md hover:border-outline-strong', VARIANT_STYLES[variant], className)}>
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-[0.08em]">{label}</span>
+        <span className="flex items-center gap-1 text-[11px] font-semibold text-on-surface-variant uppercase tracking-[0.08em]">
+          {label}
+          {hint && (
+            <span title={hint} aria-label={hint} role="note" className="inline-flex shrink-0 text-on-surface-variant/70 hover:text-on-surface cursor-help transition-colors">
+              <HelpCircle size={11} aria-hidden />
+            </span>
+          )}
+        </span>
         {icon && (
           <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center bg-surface-container-low ring-1 ring-inset ring-outline', iconColor)}>
             {icon}

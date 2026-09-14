@@ -7,6 +7,7 @@ import { useHealthColors } from '@/hooks/useHealthColors'
 import { useChartTokens } from '@/hooks/useChartTokens'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { KpiCard } from '@/components/ui/KpiCard'
+import { RECEITA_RISCO_ANUAL_DEF } from '@/features/dashboard/revenueAtRisk'
 import { ContractFilters, type ContractFilterState } from '@/components/ui/ContractFilters'
 import { formatCurrency, cn } from '@/utils/cn'
 import { useAppStore } from '@/store/appStore'
@@ -167,7 +168,7 @@ export default function AiPredictivePage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Clientes Críticos" value={rk.criticalCount.toLocaleString('pt-BR')} subtitle={`Health combinado < ${criticalThreshold}`} variant="danger" icon={<AlertTriangle size={14} />} iconColor="text-risk-critical" />
-        <KpiCard label="Receita Anual em Risco" value={formatCurrency(rk.annualRevenueRisk)} subtitle="Risco × MRR × 12" variant="warning" icon={<DollarSign size={14} />} iconColor="text-risk-medium" />
+        <KpiCard label="Receita Anual em Risco" value={formatCurrency(rk.annualRevenueRisk)} subtitle="Risco × MRR × 12" hint={RECEITA_RISCO_ANUAL_DEF} variant="warning" icon={<DollarSign size={14} />} iconColor="text-risk-medium" />
         <KpiCard label={cancelThreatsLabel} value={data.baseCounts.cancelThreats.toLocaleString('pt-BR')} subtitle="Registradas no relacionamento" variant="danger" icon={<MessageSquare size={14} />} iconColor="text-risk-high" />
         <KpiCard label="Alertas Automáticos" value={autoAlerts.length} subtitle="Ações recomendadas" variant="brand" icon={<Radio size={14} />} iconColor="text-primary" />
       </div>

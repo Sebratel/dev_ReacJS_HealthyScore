@@ -18,6 +18,24 @@
 // queries que usam o filtro (default). Edições por query via override.
 export const FROM_DATE = '2026-01-01'
 
+// ─── Contratos que NÃO são faturados ───────────────────────────
+// O preço mora no PRODUTO (`service_products.selling_price`), não no contrato.
+// Então um contrato de cortesia recebe o plano normal, com o preço de tabela do
+// plano — e passa a contar como receita em toda a plataforma, inclusive como
+// "receita em risco". Medido no banco: 205 contratos de cortesia ativos, com
+// apenas 2 faturas emitidas em 24 meses.
+//
+// Estes tipos entram na base como CLIENTE (têm score de saúde, aparecem nos
+// rankings), mas com receita ZERO. São 203 contratos e R$ 54 mil, 0,55% do MRR.
+//
+// Deliberadamente FORA da lista: "Sebratel - Fat. Especial" — 15 dos 41 têm
+// fatura, ou seja, ali há faturamento por outro caminho e zerar seria errado.
+export const NON_BILLED_CONTRACT_TYPES = [
+  'Sebratel - Cortesia',
+  'Sebratel - Contrato de Adequação de Condomínio',
+]
+const NON_BILLED_SQL = `array[${NON_BILLED_CONTRACT_TYPES.map((t) => `'${t.replace(/'/g, "''")}'`).join(', ')}]`
+
 // ─── Base (clientes/contratos ativos) ──────────────────────────
 const BASE_FROM = `
 from authentication_contracts ac
@@ -152,11 +170,14 @@ export const QUERIES = [
   {
     id: 'Q_TOTALS', engine: 'base', db: 'postgres',
     title: 'Totais gerais',
-    description: 'Contagem de clientes, contratos e MRR da base ativa.',
+    description: 'Contagem de clientes, contratos e MRR da base ativa. O MRR exclui os tipos de contrato não faturados (cortesia e adequação de condomínio), que contam como cliente mas não geram receita.',
     params: [],
     sql: `
 select count(distinct p.id) clients, count(distinct c.id) contracts,
-       coalesce(sum(sp.selling_price::numeric),0) mrr
+       -- Cortesia e afins continuam contando como cliente/contrato, mas o preço
+       -- de tabela deles NÃO entra no MRR: não há fatura por trás.
+       coalesce(sum(sp.selling_price::numeric)
+         filter (where pf.title is null or pf.title <> all (${NON_BILLED_SQL})), 0) mrr
 ${BASE_FROM}
 `,
   },

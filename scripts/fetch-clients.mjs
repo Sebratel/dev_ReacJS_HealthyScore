@@ -19,7 +19,7 @@ import { makePool } from './db.mjs'
 import { makeMariaPool } from './db-maria.mjs'
 import { makeAutoIspPool } from './db-autoisp.mjs'
 import { buildEffectiveQueries } from './queries/index.mjs'
-import { FROM_DATE } from './queries/registry.mjs'
+import { FROM_DATE, NON_BILLED_CONTRACT_TYPES } from './queries/registry.mjs'
 import { buildCohort } from './queries/cohort.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -162,7 +162,12 @@ try {
   // Dedupe por cliente (mantém 1 contrato por cliente), soma MRR dos contratos
   const byClient = new Map()
   for (const r of sample.rows) {
-    const price = Number(r.selling_price) || 0
+    // Cortesia e afins carregam o preço de TABELA do plano, mas nunca são
+    // faturados. Sem zerar aqui, esse valor vira "receita em risco" em toda a
+    // plataforma — já apareceu a própria SEBRATEL na lista de receita a perder.
+    // O cliente continua na base, com score e ranking; só a receita é zero.
+    const naoFaturado = NON_BILLED_CONTRACT_TYPES.includes((r.payment_form || '').trim())
+    const price = naoFaturado ? 0 : (Number(r.selling_price) || 0)
     if (byClient.has(r.client_id)) continue // mantém o contrato primário (1º)
     const toDate = (x) => (x ? new Date(x).toISOString().slice(0, 10) : null)
     byClient.set(r.client_id, {
@@ -178,6 +183,9 @@ try {
       contractDate: r.created_contract ? new Date(r.created_contract).toISOString().slice(0, 10) : null,
       plan: r.plan_name?.trim() || 'Sem plano',
       monthlyValue: price,
+      // Marca para a tela poder dizer "R$ 0 porque não é faturado", em vez de
+      // parecer dado faltando.
+      notBilled: naoFaturado || undefined,
       paymentForm: r.payment_form?.trim() || 'Não informado',
       city: r.city?.trim() || 'Não informado',
       neighborhood: r.neighborhood?.trim() || '(s/ bairro)',

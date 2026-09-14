@@ -466,6 +466,9 @@ export interface RealClient {
   contractDate: string | null
   plan: string
   monthlyValue: number
+  // Contrato de tipo não faturado (cortesia, adequação de condomínio): tem
+  // plano com preço de tabela, mas nenhuma fatura. monthlyValue vem ZERO.
+  notBilled?: boolean
   paymentForm: string
   city: string
   neighborhood: string
