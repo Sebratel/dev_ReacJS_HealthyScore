@@ -21,7 +21,10 @@ import { getVersion } from './dataset.mjs'
 const ENGINES = {
   financial:    { base: (c) => c.totalInvoices > 0 || c.trustReleases > 0 || c.renegotiations > 0, build: buildFinancialEngineData, wantsMonthly: true },
   commercial:   { base: () => true, build: buildCommercialEngineData },
-  connection:   { base: (c) => c.equipment.length > 0 || Object.values(c.onuStatusCounts || {}).some((n) => n > 0), build: buildConnectionEngineData },
+  // Conexão: entra quem tem equipamento, quedas de PPPoE OU leitura de enlace
+  // (óptica / porta LAN / CPE). Sem a última condição, o cliente com sinal
+  // péssimo mas sem equipamento cadastrado ficava de fora da engine inteira.
+  connection:   { base: (c) => c.equipment.length > 0 || Object.values(c.onuStatusCounts || {}).some((n) => n > 0) || c.connRxPower != null || c.connLanMbps != null || !!c.connCpeModel || c.connWifiRssi != null, build: buildConnectionEngineData },
   network:      { base: (c) => c.netMassiveCount > 0 || !!c.netSite, build: buildNetworkEngineData },
   field:        { base: (c) => c.protocolCount > 0, build: buildFieldEngineData },
   installation: { base: (c) => c.installProtocols > 0, build: buildInstallationEngineData },
@@ -135,7 +138,9 @@ export function runEngine(key, opts = {}) {
   })
 
   const total = scores.length
-  const pageSize = Math.min(200, Math.max(1, Number(opts.pageSize) || 25))
+  // Teto 2000 — a paginação normal usa 10; o "Ver dados" pede lotes maiores
+  // (seletor de quantidade). 2000 cobre o export sem estourar o payload.
+  const pageSize = Math.min(2000, Math.max(1, Number(opts.pageSize) || 25))
   const page = Math.max(0, Number(opts.page) || 0)
   const pageScores = scores.slice(page * pageSize, page * pageSize + pageSize)
 
@@ -181,11 +186,24 @@ export function scoreAllClients(clients, opts = {}) {
   return out
 }
 
+// ─── Score de UMA engine para TODOS os clientes ────────────────
+// runEngine devolve uma página; isto devolve o array inteiro, reusando o mesmo
+// cache. Usado pela reavaliação de impacto dos Planos de Ação, que precisa
+// comparar o score de hoje com o congelado no dossiê — e comparar exige a
+// MESMA régua (mesma engine, mesma config), não um score aproximado.
+export function scoreEngineAllClients(key, opts = {}) {
+  const eng = ENGINES[key]
+  if (!eng) throw new Error(`Engine desconhecida: ${key}`)
+  if (!opts.config || typeof opts.config !== 'object') throw new Error('Campo "config" (objeto) é obrigatório.')
+  const { data } = scoredEngineData(key, opts.clients || [], opts.config, opts.thresholds, opts.monthly || [])
+  return data.scores
+}
+
 // ─── Dashboard / IA — roda as 7 engines e combina o risco por cliente ──
 // Substitui o cálculo client-side (useEngineSummaries + buildClientRiskRanking)
 // que hoje roda no navegador sobre a base inteira.
 export function runDashboard(clients, opts = {}) {
-  const { configs = {}, thresholds, monthly = [], name, contract, city, topN = 12 } = opts
+  const { configs = {}, thresholds, monthly = [], name, contract, city, classification, topN = 12 } = opts
   applyHealthThresholds(thresholds && typeof thresholds === 'object' ? thresholds : DEFAULT_HEALTH_THRESHOLDS)
 
   const summaries = []
@@ -250,13 +268,14 @@ export function runDashboard(clients, opts = {}) {
     massiveClients: clients.filter((c) => c.netMassiveCount > 0).length,
   }
 
-  // Filtros (nome/contrato/cidade) escopam a lista visível — não os KPIs.
+  // Filtros (nome/contrato/cidade/classificação) escopam a lista visível — não os KPIs.
   const nm = String(name || '').trim().toLowerCase()
   const ct = String(contract || '').trim().toLowerCase()
   let visible = ranking
   if (nm) visible = visible.filter((r) => r.customerName && r.customerName.toLowerCase().includes(nm))
   if (ct) visible = visible.filter((r) => String(r.customerId).toLowerCase().includes(ct) || String(r.contractNumber).toLowerCase().includes(ct))
   if (city) visible = visible.filter((r) => r.city === city)
+  if (classification) visible = visible.filter((r) => r.classification === classification)
   const top = visible.slice(0, topN)
 
   // Sinais brutos por cliente do topo (para a explicação de IA).

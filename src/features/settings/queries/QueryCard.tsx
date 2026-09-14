@@ -6,10 +6,10 @@ import { saveQuery, resetQuery, ApiError, type QueryItem } from './queriesApi'
 
 function DbBadge({ db }: { db: QueryItem['db'] }) {
   const meta = {
-    postgres: { cls: 'bg-sky-500/15 text-sky-300', title: 'PostgreSQL (ELLEVEN)', tag: 'PG' },
-    mariadb: { cls: 'bg-amber-500/15 text-amber-300', title: 'MariaDB (massivas)', tag: 'Maria' },
-    autoisp: { cls: 'bg-emerald-500/15 text-emerald-300', title: 'PostgreSQL (AutoISP — status ONU)', tag: 'AutoISP' },
-  }[db] ?? { cls: 'bg-gray-500/15 text-gray-300', title: db, tag: db }
+    postgres: { cls: 'bg-data-1/15 text-data-1', title: 'PostgreSQL (ELLEVEN)', tag: 'PG' },
+    mariadb: { cls: 'bg-data-2/15 text-risk-medium', title: 'MariaDB (massivas)', tag: 'Maria' },
+    autoisp: { cls: 'bg-risk-low/15 text-data-3', title: 'PostgreSQL (AutoISP — status ONU)', tag: 'AutoISP' },
+  }[db] ?? { cls: 'bg-on-surface-variant/15 text-on-surface/85', title: db, tag: db }
   return (
     <span
       className={cn('shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide', meta.cls)}
@@ -83,31 +83,31 @@ export function QueryCard({ item, canEdit, onChange }: Props) {
   }
 
   return (
-    <div className="rounded-lg border border-app-border bg-app-bg/40">
+    <div className="rounded-lg border border-outline bg-surface/40">
       {/* Cabeçalho */}
       <div className="flex items-start gap-2.5 px-3.5 py-2.5">
         <DbBadge db={item.db} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-gray-100">{item.title}</span>
-            <span className="font-mono text-[10px] text-gray-500">{item.id}</span>
+            <span className="text-sm font-medium text-on-surface">{item.title}</span>
+            <span className="font-mono text-[10px] text-on-surface-variant">{item.id}</span>
             {item.isOverridden && (
               <span
-                className="rounded bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-brand-blue"
+                className="rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary"
                 title={item.updatedBy ? `por ${item.updatedBy}${item.updatedAt ? ` em ${new Date(item.updatedAt).toLocaleString('pt-BR')}` : ''}` : undefined}
               >
                 editada
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500">{item.description}</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-on-surface-variant">{item.description}</p>
         </div>
 
         {/* Ações */}
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             onClick={copy}
-            className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-gray-500 transition-colors hover:text-gray-200"
+            className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-on-surface-variant transition-colors hover:text-on-surface"
             title="Copiar SQL"
           >
             {copied ? <Check size={13} className="text-risk-low" /> : <Copy size={13} />}
@@ -116,7 +116,7 @@ export function QueryCard({ item, canEdit, onChange }: Props) {
           {canEdit && !editing && (
             <button
               onClick={startEdit}
-              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-gray-500 transition-colors hover:text-gray-200"
+              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-on-surface-variant transition-colors hover:text-on-surface"
               title="Editar SQL"
             >
               <Pencil size={13} />editar
@@ -126,9 +126,9 @@ export function QueryCard({ item, canEdit, onChange }: Props) {
       </div>
 
       {/* Corpo — leitura ou edição */}
-      <div className="border-t border-app-border px-3.5 py-3">
+      <div className="border-t border-outline px-3.5 py-3">
         {!editing ? (
-          <pre className="max-h-72 overflow-auto whitespace-pre rounded-md bg-app-bg p-3 font-mono text-[11.5px] leading-relaxed text-gray-300">
+          <pre className="max-h-72 overflow-auto whitespace-pre rounded-md bg-surface p-3 font-mono text-[11.5px] leading-relaxed text-on-surface/85">
             {item.effectiveSql.trim()}
           </pre>
         ) : (
@@ -138,18 +138,18 @@ export function QueryCard({ item, canEdit, onChange }: Props) {
               onChange={(e) => { setDraft(e.target.value); setError(null) }}
               spellCheck={false}
               rows={Math.min(24, Math.max(6, draft.split('\n').length + 1))}
-              className="w-full resize-y rounded-md border border-app-border bg-app-bg p-3 font-mono text-[11.5px] leading-relaxed text-gray-100 focus:border-brand-blue/50 focus:outline-none"
+              className="w-full resize-y rounded-md border border-outline bg-surface p-3 font-mono text-[11.5px] leading-relaxed text-on-surface focus:border-primary/50 focus:outline-none"
             />
 
             {/* Aviso do guard (client-side) */}
             {!guard.ok && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2 text-[11px] text-amber-300">
+              <div className="flex items-start gap-2 rounded-md border border-risk-medium/30 bg-risk-medium/10 px-2.5 py-2 text-[11px] text-risk-medium">
                 <AlertTriangle size={13} className="mt-0.5 shrink-0" />
                 <span>{guard.reason}</span>
               </div>
             )}
             {error && (
-              <div className="flex items-start gap-2 rounded-md border border-rose-500/25 bg-rose-500/5 px-2.5 py-2 text-[11px] text-rose-300">
+              <div className="flex items-start gap-2 rounded-md border border-risk-critical/30 bg-risk-critical/10 px-2.5 py-2 text-[11px] text-risk-critical">
                 <AlertTriangle size={13} className="mt-0.5 shrink-0" />
                 <span>{error}</span>
               </div>
@@ -159,7 +159,7 @@ export function QueryCard({ item, canEdit, onChange }: Props) {
               <button
                 onClick={save}
                 disabled={busy || !guard.ok || unchanged}
-                className="flex items-center gap-1.5 rounded-md bg-brand-blue px-3 py-1.5 text-[11px] font-semibold text-neutral-900 transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[11px] font-semibold text-on-primary transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {busy ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                 Salvar
@@ -167,7 +167,7 @@ export function QueryCard({ item, canEdit, onChange }: Props) {
               <button
                 onClick={cancel}
                 disabled={busy}
-                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] text-gray-400 transition-colors hover:text-gray-200 disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] text-on-surface/70 transition-colors hover:text-on-surface disabled:opacity-40"
               >
                 <X size={13} />Cancelar
               </button>
@@ -175,7 +175,7 @@ export function QueryCard({ item, canEdit, onChange }: Props) {
                 <button
                   onClick={reset}
                   disabled={busy}
-                  className="ml-auto flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] text-gray-500 transition-colors hover:text-gray-200 disabled:opacity-40"
+                  className="ml-auto flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-40"
                   title="Remove o override e volta ao SQL default"
                 >
                   <RotateCcw size={12} />Restaurar padrão
@@ -185,7 +185,7 @@ export function QueryCard({ item, canEdit, onChange }: Props) {
 
             {/* Parâmetros posicionais (ajuda) */}
             {item.params.length > 0 && (
-              <p className="text-[10px] text-gray-600">
+              <p className="text-[10px] text-on-surface-variant/90">
                 Parâmetros: {item.params.join(' · ')}
               </p>
             )}

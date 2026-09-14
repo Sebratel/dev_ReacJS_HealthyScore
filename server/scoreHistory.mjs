@@ -70,6 +70,14 @@ export function getClientHistory(clientId) {
   return index?.get(String(clientId)) || []
 }
 
+// Índice inteiro (clientId → série) e datas disponíveis. Usado pelo cálculo de
+// assertividade, que precisa varrer a base toda numa data passada em vez de
+// consultar cliente a cliente.
+export function getHistoryIndex() {
+  ensureFresh()
+  return { index: index ?? new Map(), dates: [...dates] }
+}
+
 export function getScoreHistoryStatus() {
   ensureFresh()
   return {

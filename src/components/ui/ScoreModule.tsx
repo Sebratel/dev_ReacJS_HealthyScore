@@ -1,7 +1,8 @@
 import { SecondaryScore, Trend } from '@/types'
 import { TrendingUp, TrendingDown, Minus, CheckCircle, XCircle, MinusCircle } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { HEALTH_COLORS, HEALTH_LABELS } from './HealthGauge'
+import { HEALTH_LABELS } from '@/utils/healthColors'
+import { useHealthColors } from '@/hooks/useHealthColors'
 
 interface ScoreModuleProps {
   name: string
@@ -14,7 +15,7 @@ function TrendBadge({ trend, value }: { trend: Trend; value: number }) {
   const cfg = {
     improving: { icon: TrendingUp, className: 'text-risk-low bg-risk-low/10 border-risk-low/20', label: `+${Math.abs(value)}pts` },
     degrading: { icon: TrendingDown, className: 'text-risk-critical bg-risk-critical/10 border-risk-critical/20', label: `-${Math.abs(value)}pts` },
-    stable: { icon: Minus, className: 'text-gray-500 bg-gray-500/10 border-gray-500/20', label: 'Estável' },
+    stable: { icon: Minus, className: 'text-on-surface-variant bg-on-surface-variant/10 border-on-surface-variant/20', label: 'Estável' },
   }[trend]
   const Icon = cfg.icon
   return (
@@ -26,25 +27,26 @@ function TrendBadge({ trend, value }: { trend: Trend; value: number }) {
 }
 
 export function ScoreModule({ name, icon, score, expanded = false }: ScoreModuleProps) {
-  const color = HEALTH_COLORS[score.classification]
+  const healthColors = useHealthColors()
+  const color = healthColors[score.classification]
   const label = HEALTH_LABELS[score.classification]
 
   return (
     <div className={cn(
-      'bg-app-card border rounded-xl p-4 flex flex-col gap-3 hover:border-app-borderLight transition-all',
+      'bg-surface-container-lowest border rounded-xl p-4 flex flex-col gap-3 hover:border-outline-strong transition-all',
       score.classification === 'critical' && 'border-risk-critical/20 bg-risk-critical/5',
       score.classification === 'high_risk' && 'border-risk-high/20',
-      score.classification === 'excellent' && 'border-brand-cyan/15',
+      score.classification === 'excellent' && 'border-primary-strong/15',
     )}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-app-surface border border-app-border flex items-center justify-center text-gray-400">
+          <div className="w-6 h-6 rounded-md bg-surface-container-low border border-outline flex items-center justify-center text-on-surface/70">
             {icon}
           </div>
-          <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{name}</span>
+          <span className="text-[11px] font-semibold text-on-surface/70 uppercase tracking-wider">{name}</span>
         </div>
-        <span className="text-[10px] text-gray-600 border border-app-border rounded px-1.5 py-0.5 font-mono">
+        <span className="text-[10px] text-on-surface-variant/90 border border-outline rounded px-1.5 py-0.5 font-mono">
           Peso {Math.round(score.weight * 100)}%
         </span>
       </div>
@@ -57,15 +59,15 @@ export function ScoreModule({ name, icon, score, expanded = false }: ScoreModule
         </div>
         <div className="flex-1 pb-1">
           {/* Score bar */}
-          <div className="w-full h-1.5 bg-app-surface rounded-full overflow-hidden">
+          <div className="w-full h-1.5 bg-surface-container-low rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-700"
               style={{ width: `${score.value}%`, backgroundColor: color }}
             />
           </div>
           <div className="flex justify-between mt-0.5">
-            <span className="text-[9px] text-gray-700">0</span>
-            <span className="text-[9px] text-gray-700">100</span>
+            <span className="text-[9px] text-on-surface-variant/75">0</span>
+            <span className="text-[9px] text-on-surface-variant/75">100</span>
           </div>
         </div>
       </div>
@@ -73,12 +75,12 @@ export function ScoreModule({ name, icon, score, expanded = false }: ScoreModule
       {/* Trend */}
       <div className="flex items-center gap-2">
         <TrendBadge trend={score.trend} value={Math.abs(score.trendValue)} />
-        <span className="text-[10px] text-gray-600">vs. 30 dias</span>
+        <span className="text-[10px] text-on-surface-variant/90">vs. 30 dias</span>
       </div>
 
       {/* Factors */}
       {(expanded || score.factors.length <= 4) && (
-        <div className="space-y-1.5 pt-1 border-t border-app-border">
+        <div className="space-y-1.5 pt-1 border-t border-outline">
           {score.factors.slice(0, expanded ? undefined : 4).map((f, i) => (
             <div key={i} className="flex items-center gap-1.5">
               {f.impact === 'positive' ? (
@@ -86,13 +88,13 @@ export function ScoreModule({ name, icon, score, expanded = false }: ScoreModule
               ) : f.impact === 'negative' ? (
                 <XCircle size={10} className="text-risk-critical shrink-0" />
               ) : (
-                <MinusCircle size={10} className="text-gray-600 shrink-0" />
+                <MinusCircle size={10} className="text-on-surface-variant/90 shrink-0" />
               )}
-              <span className={cn('text-[11px] flex-1', f.impact === 'positive' ? 'text-gray-300' : f.impact === 'negative' ? 'text-gray-300' : 'text-gray-500')}>
+              <span className={cn('text-[11px] flex-1', f.impact === 'positive' ? 'text-on-surface/85' : f.impact === 'negative' ? 'text-on-surface/85' : 'text-on-surface-variant')}>
                 {f.label}
               </span>
               {f.value && (
-                <span className={cn('text-[10px] font-mono', f.impact === 'positive' ? 'text-risk-low' : f.impact === 'negative' ? 'text-risk-critical' : 'text-gray-600')}>
+                <span className={cn('text-[10px] font-mono', f.impact === 'positive' ? 'text-risk-low' : f.impact === 'negative' ? 'text-risk-critical' : 'text-on-surface-variant/90')}>
                   {f.value}
                 </span>
               )}
@@ -102,7 +104,7 @@ export function ScoreModule({ name, icon, score, expanded = false }: ScoreModule
       )}
 
       {/* Insight */}
-      <p className="text-[11px] text-gray-500 leading-relaxed italic border-t border-app-border pt-2">
+      <p className="text-[11px] text-on-surface-variant leading-relaxed italic border-t border-outline pt-2">
         "{score.insight}"
       </p>
     </div>

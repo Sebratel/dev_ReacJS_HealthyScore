@@ -1,23 +1,10 @@
-import { HealthClassification } from '@/types'
 import { scoreToHealthClass } from '@/utils/health'
+import { softenColor } from '@/utils/healthColors'
+import { useHealthColors } from '@/hooks/useHealthColors'
+import { useChartTokens } from '@/hooks/useChartTokens'
+import { HEALTH_LABELS } from '@/utils/healthColors'
 
-export { scoreToHealthClass }
-
-export const HEALTH_COLORS: Record<HealthClassification, string> = {
-  critical: '#ef4444',
-  high_risk: '#f97316',
-  attention: '#f59e0b',
-  healthy: '#10b981',
-  excellent: '#22d3ee',
-}
-
-export const HEALTH_LABELS: Record<HealthClassification, string> = {
-  critical: 'Crítico',
-  high_risk: 'Alto Risco',
-  attention: 'Atenção',
-  healthy: 'Saudável',
-  excellent: 'Excelente',
-}
+export { scoreToHealthClass, HEALTH_LABELS }
 
 interface HealthGaugeProps {
   score: number
@@ -36,8 +23,10 @@ export function HealthGauge({ score, size = 160, showLabel = true, strokeWidth: 
   const trackLength = C * arcFraction
   const valueLength = (Math.max(0, Math.min(100, score)) / 100) * trackLength
 
+  const healthColors = useHealthColors()
+  const { track } = useChartTokens()
   const cls = scoreToHealthClass(score)
-  const color = HEALTH_COLORS[cls]
+  const color = healthColors[cls]
   const label = HEALTH_LABELS[cls]
 
   return (
@@ -52,7 +41,7 @@ export function HealthGauge({ score, size = 160, showLabel = true, strokeWidth: 
         <circle
           cx={cx} cy={cy} r={r}
           fill="none"
-          stroke="#e0dcd0"
+          stroke={track}
           strokeWidth={strokeWidth}
           strokeDasharray={`${trackLength} ${C}`}
           strokeLinecap="round"
@@ -65,18 +54,19 @@ export function HealthGauge({ score, size = 160, showLabel = true, strokeWidth: 
           strokeWidth={strokeWidth}
           strokeDasharray={`${valueLength} ${C * 10}`}
           strokeLinecap="round"
-          style={{ filter: `drop-shadow(0 0 ${strokeWidth * 0.6}px ${color}40)` }}
+          style={{ filter: `drop-shadow(0 0 ${strokeWidth * 0.6}px ${softenColor(color, 0.25)})` }}
         />
       </g>
 
-      {/* Score number */}
+      {/* Score number — usa a cor da classificação (visível no tema claro e no
+          escuro; antes era branco fixo → sumia no fundo claro). */}
       <text
         x={cx} y={cy - (showLabel ? size * 0.06 : 0)}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill="white"
+        fill={color}
         fontSize={size * 0.22}
-        fontWeight="700"
+        fontWeight="800"
         fontFamily="Inter, sans-serif"
         letterSpacing="-1"
       >

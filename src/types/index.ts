@@ -466,6 +466,9 @@ export interface RealClient {
   contractDate: string | null
   plan: string
   monthlyValue: number
+  // Contrato de tipo não faturado (cortesia, adequação de condomínio): tem
+  // plano com preço de tabela, mas nenhuma fatura. monthlyValue vem ZERO.
+  notBilled?: boolean
   paymentForm: string
   city: string
   neighborhood: string
@@ -486,6 +489,26 @@ export interface RealClient {
   // Conexão — quedas de PPPoE: mudanças de status da ONU por status (AutoISP).
   // Opcional para compatibilidade com snapshots antigos (sem o sinal).
   onuStatusCounts?: Record<string, number>
+  // Conexão — qualidade do enlace na carga (AutoISP). Todos opcionais: um
+  // snapshot gerado antes desta versão, ou com o AutoISP fora do ar, simplesmente
+  // não traz os campos e os indicadores ficam sem pontuar.
+  connRxPower?: number | null        // potência óptica recebida (dBm, negativa)
+  connOnuStatus?: string             // status corrente da ONU (OK, warning, …)
+  connLanMbps?: number | null        // maior velocidade negociada na LAN (Mbps)
+  connFiberDistanceM?: number | null // distância ONU → OLT (metros)
+  connOnuTempC?: number | null       // temperatura do módulo óptico (°C)
+  connCpeModel?: string              // modelo do CPE via TR-069
+  connCpeFirmware?: string           // firmware do CPE via TR-069
+  // Wi-Fi dentro da casa (TR-069, chaves X_INT6_). Só ~20% dos CPEs reportam —
+  // depende do firmware, não do plano —, por isso `undefined` é esperado e
+  // significa "sem leitura", nunca "Wi-Fi bom".
+  connWifiRssi?: number | null       // MEDIANA do RSSI dos dispositivos (dBm)
+  connWifiWorstRssi?: number | null  // pior dispositivo — só exibição, não pontua
+  connWifiDevices?: number | null    // dispositivos com leitura de RSSI
+  connWifiDevices24g?: number | null // … quantos no rádio de 2.4 GHz
+  connWifiDevices5g?: number | null  // … quantos no rádio de 5 GHz
+  connCpeMemPct?: number | null      // memória RAM usada no CPE (%)
+  connCpeTempC?: number | null       // temperatura do CPE (≠ módulo óptico)
   // Field Engine — protocolos de manutenção
   protocolCount: number
   scheduleCount: number
@@ -622,6 +645,12 @@ export interface ConnectionScoreFactor {
 // modelo) + quedas de PPPoE (presença por status da ONU, banco AutoISP).
 export type ConnectionIndicatorKey =
   | 'equipment'
+  // Qualidade do enlace — foto atual do cliente (AutoISP)
+  | 'opticalPower' | 'lanSpeed' | 'wifiGeneration' | 'onuStatusNow'
+  | 'fiberDistance' | 'onuTemperature'
+  // Wi-Fi dentro da casa e saúde do CPE (TR-069 / X_INT6_)
+  | 'wifiRssi' | 'cpeMemory' | 'cpeTemperature'
+  // Quedas de PPPoE — eventos acumulados no período
   | 'onuPowerFail' | 'onuLossSignal' | 'onuCritical' | 'onuWarning' | 'onuOk' | 'onuUp'
 
 export interface ConnectionIndicatorConfig {
@@ -650,6 +679,19 @@ export interface ConnectionEngineScore {
   equipment: string[]
   onuStatusCounts: Record<string, number>
   onuDrops: number         // power_fail + loss_signal (quedas de PPPoE)
+  // Qualidade do enlace na carga (AutoISP) — repassados para a tabela/detalhe.
+  rxPower: number | null
+  lanMbps: number | null
+  wifiGen: string
+  cpeModel: string
+  onuStatus: string
+  fiberDistanceM: number | null
+  onuTempC: number | null
+  wifiRssi: number | null      // mediana do RSSI dos dispositivos do cliente
+  wifiWorstRssi: number | null // pior dispositivo (exibição — ver wifiRssi)
+  wifiDevices: number | null
+  cpeMemPct: number | null
+  cpeTempC: number | null
   healthScore: number
   churnRisk: number
   revenueRisk: number
@@ -679,6 +721,22 @@ export interface ConnectionEngineData {
   indicatorSummary: ConnectionIndicatorSummary[]
   cityBreakdown: { city: string; avgScore: number; avgRisk: number; count: number }[]
   modelBreakdown: { model: string; count: number; avgScore: number }[]
+  // Qualidade do enlace — distribuições prontas para os cards da aba. `withLink`
+  // é quantos clientes têm leitura óptica; sem ele os percentuais enganam.
+  withLink: number
+  avgRxPower: number | null
+  poorSignalCount: number      // atenuação pior que −26 dBm
+  cappedLanCount: number       // porta LAN negociando 10 ou 100 Mbps
+  legacyWifiCount: number      // Wi-Fi 4 (n) ou anterior
+  rxPowerBreakdown: { key: string; label: string; count: number; avgScore: number }[]
+  lanSpeedBreakdown: { key: string; label: string; count: number; avgScore: number }[]
+  wifiGenBreakdown: { key: string; label: string; count: number; avgScore: number }[]
+  // Wi-Fi dentro da casa. `withWifiRssi` é o denominador honesto: a cobertura
+  // é de ~20% da base, então percentual sobre o total da aba mentiria.
+  withWifiRssi: number
+  avgWifiRssi: number | null
+  poorWifiCount: number        // mediana pior que −72 dBm
+  wifiRssiBreakdown: { key: string; label: string; count: number; avgScore: number }[]
 }
 
 // ─── Network Engine (100% real + config · massivas cross-DB) ───

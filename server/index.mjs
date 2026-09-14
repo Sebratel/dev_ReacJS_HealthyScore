@@ -13,16 +13,25 @@
 // com o ETL (scripts/queries/overrides.mjs).
 // ─────────────────────────────────────────────────────────────────────────
 import 'dotenv/config'
+import dns from 'node:dns'
 import express from 'express'
+
+// Node 18+ pode resolver AAAA (IPv6) primeiro. Se o container não tem egress
+// IPv6 (comum), o fetch() para googleapis.com falha — mesmo com IPv4 OK (wget
+// funciona) — e a validação do token do Google cai em 401. Preferir IPv4 evita.
+dns.setDefaultResultOrder('ipv4first')
 import { getCatalog, ENGINE_LABELS } from '../scripts/queries/index.mjs'
 import { writeOverride, deleteOverride, OVERRIDES_PATH } from '../scripts/queries/overrides.mjs'
 import { getQueryDef } from '../scripts/queries/registry.mjs'
-import { getStatus as datasetStatus, getClients, getCancelledClients, getDataset } from './dataset.mjs'
+import { getStatus as datasetStatus, getClients, getCancelledClients, getDataset, getVersion } from './dataset.mjs'
 import { runEngine, runDashboard, ENGINE_KEYS } from './engines.mjs'
 import { getClientHistory, getScoreHistoryStatus } from './scoreHistory.mjs'
+import { computeAccuracy } from './accuracy.mjs'
 import { buildSuggestions, deriveLists } from '../src/features/cancellation-profiles/suggestionEngine.ts'
 import { resolveRole, atLeast, listRoles, setRole, deleteRole } from './roles.mjs'
 import { getOfficialConfig, setOfficialConfigs, setOfficialThresholds } from './officialConfig.mjs'
+import { runChurnForecast } from './churnForecast.mjs'
+import { actionPlanRoutes } from './actionPlans/routes.mjs'
 
 const PORT = Number(process.env.API_PORT) || 8787
 const ALLOWED_DOMAIN = (process.env.ALLOWED_DOMAIN || 'sebratel.com.br').toLowerCase()
@@ -39,7 +48,7 @@ app.use((req, res, next) => {
   const origin = req.headers.origin
   if (origin) res.setHeader('Access-Control-Allow-Origin', origin)
   res.setHeader('Vary', 'Origin')
-  res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
   if (req.method === 'OPTIONS') return res.sendStatus(204)
   next()
@@ -53,12 +62,19 @@ const TOKEN_TTL_MS = 5 * 60 * 1000
 async function getUserFromToken(token) {
   const cached = tokenCache.get(token)
   if (cached && cached.exp > Date.now()) return cached.user
-  const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!r.ok) return null
-  const p = await r.json()
-  if (!p.email || p.email_verified === false) return null
+  let r
+  try {
+    r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  } catch (e) {
+    // Falha de REDE: o container não alcançou o googleapis.com (egress/DNS).
+    console.warn('[auth] falha de rede ao validar token no Google userinfo:', e.message)
+    return null
+  }
+  if (!r.ok) { console.warn(`[auth] Google userinfo respondeu ${r.status} (token inválido/expirado?)`); return null }
+  const p = await r.json().catch(() => ({}))
+  if (!p.email || p.email_verified === false) { console.warn('[auth] token sem e-mail verificado'); return null }
   const user = { email: String(p.email).toLowerCase(), name: p.name || p.email }
   tokenCache.set(token, { user, exp: Date.now() + TOKEN_TTL_MS })
   return user
@@ -98,13 +114,14 @@ app.get('/api/me', requireAuth(), (req, res) => {
 })
 
 // ─── Config oficial (pesos + limiares) ─────────────────────────
-// Leitura por todos (@domínio); escrita: pesos → admin, limiares → power_user+.
+// Leitura por todos (@domínio); escrita: pesos e limiares → power_user+
+// (admin herda). Gestão de usuários continua exclusiva de admin.
 app.get('/api/config', requireAuth(), (_req, res) => {
   const o = getOfficialConfig()
   res.json({ configs: o?.configs ?? null, thresholds: o?.thresholds ?? null, updatedAt: o?.updatedAt ?? null, updatedBy: o?.updatedBy ?? null })
 })
 
-app.put('/api/config/configs', requireAuth({ minRole: 'admin' }), (req, res) => {
+app.put('/api/config/configs', requireAuth({ minRole: 'power_user' }), (req, res) => {
   try {
     const saved = setOfficialConfigs(req.body?.configs, req.user.email)
     res.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy })
@@ -134,8 +151,36 @@ app.get('/api/dataset/status', requireAuth(), (_req, res) => {
 app.get('/api/dataset/lists', (_req, res) => {
   const ds = getDataset()
   if (!ds) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
-  const { clients, cancelledClients, ...lists } = ds // exclui os arrays pesados
+  const { clients, cancelledClients, withdrawalDetail, ...lists } = ds // exclui os arrays pesados
   res.json(lists)
+})
+
+// Detalhe das Retiradas (protocolos crus + pessoas) — servido sob demanda pra
+// não pesar o boot. A tela de Retiradas usa pra filtrar por período no cliente.
+app.get('/api/withdrawals', requireAuth(), (_req, res) => {
+  const ds = getDataset()
+  if (!ds) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
+  res.json(ds.withdrawalDetail ?? { protocols: [], people: [] })
+})
+
+// Previsão de prazo de cancelamento — lista rankeada por urgência (janela pra
+// frente estimada da sobrevivência dos cancelados por perfil). Sob demanda.
+// POST /api/churn-forecast { configs?, thresholds?, topN?, city?, classification? }
+app.post('/api/churn-forecast', requireAuth(), (req, res) => {
+  const active = getClients()
+  if (!active.length) return res.status(503).json({ error: 'Base ainda não materializada no backend (snapshot ausente).' })
+  const cancelled = getCancelledClients()
+  if (!cancelled.length) return res.status(503).json({ error: 'Coorte de cancelados ainda não materializada — a previsão depende dela.' })
+  try {
+    const b = req.body || {}
+    const result = runChurnForecast(active, cancelled, {
+      configs: b.configs, thresholds: b.thresholds, monthly: getDataset()?.monthly || [],
+      topN: b.topN, city: b.city, classification: b.classification,
+    })
+    res.json({ ...result, meta: datasetStatus() })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
 })
 
 // Dashboard + IA — 7 engines + ranking combinado por cliente, no servidor.
@@ -152,7 +197,7 @@ app.post('/api/dashboard', requireAuth(), (req, res) => {
       configs: official?.configs ?? b.configs,
       thresholds: official?.thresholds ?? b.thresholds,
       monthly: getDataset()?.monthly || [],
-      name: b.name, contract: b.contract, city: b.city, topN: b.topN,
+      name: b.name, contract: b.contract, city: b.city, classification: b.classification, topN: b.topN,
     })
     res.json({ ...result, meta: datasetStatus(), monthly: getDataset()?.monthly || [] })
   } catch (e) {
@@ -197,6 +242,19 @@ app.get('/api/score-history/status', requireAuth(), (_req, res) => {
 app.get('/api/clients/:id/score-history', requireAuth(), (req, res) => {
   const series = getClientHistory(req.params.id)
   res.json({ clientId: req.params.id, points: series, status: getScoreHistoryStatus() })
+})
+
+// Assertividade: dos que cancelaram, quantos a plataforma já sinalizava ANTES?
+// Calculado só sobre o histórico congelado — pontuar hoje quem já cancelou
+// usaria dados gerados pelo próprio cancelamento (ver server/accuracy.mjs).
+// Cache curto: a resposta varre o índice inteiro e só muda quando entra
+// snapshot ou ponto de histórico novo.
+let accCache = { key: '', value: null }
+app.get('/api/accuracy', requireAuth(), (_req, res) => {
+  const st = getScoreHistoryStatus()
+  const key = `${getVersion()}:${st.points}:${st.to ?? ''}`
+  if (accCache.key !== key) accCache = { key, value: computeAccuracy() }
+  res.json(accCache.value)
 })
 
 // Catálogo de queries — a tela de SQL é área do power_user (view + edit).
@@ -364,7 +422,33 @@ app.get('/api/cancelled-clients', requireAuth(), (req, res) => {
   })
 })
 
+// ─── Planos de Ação (IA) + provedores ──────────────────────────
+// Único bloco do backend que fala com um BANCO de aplicação (MariaDB). Fica
+// atrás do mesmo requireAuth, e degrada sozinho: sem banco configurado, o
+// /status responde "indisponível" e a tela explica o que falta.
+app.use('/api', actionPlanRoutes(requireAuth))
+
+// Migrations no boot: o deploy é pelo Portainer, onde não há passo de "rodar
+// o migrate" antes de subir. É idempotente (schema_migrations decide o que
+// falta) e NÃO derruba a API se falhar — o resto do sistema não depende deste
+// banco, e a tela do módulo mostra o que está faltando.
+// Desligue com RUN_MIGRATIONS_ON_BOOT=false.
+async function migrateOnBoot() {
+  if (String(process.env.RUN_MIGRATIONS_ON_BOOT ?? 'true').toLowerCase() === 'false') return
+  if (!process.env.DB_APP_HOST && !process.env.DB_MARIA_HOST) {
+    console.log('[migrate] banco da aplicação não configurado — módulo de Planos de Ação indisponível.')
+    return
+  }
+  try {
+    const { runMigrations } = await import('../scripts/migrate.mjs')
+    await runMigrations()
+  } catch (e) {
+    console.warn(`[migrate] não aplicado: ${e.message}`)
+  }
+}
+
 app.listen(PORT, () => {
+  void migrateOnBoot()
   console.log(`ChurnIQ API ouvindo em :${PORT}`)
   console.log(`  domínio permitido: @${ALLOWED_DOMAIN}`)
   console.log(`  papéis: ADMIN_EMAILS/POWER_USER_EMAILS (env) + data/roles.json (tela)`)

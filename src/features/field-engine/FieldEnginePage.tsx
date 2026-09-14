@@ -45,8 +45,8 @@ export default function FieldEnginePage() {
       rankingSubtitle="Clientes ordenados por Health Score de manutenção (pior primeiro)"
       tableHeaders={['Protocolos', 'Média SLA']}
       columns={[
-        { header: 'Protocolos', sortKey: 'protocolCount', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.protocolCount}p · <span className="text-risk-critical">{s.slaLateCount} atr.</span></span> },
-        { header: 'Média SLA', sortKey: 'avgSlaDays', cell: (s) => <span className="text-[10px] text-gray-500 font-mono">{s.avgSlaDays.toFixed(1)}d</span> },
+        { header: 'Protocolos', sortKey: 'protocolCount', cell: (s) => <span className="text-[10px] text-on-surface-variant font-mono">{s.protocolCount}p · <span className="text-risk-critical">{s.slaLateCount} atr.</span></span> },
+        { header: 'Média SLA', sortKey: 'avgSlaDays', cell: (s) => <span className="text-[10px] text-on-surface-variant font-mono">{s.avgSlaDays.toFixed(1)}d</span> },
       ]}
       dataTitle="Dados — Manutenção"
       dataColumns={DATA_COLUMNS}

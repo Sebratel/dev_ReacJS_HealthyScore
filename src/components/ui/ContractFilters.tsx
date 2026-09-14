@@ -50,38 +50,38 @@ export function ContractFilters({ filters, onChange, cities, resultCount, totalC
   const set = (patch: Partial<ContractFilterState>) => onChange({ ...filters, ...patch })
 
   return (
-    <div className="flex items-center gap-2 flex-wrap rounded-2xl border border-app-border bg-app-card px-3 py-2.5 shadow-card-md">
-      <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold px-1">Filtros</span>
+    <div className="flex items-center gap-2 flex-wrap rounded-2xl border border-outline bg-surface-container-lowest px-3 py-2.5 shadow-card-md">
+      <span className="text-[10px] uppercase tracking-wider text-on-surface-variant font-semibold px-1">Filtros</span>
 
       {/* Contrato (nº / id) */}
       <div className="relative flex items-center">
-        <FileText size={12} className="absolute left-2.5 text-gray-500 pointer-events-none" />
+        <FileText size={12} className="absolute left-2.5 text-on-surface-variant pointer-events-none" />
         <input
           value={filters.contract}
           onChange={(e) => set({ contract: e.target.value })}
           placeholder="Contrato (nº / id)"
-          className="pl-7 pr-2.5 h-8 w-40 text-xs bg-app-surface border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50 transition-all"
+          className="pl-7 pr-2.5 h-8 w-40 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface/85 placeholder-on-surface-variant/90 focus:outline-none focus:border-primary/50 transition-all"
         />
       </div>
 
       {/* Nome do cliente */}
       <div className="relative flex items-center">
-        <Search size={12} className="absolute left-2.5 text-gray-500 pointer-events-none" />
+        <Search size={12} className="absolute left-2.5 text-on-surface-variant pointer-events-none" />
         <input
           value={filters.name}
           onChange={(e) => set({ name: e.target.value })}
           placeholder="Nome do cliente"
-          className="pl-7 pr-2.5 h-8 w-48 text-xs bg-app-surface border border-app-border rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-blue/50 transition-all"
+          className="pl-7 pr-2.5 h-8 w-48 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface/85 placeholder-on-surface-variant/90 focus:outline-none focus:border-primary/50 transition-all"
         />
       </div>
 
       {/* Cidade */}
       <div className="relative flex items-center">
-        <MapPin size={12} className="absolute left-2.5 text-gray-500 pointer-events-none z-10" />
+        <MapPin size={12} className="absolute left-2.5 text-on-surface-variant pointer-events-none z-10" />
         <select
           value={filters.city}
           onChange={(e) => set({ city: e.target.value })}
-          className="pl-7 pr-7 h-8 w-44 text-xs bg-app-surface border border-app-border rounded-lg text-gray-300 focus:outline-none focus:border-brand-blue/50 transition-all appearance-none cursor-pointer"
+          className="pl-7 pr-7 h-8 w-44 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface/85 focus:outline-none focus:border-primary/50 transition-all appearance-none cursor-pointer"
         >
           <option value="">Todas as cidades</option>
           {cities.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -91,14 +91,14 @@ export function ContractFilters({ filters, onChange, cities, resultCount, totalC
       {active && (
         <button
           onClick={() => onChange(EMPTY)}
-          className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-200 px-2 h-8 rounded-lg border border-app-border hover:border-app-borderLight transition-all"
+          className="flex items-center gap-1 text-[11px] text-on-surface/70 hover:text-on-surface px-2 h-8 rounded-lg border border-outline hover:border-outline-strong transition-all"
         >
           <X size={12} /> Limpar
         </button>
       )}
 
       {resultCount !== undefined && (
-        <span className="ml-auto text-[11px] text-gray-500 font-mono pr-1">
+        <span className="ml-auto text-[11px] text-on-surface-variant font-mono pr-1">
           {resultCount.toLocaleString('pt-BR')}{totalCount !== undefined ? ` / ${totalCount.toLocaleString('pt-BR')}` : ''} contratos
         </span>
       )}

@@ -18,6 +18,24 @@
 // queries que usam o filtro (default). Edições por query via override.
 export const FROM_DATE = '2026-01-01'
 
+// ─── Contratos que NÃO são faturados ───────────────────────────
+// O preço mora no PRODUTO (`service_products.selling_price`), não no contrato.
+// Então um contrato de cortesia recebe o plano normal, com o preço de tabela do
+// plano — e passa a contar como receita em toda a plataforma, inclusive como
+// "receita em risco". Medido no banco: 205 contratos de cortesia ativos, com
+// apenas 2 faturas emitidas em 24 meses.
+//
+// Estes tipos entram na base como CLIENTE (têm score de saúde, aparecem nos
+// rankings), mas com receita ZERO. São 203 contratos e R$ 54 mil, 0,55% do MRR.
+//
+// Deliberadamente FORA da lista: "Sebratel - Fat. Especial" — 15 dos 41 têm
+// fatura, ou seja, ali há faturamento por outro caminho e zerar seria errado.
+export const NON_BILLED_CONTRACT_TYPES = [
+  'Sebratel - Cortesia',
+  'Sebratel - Contrato de Adequação de Condomínio',
+]
+const NON_BILLED_SQL = `array[${NON_BILLED_CONTRACT_TYPES.map((t) => `'${t.replace(/'/g, "''")}'`).join(', ')}]`
+
 // ─── Base (clientes/contratos ativos) ──────────────────────────
 const BASE_FROM = `
 from authentication_contracts ac
@@ -123,7 +141,7 @@ const INV_BASE = (extraWhere) => `
 
 // ─── Coorte (Cancelados) — base compartilhada pelas queries gêmeas ─────
 // Espelha cohort.mjs. As colunas/joins são iguais para ativos e cancelados;
-// só o filtro de v_status muda ({{statusCmp}}). "Forma de pagamento" já usa
+// só o filtro de v_status muda ({{statusFilter}}). "Forma de pagamento" já usa
 // contract_types (migração de payment_forms).
 const COHORT_BASE_COLUMNS = `
   p.id client_id, p.name client_name, p.gender client_gender, p.birth_date client_birth,
@@ -152,11 +170,14 @@ export const QUERIES = [
   {
     id: 'Q_TOTALS', engine: 'base', db: 'postgres',
     title: 'Totais gerais',
-    description: 'Contagem de clientes, contratos e MRR da base ativa.',
+    description: 'Contagem de clientes, contratos e MRR da base ativa. O MRR exclui os tipos de contrato não faturados (cortesia e adequação de condomínio), que contam como cliente mas não geram receita.',
     params: [],
     sql: `
 select count(distinct p.id) clients, count(distinct c.id) contracts,
-       coalesce(sum(sp.selling_price::numeric),0) mrr
+       -- Cortesia e afins continuam contando como cliente/contrato, mas o preço
+       -- de tabela deles NÃO entra no MRR: não há fatura por trás.
+       coalesce(sum(sp.selling_price::numeric)
+         filter (where pf.title is null or pf.title <> all (${NON_BILLED_SQL})), 0) mrr
 ${BASE_FROM}
 `,
   },
@@ -470,6 +491,44 @@ group by c.contract_number
     sql: `select p2.name v, count(distinct a.id) n ${REL_FROM} ${REL_WHERE} and p2.id is not null group by p2.name order by n desc`,
   },
 
+  // ── Coorte mensal — conexões provisionadas (MariaDB) ─────────
+  {
+    id: 'Q_MARIA_CONEXOES_MES', engine: 'mensal', db: 'mariadb',
+    title: 'Conexões no último dia de cada mês (MariaDB)',
+    description:
+      'Snapshot diário AGREGADO de conexões provisionadas (uma linha por dia/cidade/bairro/site). Serve de denominador operacional: é o número de conexões que a operação reconhece. Não tem identidade de contrato, então não se junta a score — para isso use a reconstrução do ELLEVEN (Q_ASOF_BASE), que fica ~2% acima por contar contrato sem conexão provisionada (suspenso, bloqueado, sem registro de autenticação). Cobertura começa em 03/03/2026.',
+    params: [],
+    sql: `
+select date(acd.\`date\`) dia, sum(acd.total) conexoes
+from DB_Applicattion.Autentication_Contracts_Daily acd
+where date(acd.\`date\`) in (
+  select max(date(\`date\`))
+  from DB_Applicattion.Autentication_Contracts_Daily
+  group by year(\`date\`), month(\`date\`)
+)
+group by dia
+order by dia
+`,
+  },
+  {
+    id: 'Q_MARIA_CONEXOES_BAIRRO', engine: 'mensal', db: 'mariadb',
+    title: 'Conexões por bairro no último dia de cada mês (MariaDB)',
+    description:
+      'Mesmo snapshot, quebrado por cidade/bairro. É o denominador que faltava para calcular TAXA de cancelamento por bairro — sem ele só dá para dizer "% dos cancelamentos veio daqui", que confunde bairro grande com bairro problemático.',
+    params: [],
+    sql: `
+select date(acd.\`date\`) dia, acd.city, acd.neighborhood, sum(acd.total) conexoes
+from DB_Applicattion.Autentication_Contracts_Daily acd
+where date(acd.\`date\`) in (
+  select max(date(\`date\`))
+  from DB_Applicattion.Autentication_Contracts_Daily
+  group by year(\`date\`), month(\`date\`)
+)
+group by dia, acd.city, acd.neighborhood
+order by dia, conexoes desc
+`,
+  },
+
   // ── Network Engine — massivas (MariaDB) × infra (PostgreSQL) ─
   {
     id: 'Q_MARIA_SPLITTER', engine: 'rede', db: 'mariadb',
@@ -604,6 +663,133 @@ group by c.contract_id, s.subsc_id, osc.new_status
 `,
   },
 
+  // ── Conexão — qualidade do enlace (AutoISP) ───────────────────
+  // As três queries abaixo são PASSADAS ÚNICAS sobre a base inteira, sem filtro
+  // por contrato. Não é descuido: medimos as duas formas contra o banco real e
+  // filtrar por `contract_id = any($1)` obriga o planner a varrer contracts +
+  // contracted_services a cada execução e sai ~5x MAIS CARO (11,8s para 2 mil
+  // contratos contra 2,3s para os 84 mil). O casamento com a base é feito no
+  // ETL, em memória, por contract_number.
+  //
+  // Também estão SEPARADAS de propósito. Juntar o óptico com a velocidade da
+  // porta numa query só faz o Postgres destoastar o jsonb `ethernet` das 215
+  // mil linhas de onu_statuses (a tabela tem 1,7 GB por causa dele) e a
+  // consulta estoura 10 min. Separadas, o filtro `jsonb_typeof = 'array'` corta
+  // para as ~87 mil que têm dado real e a mesma coisa sai em 1,5s.
+  {
+    id: 'Q_AUTOISP_ONU_HEALTH', engine: 'conexao', db: 'autoisp',
+    title: 'Qualidade do enlace óptico — sinal, distância e temperatura (AutoISP)',
+    description:
+      'Foto ATUAL do enlace de cada contrato: potência óptica recebida (dBm), potência transmitida, status corrente da ONU, distância da fibra em metros e temperatura óptica. Uma linha por contrato. Passada única sobre onu_statuses + onu_infos (sem filtro por contrato — ver comentário acima).',
+    params: [],
+    sql: `
+select cs.contract_id::text contract_id,
+  os.calculated_rx_power, os.tx_power, os.calculated_status,
+  oi.distance, oi.optical_temperature
+from onu_statuses os
+join gpon_clients gc on gc.id = os.gpon_client_id
+join contracted_services cs on cs.id = gc.contracted_service_id
+left join onu_infos oi on oi.gpon_client_id = gc.id
+where cs.contract_id is not null
+`,
+  },
+
+  {
+    id: 'Q_AUTOISP_ONU_LAN', engine: 'conexao', db: 'autoisp',
+    title: 'Velocidade negociada da porta LAN da ONU (AutoISP)',
+    description:
+      'Maior velocidade negociada (Mbps) entre as portas ethernet da ONU que estão com link ativo. Serve para achar o cliente de plano alto ligado numa porta de 100 ou 10 Mbps — que nunca vai ver a velocidade que assina. Lê o jsonb `ethernet` de onu_statuses, restrito às linhas em que ele é um array de verdade.',
+    params: [],
+    sql: `
+select cs.contract_id::text contract_id,
+  (select max(nullif(regexp_replace(p->>'negotiated_speed','[^0-9]','','g'),'')::int)
+     from jsonb_array_elements(os.ethernet) p where p->>'link' = 'up') lan_mbps
+from onu_statuses os
+join gpon_clients gc on gc.id = os.gpon_client_id
+join contracted_services cs on cs.id = gc.contracted_service_id
+where cs.contract_id is not null and jsonb_typeof(os.ethernet) = 'array'
+`,
+  },
+
+  {
+    id: 'Q_AUTOISP_CPE', engine: 'conexao', db: 'autoisp',
+    title: 'Equipamento do cliente — modelo e firmware via TR-069 (AutoISP)',
+    description:
+      'Modelo e firmware do CPE reportados por TR-069. O modelo é o que define a geração do Wi-Fi (ax / ac / n) — o ETL faz esse de-para. Usa só COLUNAS de acs_clients: a mesma informação existe no jsonb de acs_device_statuses, mas lê-lo custa mais de 10 min contra 2,3s aqui.',
+    params: [],
+    sql: `
+select cs.contract_id::text contract_id,
+  ac.router_model_name, ac.firmware_version
+from acs_clients ac
+join gpon_clients gc on gc.id = ac.gpon_client_id
+join contracted_services cs on cs.id = gc.contracted_service_id
+where cs.contract_id is not null
+`,
+  },
+
+  // ── Conexão — Wi-Fi dentro da casa e saúde do CPE (TR-069, AutoISP) ─
+  // O RSSI de cada aparelho do cliente mora no jsonb do TR-069, nas chaves
+  // proprietárias da Int6: ...WLANConfiguration.<radio>.AssociatedDevice.<n>.
+  // X_INT6_RSSI (rádio 1 = 2.4 GHz, 5 = 5 GHz). É a mesma fonte do relatório de
+  // qualidade de Wi-Fi que a Int6 envia.
+  //
+  // Esta é a ÚNICA query do grupo que filtra por data — e o filtro é o que a
+  // torna viável. `last_inform` é coluna normal, avaliada antes de destoastar o
+  // jsonb (1,7 GB na tabela): com ela, 9s; sem ela, a consulta abre o jsonb das
+  // 119 mil linhas. Como RSSI é foto do instante, leitura de três dias atrás não
+  // valeria nada de qualquer forma.
+  //
+  // As tabelas prontas analytics_device_dailies / _rollup_stats teriam isto
+  // agregado por dia (e o "tempo conectado" do relatório), mas nesta instância
+  // estão VAZIAS e fora do grant — por isso o dado sai do jsonb.
+  {
+    id: 'Q_AUTOISP_WIFI', engine: 'conexao', db: 'autoisp',
+    title: 'Wi-Fi na casa do cliente — RSSI, memória e temperatura do CPE (AutoISP)',
+    description:
+      'Uma linha por contrato: mediana do RSSI dos aparelhos conectados ao Wi-Fi (o agregador honesto — o pior aparelho mede quantos aparelhos a casa tem), pior aparelho, quantidade por banda, e memória/temperatura do roteador. Cobre ~20% dos contratos: depende do firmware do CPE, não do plano.',
+    params: [],
+    sql: `
+select cs.contract_id::text contract_id,
+  r.rssi_mediano, r.pior_rssi, r.devices_wifi, r.devices_24g, r.devices_5g,
+  nullif(f.d->>'InternetGatewayDevice.DeviceInfo.X_INT6_MEMUSED_PERCENT','')::numeric cpe_mem_pct,
+  nullif(f.d->>'InternetGatewayDevice.DeviceInfo.X_INT6_TEMPERATURE','')::numeric cpe_temp_c
+from (
+  select ads.device_id, ads.last_analytics_data_translated d
+  from acs_device_statuses ads
+  where ads.last_inform >= now() - interval '48 hours'
+    and ads.last_analytics_data_translated is not null
+) f
+left join (
+  select x.device_id,
+    percentile_cont(0.5) within group (order by x.rssi) rssi_mediano,
+    min(x.rssi) pior_rssi, count(*) devices_wifi,
+    count(*) filter (where x.radio = '1') devices_24g,
+    count(*) filter (where x.radio = '5') devices_5g
+  from (
+    select ads.device_id,
+      substring(e.key from 'WLANConfiguration\\.(\\d+)\\.') radio,
+      e.value::numeric rssi
+    from acs_device_statuses ads,
+      lateral jsonb_each_text(ads.last_analytics_data_translated) e
+    where ads.last_inform >= now() - interval '48 hours'
+      and ads.last_analytics_data_translated is not null
+      and e.key like '%.AssociatedDevice.%.X_INT6_RSSI'
+      and e.value ~ '^-[0-9]+$'
+  ) x
+  -- Fora de [-100, -10] é lixo de firmware, não aparelho colado no roteador.
+  where x.rssi between -100 and -10
+  group by x.device_id
+) r on r.device_id = f.device_id
+join acs_clients ac on ac.device_id = f.device_id
+join gpon_clients gc on gc.id = ac.gpon_client_id
+join contracted_services cs on cs.id = gc.contracted_service_id
+where cs.contract_id is not null
+  and (r.device_id is not null
+       or f.d ? 'InternetGatewayDevice.DeviceInfo.X_INT6_MEMUSED_PERCENT'
+       or f.d ? 'InternetGatewayDevice.DeviceInfo.X_INT6_TEMPERATURE')
+`,
+  },
+
   // ── Retiradas de equipamento — protocolos de retirada (motoboys) ─
   // Uma linha por PROTOCOLO. Cada relato (report) que casa com os filtros é uma
   // "visita"; o desfecho (retirado × não retirado) e o motoboy vêm do relato
@@ -655,7 +841,7 @@ where rn = 1
   },
 
   // ── Cancelados (coorte) — queries GÊMEAS ativos × cancelados ────────
-  // Rodam para os DOIS coortes; só o filtro de status muda via {{statusCmp}}
+  // Rodam para os DOIS coortes; só o filtro de status muda via {{statusFilter}}
   // ('=' cancelados | '<>' ativos). Consumidas por scripts/queries/cohort.mjs
   // (buildCohort) — fonte única, editáveis pela tela como as demais.
   {
@@ -674,14 +860,83 @@ order by c.id, sp.selling_price desc nulls last
 `,
   },
   {
-    id: 'Q_COH_CANCELLED_BASE', engine: 'cancelados', db: 'postgres',
-    title: 'Coorte — base de CANCELADOS (janela)',
-    description: 'Identidade/plano/endereço dos contratos cancelados na janela. $1 = from, $2 = to (datas).',
-    params: ['$1 = from', '$2 = to'],
+    id: 'Q_ASOF_BASE', engine: 'mensal', db: 'postgres',
+    title: 'Coorte mensal — contratos ATIVOS numa data passada',
+    description:
+      'Reconstrói a base ativa no fim de um mês. NÃO pode filtrar por v_status: quem estava ativo naquela data e cancelou depois consta como "Cancelado" hoje, e o filtro por status atual apagaria justamente a coorte que interessa. O recorte é temporal — nasceu até a data e ainda não tinha cancelado. Mantém os mesmos filtros de qualidade da coorte (v_stage instalado, tipo 19 fora). $1 = data de corte.',
+    params: ['$1 = data de corte (fim do mês)'],
     sql: `
+with base as (
+  select c.id
+  from contracts c
+  where c.v_stage = 'Aprovado'
+    and c.contract_type_id <> 19
+    and c.created::date <= $1::date
+    and (c.cancellation_date is null or c.cancellation_date::date > $1::date)
+)
 select distinct on (c.id) ${COHORT_BASE_COLUMNS}
 ${COHORT_BASE_JOINS}
+join base b on b.id = c.id
+order by c.id, sp.selling_price desc nulls last
+`,
+  },
+  {
+    id: 'Q_ASOF_CANCEL_MES', engine: 'mensal', db: 'postgres',
+    title: 'Coorte mensal — cancelamentos de um mês, por contrato',
+    description:
+      'Contratos cancelados dentro da janela, com o código do último evento de cancelamento, MRR e tempo de casa. Chave é o contrato, não a pessoa: quem tem 3 contratos e cancela 1 precisa aparecer como 1 saída, e o agrupamento por cliente não enxerga isso.',
+    params: ['$1 = início da janela', '$2 = fim da janela'],
+    sql: `
+with uec as (
+  select ce.contract_id, cet.code,
+         row_number() over (partition by ce.contract_id order by ce.created desc) rn
+  from contract_events ce
+  join contract_event_types cet on cet.id = ce.contract_event_type_id
+  where cet.title ilike '%cancelamento%'
+)
+select distinct on (c.id)
+  c.contract_number, c.cancellation_date, c.created created_contract,
+  uec.code cancellation_code, c.cancellation_motive,
+  sp.selling_price, p.city, p.neighborhood
+from contracts c
+left join contract_service_tags cst on cst.contract_id = c.id
+left join service_products sp on sp.id = cst.service_product_id
+left join people p on p.id = c.client_id
+left join uec on uec.contract_id = c.id and uec.rn = 1
 where c.v_status = 'Cancelado'
+  and c.v_stage = 'Aprovado'
+  and c.contract_type_id <> 19
+  and uec.code is distinct from 'OTR.CAN.006'
+  and c.cancellation_date >= $1::date and c.cancellation_date < ($2::date + 1)
+order by c.id, sp.selling_price desc nulls last
+`,
+  },
+  {
+    // Sem o filtro de v_stage, 41% da coorte (27.654 de 67.124 na janela de 2
+    // anos) eram contratos que NUNCA foram instalados: endereço com pendência,
+    // falta de contato, desistência e inviabilidade técnica. Eles entram como
+    // "cancelamento" no ELLEVEN, mas nunca foram clientes — e distorciam tempo
+    // de casa, ticket e qualquer perfil montado sobre a coorte.
+    id: 'Q_COH_CANCELLED_BASE', engine: 'cancelados', db: 'postgres',
+    title: 'Coorte — base de CANCELADOS (janela)',
+    description:
+      'Identidade/plano/endereço dos contratos cancelados na janela, restrita a CANCELAMENTO DE CLIENTE DE VERDADE. Três filtros, iguais aos do relatório de cancelamento já em uso: v_stage = Aprovado (contrato chegou a ser instalado), contract_type_id <> 19 (exclui Contrato Telefonia, que é outro produto) e último evento de cancelamento <> OTR.CAN.006 (contrato duplicado). Traz também o código do último evento, que é a classificação AUTORITATIVA do motivo — melhor que o texto livre de cancellation_motive. $1 = from, $2 = to (datas).',
+    params: ['$1 = from', '$2 = to'],
+    sql: `
+with ultimo_evento_cancelamento as (
+  select ce.contract_id, cet.code,
+         row_number() over (partition by ce.contract_id order by ce.created desc) rn
+  from contract_events ce
+  join contract_event_types cet on cet.id = ce.contract_event_type_id
+  where cet.title ilike '%cancelamento%'
+)
+select distinct on (c.id) ${COHORT_BASE_COLUMNS}, uec.code cancellation_code
+${COHORT_BASE_JOINS}
+left join ultimo_evento_cancelamento uec on uec.contract_id = c.id and uec.rn = 1
+where c.v_status = 'Cancelado'
+  and c.v_stage = 'Aprovado'
+  and c.contract_type_id <> 19
+  and uec.code is distinct from 'OTR.CAN.006'
   and c.cancellation_date >= $1::date and c.cancellation_date < ($2::date + 1)
 order by c.id, sp.selling_price desc nulls last
 `,
@@ -689,7 +944,7 @@ order by c.id, sp.selling_price desc nulls last
   {
     id: 'Q_COH_INV', engine: 'cancelados', db: 'postgres',
     title: 'Coorte — faturas (on_time/late/overdue) por contrato',
-    description: 'Estados das faturas por contrato. $1 = contract_numbers, $2 = from, $3 = to. {{statusCmp}} = filtro de v_status.',
+    description: 'Estados das faturas por contrato. $1 = contract_numbers, $2 = from, $3 = to. {{statusFilter}} = filtro de v_status (ou `true` na coorte mensal).',
     params: ['$1 = contract_numbers', '$2 = from', '$3 = to'],
     sql: `
 select contract_number,
@@ -709,7 +964,7 @@ from (
   join financial_receivable_titles frt on frt.contract_id = c.id
   left join financial_receipt_titles frt2 on frt2.financial_receivable_title_id = frt.id
   left join financers_natures fn on fn.id = frt2.financer_nature_id
-  where c.v_status {{statusCmp}} 'Cancelado'
+  where {{statusFilter}}
     and frt.title like '%FAT%' and frt.deleted = 'False' and frt.renegotiated = 'False'
     and frt.bill_title_id is null
     and (fn.title is null or fn.title <> 'DF - TARIFA BAIXA DE TÍTULO')
@@ -727,7 +982,7 @@ group by contract_number`,
 select c.contract_number, count(distinct frt.id) renegotiations
 from contracts c
 join financial_receivable_titles frt on frt.contract_id = c.id
-where c.v_status {{statusCmp}} 'Cancelado'
+where {{statusFilter}}
   and frt.title like '%FAT%' and frt.deleted = 'False' and frt.renegotiated = 'True'
   and date(frt.issue_date) >= $2::date and date(frt.issue_date) < ($3::date + 1)
   and c.contract_number::text = any($1::text[])
@@ -742,7 +997,7 @@ group by c.contract_number`,
 select c.contract_number, count(*) trust_releases
 from contracts c
 join contract_events ce on ce.contract_id = c.id
-where c.v_status {{statusCmp}} 'Cancelado'
+where {{statusFilter}}
   and ce.description in (
     'Desbloqueio Financeiro realizado pelo cliente através do atendimento telefônico.',
     'Desbloqueio Financeiro realizado pela tela de atendimento ao cliente.',
@@ -766,7 +1021,7 @@ left join assignment_incidents ai on ai.assignment_id = a.id
 left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
 left join contracts c on c.id = cst.contract_id
 left join patrimonies p on p.id = plis.patrimony_id
-where c.v_status {{statusCmp}} 'Cancelado' and p.title is not null
+where {{statusFilter}} and p.title is not null
   and c.contract_number::text = any($1::text[])
 group by c.contract_number`,
   },
@@ -793,7 +1048,7 @@ from (
   left join contracts c on c.id = cst.contract_id
   left join catalog_services cs on cs.id = ai.catalog_service_id
   where (it.active is true or cs.title in ('Equipe reparo','Equipe tecnologia'))
-    and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+    and a.created >= $2::date and a.created < ($3::date + 1) and {{statusFilter}}
     and c.contract_number::text = any($1::text[])
   group by a.id, c.contract_number
 ) q
@@ -817,7 +1072,7 @@ left join catalog_services cs on cs.id = ai.catalog_service_id
 left join service_desk_slots sds on sds.pre_reserved_assignment_id = a.id
 left join people p2 on p2.id = sds.resource_id
 where (it.active is true or cs.title in ('Equipe reparo','Equipe tecnologia'))
-  and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+  and a.created >= $2::date and a.created < ($3::date + 1) and {{statusFilter}}
   and c.contract_number::text = any($1::text[])
 group by c.contract_number`,
   },
@@ -842,7 +1097,7 @@ from (
   left join solicitation_service_categories ssc3 on ssc3.id = scm.service_category_id_3
   left join solicitation_service_categories ssc4 on ssc4.id = scm.service_category_id_4
   where (it.active is true or cs.title in ('Equipe reparo','Equipe tecnologia'))
-    and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+    and a.created >= $2::date and a.created < ($3::date + 1) and {{statusFilter}}
     and c.contract_number::text = any($1::text[])
 ) q
 where cat is not null and cat <> ''
@@ -874,7 +1129,7 @@ from (
   left join contracts c on c.id = cst.contract_id
   left join service_desk_slots sds on sds.pre_reserved_assignment_id = a.id
   where it.active is true and it.code like 'ATV%'
-    and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+    and a.created >= $2::date and a.created < ($3::date + 1) and {{statusFilter}}
     and c.contract_number::text = any($1::text[])
   group by a.id, c.contract_number
 ) q
@@ -897,7 +1152,7 @@ left join contracts c on c.id = cst.contract_id
 left join service_desk_slots sds on sds.pre_reserved_assignment_id = a.id
 left join people p2 on p2.id = sds.resource_id
 where it.active is true and it.code like 'ATV%'
-  and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+  and a.created >= $2::date and a.created < ($3::date + 1) and {{statusFilter}}
   and c.contract_number::text = any($1::text[])
 group by c.contract_number`,
   },
@@ -923,7 +1178,7 @@ from (
   left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
   left join contracts c on c.id = cst.contract_id
   where it.active is true and not (it.code like 'ATV%' or it.code like 'MNT%')
-    and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+    and a.created >= $2::date and a.created < ($3::date + 1) and {{statusFilter}}
     and c.contract_number::text = any($1::text[])
   group by a.id, c.contract_number
 ) q
@@ -945,7 +1200,7 @@ left join people p2 on p2.id = a.responsible_id
 left join contract_service_tags cst on cst.id = ai.contract_service_tag_id
 left join contracts c on c.id = cst.contract_id
 where it.active is true and not (it.code like 'ATV%' or it.code like 'MNT%')
-  and a.created >= $2::date and a.created < ($3::date + 1) and c.v_status {{statusCmp}} 'Cancelado'
+  and a.created >= $2::date and a.created < ($3::date + 1) and {{statusFilter}}
   and c.contract_number::text = any($1::text[])
 group by c.contract_number`,
   },
@@ -963,6 +1218,7 @@ export const ENGINE_LABELS = {
   financeiro: 'Financeiro',
   retiradas: 'Retiradas de Equipamento',
   cancelados: 'Cancelados (coorte ativos × cancelados)',
+  mensal: 'Coorte mensal (fim de mês, por contrato)',
 }
 
 const BY_ID = new Map(QUERIES.map((q) => [q.id, q]))
@@ -980,13 +1236,23 @@ export function listQueries() {
 // adiciona nada; em amostra adiciona `order by random()` + `limit $1`.
 export function renderTemplate(sql, { full = false, cancelled = false } = {}) {
   const sampleClause = full ? '' : 'order by random()\nlimit $1'
-  // {{statusCmp}} — usado pelas queries GÊMEAS da coorte (engine 'cancelados'):
-  // '=' para cancelados, '<>' para ativos. Default '<>' quando não informado
-  // (o ETL principal não usa essas queries; cohort.mjs sempre passa o contexto).
-  const statusCmp = cancelled ? '=' : '<>'
+  // {{statusFilter}} — usado pelas queries GÊMEAS da coorte (engine 'cancelados')
+  // e pela coorte mensal. Três modos:
+  //   cancelled: true   → só cancelados
+  //   cancelled: false  → só ativos (default; o ETL principal não usa estas queries)
+  //   cancelled: 'all'  → SEM filtro de status
+  //
+  // O terceiro modo existe porque a coorte MENSAL é retroativa: ela pergunta
+  // "quem estava ativo em 31/05?", e metade dessa coorte já cancelou desde
+  // então. Filtrar pelo v_status de HOJE apagaria justamente quem saiu — que é
+  // o desfecho que a medição quer observar. O recorte ali é por data, na base.
+  const statusFilter =
+    cancelled === 'all' ? 'true'
+      : cancelled ? `c.v_status = 'Cancelado'`
+        : `c.v_status <> 'Cancelado'`
   return sql
     .replace(/\{\{sampleClause\}\}/g, sampleClause)
-    .replace(/\{\{statusCmp\}\}/g, statusCmp)
+    .replace(/\{\{statusFilter\}\}/g, statusFilter)
 }
 
 // SQL default já renderizado para o contexto dado (sem overrides).

@@ -19,19 +19,19 @@ export default function CancellationProfilesPage() {
   return (
     <div className="space-y-4 animate-slide-up">
       {/* Cabeçalho compacto + abas */}
-      <div className="rounded-2xl border border-app-border bg-app-card shadow-card-md px-5 py-4">
+      <div className="rounded-2xl border border-outline bg-surface-container-lowest shadow-card-md px-5 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-gradient-danger flex items-center justify-center shadow-glow-danger shrink-0">
-              <UserMinus size={16} className="text-white" />
+              <UserMinus size={16} className="text-on-primary" />
             </div>
             <div className="min-w-0">
               <h1 className="text-lg font-bold gradient-text tracking-tight leading-none">Cancelados</h1>
-              <p className="text-[11px] text-gray-500 mt-1 truncate">{active.hint}</p>
+              <p className="text-[11px] text-on-surface-variant mt-1 truncate">{active.hint}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 p-0.5 rounded-xl bg-app-surface border border-app-border shrink-0">
+          <div className="flex items-center gap-1 p-0.5 rounded-xl bg-surface-container-low border border-outline shrink-0">
             {TABS.map((t) => {
               const Icon = t.icon
               const sel = tab === t.key
@@ -41,7 +41,7 @@ export default function CancellationProfilesPage() {
                   onClick={() => setTab(t.key)}
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-                    sel ? 'bg-gradient-brand text-[#fff] shadow-glow' : 'text-gray-400 hover:text-gray-200',
+                    sel ? 'bg-gradient-brand text-[#fff] shadow-glow' : 'text-on-surface/70 hover:text-on-surface',
                   )}
                 >
                   <Icon size={13} />

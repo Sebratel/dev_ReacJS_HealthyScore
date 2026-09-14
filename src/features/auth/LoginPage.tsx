@@ -122,33 +122,33 @@ export default function LoginPage() {
         />
         <HeroAmbientDecor reduced={reduced} />
         {/* scrims reforçados para legibilidade do texto e do card */}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/45 to-[#0f0d0b]/70" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-black/40" />
-        <div className="absolute inset-0 bg-black/15" />
+        <div className="absolute inset-0 bg-gradient-to-r from-scrim/75 via-scrim/45 to-[#0f0d0b]/70" />
+        <div className="absolute inset-0 bg-gradient-to-t from-scrim/75 via-scrim/25 to-scrim/40" />
+        <div className="absolute inset-0 bg-scrim/15" />
       </div>
 
       <div className="relative z-10 flex min-h-svh w-full flex-col pb-16 lg:flex-row lg:items-center lg:pb-20">
         {/* Bloco de marca */}
-        <div className="order-1 flex flex-col gap-4 px-6 pt-10 text-[#fff] lg:min-h-svh lg:flex-1 lg:justify-end lg:pb-32 lg:pl-10 lg:pr-6 lg:pt-0 xl:pl-14">
+        <div className="order-1 flex flex-col gap-4 px-6 pt-10 text-on-scrim lg:min-h-svh lg:flex-1 lg:justify-end lg:pb-32 lg:pl-10 lg:pr-6 lg:pt-0 xl:pl-14">
           <motion.div
             className="flex items-center gap-3 drop-shadow-md"
             initial={reduced ? false : { opacity: 0, x: -14 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, ease: EASE }}
           >
-            <img src={LOGO} alt="" width={44} height={44} className="h-11 w-11 rounded-full object-contain ring-1 ring-[#fff]/40 shadow-lg" aria-hidden />
-            <span className="text-base font-extrabold uppercase tracking-[0.24em] text-[#fff] drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] sm:text-lg">Operação Sebratel</span>
+            <img src={LOGO} alt="" width={44} height={44} className="h-11 w-11 rounded-full object-contain ring-1 ring-on-scrim/40 shadow-lg" aria-hidden />
+            <span className="text-base font-extrabold uppercase tracking-[0.24em] text-on-scrim drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] sm:text-lg">Operação Sebratel</span>
           </motion.div>
           <motion.h2
-            className="max-w-xl text-balance text-2xl font-bold leading-[1.15] tracking-tight text-[#fff] drop-shadow-[0_2px_12px_rgba(0,0,0,0.75)] sm:text-3xl lg:text-[2rem] xl:text-4xl"
+            className="max-w-xl text-balance text-2xl font-bold leading-[1.15] tracking-tight text-on-scrim drop-shadow-[0_2px_12px_rgba(0,0,0,0.75)] sm:text-3xl lg:text-[2rem] xl:text-4xl"
             initial={reduced ? false : { opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, delay: 0.08, ease: EASE }}
           >
-            A conexão que move <span className="text-[#FFC107]">o que importa.</span>
+            A conexão que move <span className="text-primary-container">o que importa.</span>
           </motion.h2>
           <motion.p
-            className="max-w-md text-sm leading-relaxed text-[#fff] drop-shadow-[0_1px_8px_rgba(0,0,0,0.8)] sm:text-base"
+            className="max-w-md text-sm leading-relaxed text-on-scrim drop-shadow-[0_1px_8px_rgba(0,0,0,0.8)] sm:text-base"
             initial={reduced ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.16, ease: EASE }}
@@ -166,7 +166,7 @@ export default function LoginPage() {
             transition={{ duration: 0.58, ease: EASE, delay: 0.06 }}
           >
             <motion.div
-              className="relative overflow-hidden rounded-2xl border border-[#fff]/60 bg-[#FBFAF5] shadow-[0_36px_72px_-12px_rgba(0,0,0,0.62)] ring-1 ring-black/5 sm:rounded-3xl"
+              className="relative overflow-hidden rounded-2xl border border-outline bg-surface-container-lowest shadow-[0_36px_72px_-12px_rgba(0,0,0,0.62)] ring-1 ring-scrim/5 sm:rounded-3xl"
               animate={error && !reduced ? { x: [0, -6, 6, -4, 4, 0] } : { x: 0 }}
               transition={{ duration: 0.4 }}
             >
@@ -174,19 +174,19 @@ export default function LoginPage() {
 
               <div className="relative space-y-6 p-7 sm:p-8">
                 <header className="space-y-2">
-                  <span className="inline-flex rounded-full border border-amber-300/70 bg-amber-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-900">
-                    Operação Sebratel
+                  <span className="inline-flex rounded-full border border-primary/40 bg-primary/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-strong">
+                    Health Score
                   </span>
                   <h1 className="text-2xl font-bold tracking-tight text-on-surface sm:text-[1.65rem]">Acessar plataforma</h1>
-                  <p className="text-sm leading-relaxed text-neutral-700">
+                  <p className="text-sm leading-relaxed text-on-surface-variant">
                     Acesso com conta Google para controle de permissões por módulo.
                   </p>
                 </header>
 
                 {/* Domínio liberado nesta fase */}
-                <div className="rounded-2xl border border-amber-300/80 bg-[#FFFBEB] p-4 shadow-sm">
+                <div className="rounded-2xl border border-primary/35 bg-primary/10 p-4 shadow-sm">
                   <div className="flex gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-400/50 bg-amber-100/80 text-primary">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/40 bg-primary/15 text-primary-strong">
                       <Shield className="h-5 w-5" strokeWidth={2} aria-hidden />
                     </div>
                     <div className="min-w-0 flex-1 space-y-2">
@@ -213,9 +213,9 @@ export default function LoginPage() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
                       transition={{ duration: 0.2 }}
-                      className="flex gap-2 rounded-xl border border-rose-200/90 bg-rose-50/95 px-3 py-2.5 text-sm text-rose-900 shadow-sm"
+                      className="flex gap-2 rounded-xl border border-risk-critical/40 bg-risk-critical/10 px-3 py-2.5 text-sm text-risk-critical shadow-sm"
                     >
-                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" aria-hidden />
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-risk-critical" aria-hidden />
                       <span>{error}</span>
                     </motion.div>
                   )}
@@ -229,12 +229,13 @@ export default function LoginPage() {
                   whileHover={reduced || busy ? undefined : { scale: 1.02, y: -1 }}
                   whileTap={reduced || busy ? undefined : { scale: 0.98 }}
                   transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                  className="group relative flex min-h-[44px] w-full items-center justify-center gap-3 overflow-hidden rounded-xl bg-[#FFB800] px-4 py-3.5 text-sm font-semibold text-on-surface shadow-md transition-shadow hover:bg-[#e6a800] hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group relative flex min-h-[44px] w-full items-center justify-center gap-3 overflow-hidden rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-on-primary shadow-md transition-shadow hover:bg-secondary hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {busy ? (
-                    <Loader2 className="relative z-10 h-5 w-5 animate-spin text-on-surface" aria-hidden />
+                    <Loader2 className="relative z-10 h-5 w-5 animate-spin text-on-primary" aria-hidden />
                   ) : (
-                    <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#fff] shadow-sm ring-1 ring-black/5">
+                    /* Plate branco fixo: exigência da marca Google, não segue o tema. */
+                    <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-on-scrim shadow-sm ring-1 ring-scrim/5">
                       <GoogleMark className="h-5 w-5" />
                     </span>
                   )}
@@ -242,9 +243,9 @@ export default function LoginPage() {
                 </motion.button>
 
                 <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-neutral-200" />
+                  <div className="h-px flex-1 bg-outline" />
                   <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant">ou</span>
-                  <div className="h-px flex-1 bg-neutral-200" />
+                  <div className="h-px flex-1 bg-outline" />
                 </div>
 
                 <p className="text-center text-[11px] text-on-surface-variant">
@@ -262,7 +263,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <footer className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 border-t border-[#fff]/10 bg-black/55 py-2.5 text-center text-[11px] text-[#fff]/90 backdrop-blur-md supports-[backdrop-filter]:bg-black/40">
+      <footer className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 border-t border-on-scrim/10 bg-scrim/55 py-2.5 text-center text-[11px] text-on-scrim/90 backdrop-blur-md supports-[backdrop-filter]:bg-scrim/40">
         <span className="inline-flex items-center justify-center gap-2 px-4">
           <Lock className="h-3.5 w-3.5 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
           Ambiente seguro e monitorado.

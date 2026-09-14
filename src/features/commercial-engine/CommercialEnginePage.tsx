@@ -49,8 +49,8 @@ export default function CommercialEnginePage() {
       rankingSubtitle="Clientes ordenados por Health Score comercial (pior primeiro)"
       tableHeaders={['Vendedor', 'Tempo']}
       columns={[
-        { header: 'Vendedor', sortKey: 'seller', cell: (s) => <span className="text-xs text-gray-300 truncate block max-w-[130px]">{s.seller}</span> },
-        { header: 'Tempo', sortKey: 'contractAgeMonths', cell: (s) => <span className="text-[10px] text-gray-500">{s.contractAgeLabel}</span> },
+        { header: 'Vendedor', sortKey: 'seller', cell: (s) => <span className="text-xs text-on-surface/85 truncate block max-w-[130px]">{s.seller}</span> },
+        { header: 'Tempo', sortKey: 'contractAgeMonths', cell: (s) => <span className="text-[10px] text-on-surface-variant">{s.contractAgeLabel}</span> },
       ]}
       dataTitle="Dados — Comercial"
       dataColumns={DATA_COLUMNS}

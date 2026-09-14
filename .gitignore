@@ -7,9 +7,20 @@ node_modules
 
 # Dados reais com PII (gerados pelo ETL — não versionar)
 src/data/realClients.json
+public/realClients.data
 
 # Estado de runtime: overrides de query editados pela tela (volume do servidor)
 data/
 
 # Histórico de Health Score (gerado pelo score-history.mjs → volume do servidor)
 public/history/
+
+# Build de produção: a imagem Docker roda `npm run build` por dentro
+# (ver Dockerfile), então o dist versionado nunca era usado no deploy.
+dist/
+
+# Relatórios gerados pelo scripts/perfil-cancelamentos.mjs (regeráveis)
+perfil-cancelamentos-*.md
+
+# Coorte mensal (gerada pelo monthly-cohort.mjs; refaz a qualquer momento)
+public/monthly-cohort.json

@@ -17,6 +17,8 @@ const NetworkEnginePage         = lazy(() => import('@/features/network-engine/N
 const RelationshipEnginePage    = lazy(() => import('@/features/relationship-engine/RelationshipEnginePage'))
 const CancellationProfilesPage  = lazy(() => import('@/features/cancellation-profiles/CancellationProfilesPage'))
 const EquipmentWithdrawalPage   = lazy(() => import('@/features/equipment-withdrawal/EquipmentWithdrawalPage'))
+const ChurnForecastPage         = lazy(() => import('@/features/churn-forecast/ChurnForecastPage'))
+const ActionPlansPage           = lazy(() => import('@/features/action-plans/ActionPlansPage'))
 const SettingsPage              = lazy(() => import('@/features/settings/SettingsPage'))
 
 function PageLoader() {
@@ -76,6 +78,8 @@ export const router = createBrowserRouter([
       { path: 'engine-relacionamento',  element: <PageSuspense><RelationshipEnginePage /></PageSuspense> },
       { path: 'perfis-cancelados',      element: <PageSuspense><CancellationProfilesPage /></PageSuspense> },
       { path: 'retiradas',              element: <PageSuspense><EquipmentWithdrawalPage /></PageSuspense> },
+      { path: 'previsao-cancelamento',  element: <PageSuspense><ChurnForecastPage /></PageSuspense> },
+      { path: 'planos-acao',            element: <PageSuspense><ActionPlansPage /></PageSuspense> },
       { path: 'configuracoes',          element: <RequireRole min="power_user"><PageSuspense><SettingsPage /></PageSuspense></RequireRole> },
       // Rotas antigas removidas → redireciona
       { path: 'clientes',               element: <Navigate to="/" replace /> },

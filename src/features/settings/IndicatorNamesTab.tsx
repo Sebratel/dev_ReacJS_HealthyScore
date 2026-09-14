@@ -20,7 +20,7 @@ function NameInput({ value, onCommit }: { value: string; onCommit: (label: strin
         if (e.target.value.trim()) onCommit(e.target.value.trim())
       }}
       onBlur={() => { if (!v.trim()) setV(value) }}
-      className="w-full bg-app-bg border border-app-border rounded-md px-2.5 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-brand-blue/50 transition-colors"
+      className="w-full bg-surface border border-outline rounded-md px-2.5 py-1.5 text-sm text-on-surface focus:outline-none focus:border-primary/50 transition-colors"
     />
   )
 }
@@ -58,23 +58,23 @@ export function IndicatorNamesTab() {
           const changedCount = order.filter((k) => (config.indicators[k]?.label ?? defaults[k]) !== defaults[k]).length
           const isOpen = open[engineKey]
           return (
-            <div key={engineKey} className="rounded-xl border border-app-border bg-app-bg/40 overflow-hidden">
+            <div key={engineKey} className="rounded-xl border border-outline bg-surface/40 overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2.5">
                 <button
                   onClick={() => setOpen((o) => ({ ...o, [engineKey]: !o[engineKey] }))}
                   className="flex flex-1 items-center gap-2 text-left group"
                 >
-                  {isOpen ? <ChevronDown size={14} className="text-brand-blue shrink-0" /> : <ChevronRight size={14} className="text-gray-500 shrink-0 group-hover:text-gray-300" />}
-                  <span className="text-sm font-semibold text-gray-100">{ENGINE_LABELS[engineKey]}</span>
-                  <span className="text-[10px] font-mono text-gray-500">{order.length} indicadores</span>
+                  {isOpen ? <ChevronDown size={14} className="text-primary shrink-0" /> : <ChevronRight size={14} className="text-on-surface-variant shrink-0 group-hover:text-on-surface/85" />}
+                  <span className="text-sm font-semibold text-on-surface">{ENGINE_LABELS[engineKey]}</span>
+                  <span className="text-[10px] font-mono text-on-surface-variant">{order.length} indicadores</span>
                   {changedCount > 0 && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-brand-blue/15 text-brand-blue font-medium">{changedCount} renomeado{changedCount > 1 ? 's' : ''}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">{changedCount} renomeado{changedCount > 1 ? 's' : ''}</span>
                   )}
                 </button>
                 {changedCount > 0 && (
                   <button
                     onClick={() => order.forEach((k) => { if (config.indicators[k] && config.indicators[k].label !== defaults[k]) update(k, { label: defaults[k] }) })}
-                    className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-200 transition-colors shrink-0"
+                    className="flex items-center gap-1 text-[11px] text-on-surface-variant hover:text-on-surface transition-colors shrink-0"
                     title="Restaurar os nomes padrão desta engine"
                   >
                     <RotateCcw size={11} />Restaurar nomes
@@ -83,7 +83,7 @@ export function IndicatorNamesTab() {
               </div>
 
               {isOpen && (
-                <div className="border-t border-app-border divide-y divide-app-border/50">
+                <div className="border-t border-outline divide-y divide-outline/50">
                   {order.map((key) => {
                     const indicator = config.indicators[key]
                     if (!indicator) return null
@@ -91,14 +91,14 @@ export function IndicatorNamesTab() {
                     return (
                       <div key={key} className="flex items-center gap-3 px-3 py-2">
                         <div className="w-52 shrink-0 min-w-0">
-                          <p className={cn('text-[11px] truncate', changed ? 'text-gray-500 line-through' : 'text-gray-400')} title={defaults[key]}>{defaults[key]}</p>
-                          {indicator.description && <p className="text-[10px] text-gray-600 truncate" title={indicator.description}>{indicator.description}</p>}
+                          <p className={cn('text-[11px] truncate', changed ? 'text-on-surface-variant line-through' : 'text-on-surface/70')} title={defaults[key]}>{defaults[key]}</p>
+                          {indicator.description && <p className="text-[10px] text-on-surface-variant/90 truncate" title={indicator.description}>{indicator.description}</p>}
                         </div>
                         <NameInput value={indicator.label} onCommit={(label) => update(key, { label })} />
                         <button
                           onClick={() => update(key, { label: defaults[key] })}
                           disabled={!changed}
-                          className="text-gray-500 hover:text-gray-200 disabled:opacity-0 transition-all shrink-0"
+                          className="text-on-surface-variant hover:text-on-surface disabled:opacity-0 transition-all shrink-0"
                           title="Restaurar nome padrão"
                         >
                           <RotateCcw size={13} />
@@ -112,8 +112,8 @@ export function IndicatorNamesTab() {
           )
         })}
 
-        <div className="flex items-start gap-2 text-[11px] text-gray-500 bg-brand-blue/5 border border-brand-blue/15 rounded-lg px-3 py-2.5">
-          <Info size={13} className="text-brand-blue shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2 text-[11px] text-on-surface-variant bg-primary/5 border border-primary/15 rounded-lg px-3 py-2.5">
+          <Info size={13} className="text-primary shrink-0 mt-0.5" />
           <p className="leading-relaxed">
             O nome editado é aplicado em todas as telas — módulos das engines, modais de configuração, IA Preditiva,
             Pontuação Sugerida (IA) e exportação em PDF. Alterações são salvas neste navegador.

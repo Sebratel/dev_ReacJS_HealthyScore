@@ -7,6 +7,7 @@ import {
 import { Card, CardHeader } from '@/components/ui/Card'
 import { cn, formatCurrency } from '@/utils/cn'
 import { useAppStore } from '@/store/appStore'
+import { useRole } from '@/features/auth/access'
 import { genderLabel } from '@/features/commercial-engine/commercialConfig'
 import {
   realPaymentForms, realCommercial, realConnection, realField,
@@ -15,6 +16,9 @@ import {
 import type { SuggestionEngineKey, IndicatorSuggestion, IndexSuggestion } from './suggestionEngine'
 import { fetchCancellationSuggestions, ApiError, type SuggestionResult } from './suggestionsApi'
 import { useIndicatorLabelMap, resolveIndicatorLabel } from '@/features/settings/indicatorCatalog'
+import { useChartTokens } from '@/hooks/useChartTokens'
+import { softenColor } from '@/utils/healthColors'
+import type { ChartTokens } from '@/utils/chartTokens'
 
 // ─── Datas ─────────────────────────────────────────────────────
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -38,26 +42,29 @@ const PRESETS = [
 const fmtPct = (r: number) => `${(r * 100).toFixed(r * 100 < 10 ? 1 : 0)}%`
 const fmtLift = (l: number) => `${l.toFixed(2).replace('.', ',')}×`
 
-function liftColor(lift: number | null): string {
-  if (lift === null) return '#6b7280'
-  if (lift >= 1.6) return '#ef4444'
-  if (lift >= 1.2) return '#f97316'
-  if (lift <= 0.6) return '#10b981'
-  if (lift <= 0.85) return '#34d399'
-  return '#9ca3af'
+// Rampa de 5 passos do lift. O passo "levemente protetivo" é o mesmo verde
+// atenuado, em vez de um segundo verde fixo, para acompanhar o tema.
+function liftColor(t: ChartTokens, lift: number | null): string {
+  if (lift === null) return t.axis
+  if (lift >= 1.6) return t.riskCritical
+  if (lift >= 1.2) return t.riskHigh
+  if (lift <= 0.6) return t.riskLow
+  if (lift <= 0.85) return softenColor(t.riskLow, 0.7)
+  return t.axisStrong
 }
-function pointsColor(p: number | null): string {
-  if (p === null || p === 0) return '#6b7280'
-  return p > 0 ? '#10b981' : '#ef4444'
+function pointsColor(t: ChartTokens, p: number | null): string {
+  if (p === null || p === 0) return t.axis
+  return p > 0 ? t.riskLow : t.riskCritical
 }
 
 // ─── Tag de pontuação ──────────────────────────────────────────
 function PointsTag({ value, size = 'md' }: { value: number | null; size?: 'sm' | 'md' }) {
-  if (value === null) return <span className="text-[11px] text-gray-600">—</span>
-  const color = pointsColor(value)
+  const tokens = useChartTokens()
+  if (value === null) return <span className="text-[11px] text-on-surface-variant/90">—</span>
+  const color = pointsColor(tokens, value)
   return (
     <span className={cn('font-mono font-bold tabular-nums', size === 'md' ? 'text-sm' : 'text-xs')} style={{ color }}>
-      {value > 0 ? '+' : ''}{value}<span className="text-[9px] font-normal text-gray-500 ml-0.5">pts</span>
+      {value > 0 ? '+' : ''}{value}<span className="text-[9px] font-normal text-on-surface-variant ml-0.5">pts</span>
     </span>
   )
 }
@@ -66,11 +73,11 @@ function PointsTag({ value, size = 'md' }: { value: number | null; size?: 'sm' |
 function Explanation({ ind, idx }: { ind: IndicatorSuggestion; idx: IndexSuggestion }) {
   if (!idx.enough || idx.lift === null) {
     return (
-      <div className="flex items-start gap-2 rounded-lg bg-app-surface/60 border border-app-border px-3 py-2.5 text-[11px] text-gray-400 leading-relaxed">
-        <Info size={13} className="mt-0.5 shrink-0 text-gray-500" />
+      <div className="flex items-start gap-2 rounded-lg bg-surface-container-low/60 border border-outline px-3 py-2.5 text-[11px] text-on-surface/70 leading-relaxed">
+        <Info size={13} className="mt-0.5 shrink-0 text-on-surface-variant" />
         <span>
           Amostra insuficiente na base ativa para sugerir com confiança
-          (apenas <strong className="text-gray-300">{idx.activeCount}</strong> cliente(s) com este atributo). Precisa de pelo menos 5.
+          (apenas <strong className="text-on-surface/85">{idx.activeCount}</strong> cliente(s) com este atributo). Precisa de pelo menos 5.
         </span>
       </div>
     )
@@ -79,39 +86,40 @@ function Explanation({ ind, idx }: { ind: IndicatorSuggestion; idx: IndexSuggest
   const verb = more ? 'mais comum' : 'menos comum'
   const kind = more ? 'sinal de risco' : 'fator protetor'
   const KindIcon = more ? TrendingDown : TrendingUp
-  const color = pointsColor(idx.suggestedPoints)
+  const tokens = useChartTokens()
+  const color = pointsColor(tokens, idx.suggestedPoints)
   return (
-    <div className="rounded-lg bg-app-surface/60 border border-app-border px-3 py-2.5 space-y-2">
+    <div className="rounded-lg bg-surface-container-low/60 border border-outline px-3 py-2.5 space-y-2">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div className="rounded-md bg-risk-critical/5 border border-risk-critical/15 px-2.5 py-1.5">
-          <p className="text-[9px] uppercase tracking-wider text-gray-500">Entre os cancelados</p>
-          <p className="text-xs text-gray-200 mt-0.5">
+          <p className="text-[9px] uppercase tracking-wider text-on-surface-variant">Entre os cancelados</p>
+          <p className="text-xs text-on-surface mt-0.5">
             <strong className="font-mono text-risk-critical">{idx.cancelledCount.toLocaleString('pt-BR')}</strong> de{' '}
             {ind.cancelledRelevant.toLocaleString('pt-BR')} · <strong className="font-mono">{fmtPct(idx.cancelledRate)}</strong>
           </p>
         </div>
         <div className="rounded-md bg-risk-low/5 border border-risk-low/15 px-2.5 py-1.5">
-          <p className="text-[9px] uppercase tracking-wider text-gray-500">Na base ativa</p>
-          <p className="text-xs text-gray-200 mt-0.5">
+          <p className="text-[9px] uppercase tracking-wider text-on-surface-variant">Na base ativa</p>
+          <p className="text-xs text-on-surface mt-0.5">
             <strong className="font-mono text-risk-low">{idx.activeCount.toLocaleString('pt-BR')}</strong> de{' '}
             {ind.activeRelevant.toLocaleString('pt-BR')} · <strong className="font-mono">{fmtPct(idx.activeRate)}</strong>
           </p>
         </div>
       </div>
-      <p className="text-[11px] text-gray-400 leading-relaxed flex items-start gap-1.5">
+      <p className="text-[11px] text-on-surface/70 leading-relaxed flex items-start gap-1.5">
         <KindIcon size={13} className="mt-0.5 shrink-0" style={{ color }} />
         <span>
-          «{idx.label}» é <strong style={{ color: liftColor(idx.lift) }}>{fmtLift(idx.lift)}</strong>{' '}
+          «{idx.label}» é <strong style={{ color: liftColor(tokens, idx.lift) }}>{fmtLift(idx.lift)}</strong>{' '}
           {verb} entre quem cancelou do que na base ativa → <strong style={{ color }}>{kind}</strong> →
           sugestão de <strong style={{ color }}>{idx.suggestedPoints! > 0 ? '+' : ''}{idx.suggestedPoints} pts</strong>.
         </span>
       </p>
       {ind.presence && (
-        <p className="text-[10px] text-gray-500 leading-relaxed flex items-start gap-1.5">
+        <p className="text-[10px] text-on-surface-variant leading-relaxed flex items-start gap-1.5">
           <Info size={11} className="mt-0.5 shrink-0" />
           <span>
-            Percentual <strong className="text-gray-400">por cliente</strong>, não por fatura/evento: conta quem teve{' '}
-            <strong className="text-gray-400">ao menos uma</strong> ocorrência no histórico. Por isso indicadores de
+            Percentual <strong className="text-on-surface/70">por cliente</strong>, não por fatura/evento: conta quem teve{' '}
+            <strong className="text-on-surface/70">ao menos uma</strong> ocorrência no histórico. Por isso indicadores de
             presença não somam 100% entre si — o mesmo cliente pode ter, por exemplo, faturas atrasadas <em>e</em> faturas
             pagas no prazo.
           </span>
@@ -126,46 +134,50 @@ function IndexRow({ ind, idx, current, onApply }: {
   ind: IndicatorSuggestion; idx: IndexSuggestion; current: number; onApply: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const tokens = useChartTokens()
+  const { isPowerUser } = useRole() // aplicar pontuação = editar pesos → power_user+
   const applied = idx.suggestedPoints !== null && current === idx.suggestedPoints
   const canApply = idx.suggestedPoints !== null && !applied
   return (
     <>
-      <tr className="border-b border-app-border/50 hover:bg-app-surface/40 cursor-pointer transition-colors" onClick={() => setOpen((v) => !v)}>
+      <tr className="border-b border-outline/50 hover:bg-surface-container-low/40 cursor-pointer transition-colors" onClick={() => setOpen((v) => !v)}>
         <td className="px-3 py-2">
           <div className="flex items-center gap-1.5">
-            {open ? <ChevronDown size={11} className="text-gray-500 shrink-0" /> : <ChevronRight size={11} className="text-gray-500 shrink-0" />}
-            <span className="text-xs text-gray-200 truncate max-w-[220px]" title={idx.label}>{idx.label}</span>
+            {open ? <ChevronDown size={11} className="text-on-surface-variant shrink-0" /> : <ChevronRight size={11} className="text-on-surface-variant shrink-0" />}
+            <span className="text-xs text-on-surface truncate max-w-[220px]" title={idx.label}>{idx.label}</span>
           </div>
         </td>
-        <td className="px-3 py-2 text-right text-[11px] font-mono text-gray-400">{idx.enough ? fmtPct(idx.activeRate) : '—'}</td>
-        <td className="px-3 py-2 text-right text-[11px] font-mono text-gray-400">{idx.enough ? fmtPct(idx.cancelledRate) : '—'}</td>
+        <td className="px-3 py-2 text-right text-[11px] font-mono text-on-surface/70">{idx.enough ? fmtPct(idx.activeRate) : '—'}</td>
+        <td className="px-3 py-2 text-right text-[11px] font-mono text-on-surface/70">{idx.enough ? fmtPct(idx.cancelledRate) : '—'}</td>
         <td className="px-3 py-2 text-right">
-          <span className="text-[11px] font-mono font-semibold" style={{ color: liftColor(idx.lift) }}>
+          <span className="text-[11px] font-mono font-semibold" style={{ color: liftColor(tokens, idx.lift) }}>
             {idx.lift === null ? '—' : fmtLift(idx.lift)}
           </span>
         </td>
         <td className="px-3 py-2 text-right"><PointsTag value={idx.suggestedPoints} /></td>
         <td className="px-3 py-2 text-right">
-          <span className="text-[11px] font-mono tabular-nums" style={{ color: current === 0 ? '#6b7280' : pointsColor(current) }}>
+          <span className="text-[11px] font-mono tabular-nums" style={{ color: current === 0 ? tokens.axis : pointsColor(tokens, current) }}>
             {current > 0 ? '+' : ''}{current}
           </span>
         </td>
         <td className="px-3 py-2 text-right">
           {applied ? (
             <span className="inline-flex items-center gap-1 text-[10px] text-risk-low"><Check size={11} /> aplicado</span>
-          ) : (
+          ) : isPowerUser ? (
             <button
               onClick={(e) => { e.stopPropagation(); onApply() }}
               disabled={!canApply}
-              className="text-[10px] px-2 py-1 rounded-md border border-brand-blue/30 bg-brand-blue/10 text-brand-blue hover:bg-brand-blue/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              className="text-[10px] px-2 py-1 rounded-md border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Aplicar
             </button>
+          ) : (
+            <span className="text-[10px] text-on-surface-variant/90">—</span>
           )}
         </td>
       </tr>
       {open && (
-        <tr className="border-b border-app-border/50 bg-app-bg/30">
+        <tr className="border-b border-outline/50 bg-surface/30">
           <td colSpan={7} className="px-3 py-2.5"><Explanation ind={ind} idx={idx} /></td>
         </tr>
       )}
@@ -186,6 +198,7 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
   const [open, setOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [sort, setSort] = useState<SortState>(null)
+  const { isPowerUser } = useRole() // "Aplicar todas" = editar pesos → power_user+
 
   const valid = ind.indices.filter((i) => i.suggestedPoints !== null)
   const top = valid[0] ?? null
@@ -211,22 +224,22 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
     setSort((s) => (s?.col !== col ? { col, dir: 'desc' } : s.dir === 'desc' ? { col, dir: 'asc' } : null))
 
   return (
-    <div className="rounded-xl border border-app-border bg-app-card overflow-hidden">
-      <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-app-surface/40 transition-colors text-left">
-        {open ? <ChevronDown size={14} className="text-gray-500 shrink-0" /> : <ChevronRight size={14} className="text-gray-500 shrink-0" />}
+    <div className="rounded-xl border border-outline bg-surface-container-lowest overflow-hidden">
+      <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container-low/40 transition-colors text-left">
+        {open ? <ChevronDown size={14} className="text-on-surface-variant shrink-0" /> : <ChevronRight size={14} className="text-on-surface-variant shrink-0" />}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-gray-100">{ind.indicatorLabel}</span>
-            {ind.presence && <span title="Indicador de presença: o % é por cliente (ao menos uma ocorrência no histórico). Não é excludente com outros indicadores — os percentuais não somam 100% entre si." className="text-[9px] px-1.5 py-0.5 rounded bg-app-surface border border-app-border text-gray-500 uppercase tracking-wider cursor-help">presença</span>}
-            {ind.multi && <span className="text-[9px] px-1.5 py-0.5 rounded bg-app-surface border border-app-border text-gray-500 uppercase tracking-wider">multi</span>}
+            <span className="text-sm font-semibold text-on-surface">{ind.indicatorLabel}</span>
+            {ind.presence && <span title="Indicador de presença: o % é por cliente (ao menos uma ocorrência no histórico). Não é excludente com outros indicadores — os percentuais não somam 100% entre si." className="text-[9px] px-1.5 py-0.5 rounded bg-surface-container-low border border-outline text-on-surface-variant uppercase tracking-wider cursor-help">presença</span>}
+            {ind.multi && <span className="text-[9px] px-1.5 py-0.5 rounded bg-surface-container-low border border-outline text-on-surface-variant uppercase tracking-wider">multi</span>}
           </div>
-          <p className="text-[11px] text-gray-500 mt-0.5 truncate">{ind.description}</p>
+          <p className="text-[11px] text-on-surface-variant mt-0.5 truncate">{ind.description}</p>
         </div>
         {top && top.suggestedPoints !== null && (
           <div className="shrink-0 text-right hidden sm:block">
-            <p className="text-[9px] uppercase tracking-wider text-gray-500">Maior impacto</p>
+            <p className="text-[9px] uppercase tracking-wider text-on-surface-variant">Maior impacto</p>
             <div className="flex items-center gap-1.5 justify-end">
-              <span className="text-[11px] text-gray-400 truncate max-w-[120px]" title={top.label}>{top.label}</span>
+              <span className="text-[11px] text-on-surface/70 truncate max-w-[120px]" title={top.label}>{top.label}</span>
               <PointsTag value={top.suggestedPoints} size="sm" />
             </div>
           </div>
@@ -234,14 +247,14 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
       </button>
 
       {open && (
-        <div className="border-t border-app-border">
-          <div className="flex items-center justify-between px-4 py-2 bg-app-surface/30">
-            <span className="text-[10px] text-gray-500">
+        <div className="border-t border-outline">
+          <div className="flex items-center justify-between px-4 py-2 bg-surface-container-low/30">
+            <span className="text-[10px] text-on-surface-variant">
               {valid.length} de {ind.indices.length} {ind.presence ? 'condição' : 'índices'} com amostra suficiente
-              {ind.presence && <span className="text-gray-600"> · % = clientes com ao menos uma ocorrência no histórico</span>}
+              {ind.presence && <span className="text-on-surface-variant/90"> · % = clientes com ao menos uma ocorrência no histórico</span>}
             </span>
-            {appliableCount > 0 && (
-              <button onClick={() => onApplyAll(ind)} className="inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-md bg-gradient-brand text-white shadow-glow hover:-translate-y-0.5 transition-all">
+            {isPowerUser && appliableCount > 0 && (
+              <button onClick={() => onApplyAll(ind)} className="inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-md bg-gradient-brand text-on-primary shadow-glow hover:-translate-y-0.5 transition-all">
                 <Wand2 size={11} /> Aplicar todas ({appliableCount})
               </button>
             )}
@@ -249,7 +262,7 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-app-border bg-app-surface/20">
+                <tr className="border-b border-outline bg-surface-container-low/20">
                   {([
                     { h: ind.presence ? 'Condição' : 'Atributo', a: 'left' },
                     { h: '% base ativa', a: 'right', col: 'activeRate' as SortCol },
@@ -259,12 +272,12 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
                     { h: 'Atual', a: 'right' },
                     { h: '', a: 'right' },
                   ] as { h: string; a: string; col?: SortCol }[]).map(({ h, a, col }) => (
-                    <th key={h || 'apply'} className={cn('px-3 py-2 text-[9px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap', a === 'right' ? 'text-right' : 'text-left')}>
+                    <th key={h || 'apply'} className={cn('px-3 py-2 text-[9px] text-on-surface-variant uppercase tracking-wider font-medium whitespace-nowrap', a === 'right' ? 'text-right' : 'text-left')}>
                       {col ? (
                         <button
                           onClick={() => toggleSort(col)}
                           title={`Ordenar por ${h}`}
-                          className={cn('inline-flex items-center gap-1 uppercase tracking-wider hover:text-gray-300 transition-colors', sort?.col === col ? 'text-brand-blue' : '')}
+                          className={cn('inline-flex items-center gap-1 uppercase tracking-wider hover:text-on-surface/85 transition-colors', sort?.col === col ? 'text-primary' : '')}
                         >
                           {h}
                           {sort?.col === col
@@ -284,7 +297,7 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
             </table>
           </div>
           {ind.indices.length > LIMIT && (
-            <button onClick={() => setShowAll((v) => !v)} className="w-full py-2 text-[10px] text-gray-500 hover:text-gray-300 border-t border-app-border transition-colors">
+            <button onClick={() => setShowAll((v) => !v)} className="w-full py-2 text-[10px] text-on-surface-variant hover:text-on-surface/85 border-t border-outline transition-colors">
               {showAll ? 'Mostrar menos' : `Ver todos os ${ind.indices.length} atributos`}
             </button>
           )}
@@ -307,10 +320,10 @@ function EngineSection({ label, indicators, defaultOpen, currentOf, onApply, onA
   return (
     <div className="space-y-2">
       <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-2 text-left group">
-        {open ? <ChevronDown size={15} className="text-brand-blue shrink-0" /> : <ChevronRight size={15} className="text-brand-blue shrink-0" />}
-        <h3 className="text-sm font-bold text-gray-100 tracking-tight">{label}</h3>
-        <span className="text-[10px] text-gray-500 font-mono">{indicators.length} indicadores</span>
-        <div className="flex-1 h-px bg-app-border ml-2" />
+        {open ? <ChevronDown size={15} className="text-primary shrink-0" /> : <ChevronRight size={15} className="text-primary shrink-0" />}
+        <h3 className="text-sm font-bold text-on-surface tracking-tight">{label}</h3>
+        <span className="text-[10px] text-on-surface-variant font-mono">{indicators.length} indicadores</span>
+        <div className="flex-1 h-px bg-outline ml-2" />
       </button>
       {open && (
         <div className="space-y-2 pl-1">
@@ -330,13 +343,14 @@ function EngineSection({ label, indicators, defaultOpen, currentOf, onApply, onA
 }
 
 function Kpi({ icon, label, value, sub, color }: { icon: React.ReactNode; label: string; value: string; sub?: string; color?: string }) {
+  const { categorical } = useChartTokens()
   return (
-    <div className="rounded-xl bg-app-card border border-app-border px-4 py-3 flex items-center gap-3">
-      <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-app-surface ring-1 ring-inset ring-app-border shrink-0" style={{ color: color ?? '#4f8ef7' }}>{icon}</div>
+    <div className="rounded-xl bg-surface-container-lowest border border-outline px-4 py-3 flex items-center gap-3">
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-surface-container-low ring-1 ring-inset ring-outline shrink-0" style={{ color: color ?? categorical[0] }}>{icon}</div>
       <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider text-gray-500">{label}</p>
-        <p className="text-lg font-bold tabular-nums tracking-tight text-gray-100" style={color ? { color } : undefined}>{value}</p>
-        {sub && <p className="text-[10px] text-gray-600 truncate">{sub}</p>}
+        <p className="text-[10px] uppercase tracking-wider text-on-surface-variant">{label}</p>
+        <p className="text-lg font-bold tabular-nums tracking-tight text-on-surface" style={color ? { color } : undefined}>{value}</p>
+        {sub && <p className="text-[10px] text-on-surface-variant/90 truncate">{sub}</p>}
       </div>
     </div>
   )
@@ -353,6 +367,7 @@ type LoadState =
 // ─── Painel principal ──────────────────────────────────────────
 export default function SuggestedScorePanel() {
   const store = useAppStore()
+  const tokens = useChartTokens()
 
   // Sincroniza as categorias dinâmicas (do snapshot) com as configs das engines
   // — necessário para o "Aplicar" gravar a nota dos índices dinâmicos.
@@ -510,12 +525,12 @@ export default function SuggestedScorePanel() {
   return (
     <div className="space-y-5">
       {/* Banner explicativo */}
-      <div className="flex items-start gap-2.5 rounded-xl border border-brand-blue/15 bg-brand-blue/5 px-4 py-3 text-[11px] text-gray-400 leading-relaxed">
-        <Sparkles size={15} className="mt-0.5 shrink-0 text-brand-blue" />
+      <div className="flex items-start gap-2.5 rounded-xl border border-primary/15 bg-primary/5 px-4 py-3 text-[11px] text-on-surface/70 leading-relaxed">
+        <Sparkles size={15} className="mt-0.5 shrink-0 text-primary" />
         <p>
-          <strong className="text-gray-200">Pontuação sugerida pela IA (dados reais).</strong> Para cada indicador,
+          <strong className="text-on-surface">Pontuação sugerida pela IA (dados reais).</strong> Para cada indicador,
           comparamos a prevalência do atributo entre <strong className="text-risk-critical">quem cancelou no período</strong> e
-          a <strong className="text-risk-low">base ativa</strong>. O <strong className="text-gray-200">lift</strong> vira a
+          a <strong className="text-risk-low">base ativa</strong>. O <strong className="text-on-surface">lift</strong> vira a
           pontuação: mais comum em quem cancela → risco (negativo); mais comum em quem fica → protetor (positivo).
           Clique numa linha para ver <em>como cheguei no número</em>.
         </p>
@@ -524,39 +539,39 @@ export default function SuggestedScorePanel() {
       {/* Barra de período */}
       <Card className="shadow-card-md">
         <div className="flex flex-col lg:flex-row lg:items-end gap-4 px-5 py-4">
-          <div className="flex items-center gap-2 text-gray-300">
-            <CalendarRange size={16} className="text-brand-blue" />
+          <div className="flex items-center gap-2 text-on-surface/85">
+            <CalendarRange size={16} className="text-primary" />
             <span className="text-sm font-semibold">Período de cancelamento</span>
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500">De</span>
+              <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">De</span>
               <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)}
-                className="h-8 text-xs bg-app-surface border border-app-border rounded-lg text-gray-200 px-2.5 focus:outline-none focus:border-brand-blue/50" />
+                className="h-8 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface px-2.5 focus:outline-none focus:border-primary/50" />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500">Até</span>
+              <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Até</span>
               <input type="date" value={to} min={from} max={todayISO()} onChange={(e) => setTo(e.target.value)}
-                className="h-8 text-xs bg-app-surface border border-app-border rounded-lg text-gray-200 px-2.5 focus:outline-none focus:border-brand-blue/50" />
+                className="h-8 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface px-2.5 focus:outline-none focus:border-primary/50" />
             </label>
             <button onClick={() => load(from, to)} disabled={state.status === 'loading'}
-              className="h-8 flex items-center gap-1.5 rounded-lg bg-gradient-brand px-3.5 text-[11px] font-semibold text-white shadow-glow hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0">
+              className="h-8 flex items-center gap-1.5 rounded-lg bg-gradient-brand px-3.5 text-[11px] font-semibold text-on-primary shadow-glow hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0">
               {state.status === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Analisar
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-1.5 lg:ml-auto">
             {PRESETS.map((p) => (
               <button key={p.days} onClick={() => applyPreset(p.days)}
-                className="text-[10px] px-2.5 py-1.5 rounded-lg border border-app-border text-gray-400 hover:text-gray-200 hover:border-app-borderLight transition-all">
+                className="text-[10px] px-2.5 py-1.5 rounded-lg border border-outline text-on-surface/70 hover:text-on-surface hover:border-outline-strong transition-all">
                 {p.label}
               </button>
             ))}
-            <span className="w-px h-5 bg-app-border mx-1 hidden sm:block" />
+            <span className="w-px h-5 bg-outline mx-1 hidden sm:block" />
             <button
               onClick={exportPdf}
               disabled={state.status !== 'ready' || exporting}
               title="Exporta os KPIs e as sugestões de pontuação em PDF"
-              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-brand-blue/15 text-brand-blue border border-brand-blue/30 hover:bg-brand-blue/25 transition-all font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-all font-medium disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {exporting ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
               Exportar PDF
@@ -567,26 +582,26 @@ export default function SuggestedScorePanel() {
 
       {/* Estados */}
       {state.status === 'loading' && (
-        <div className="flex items-center gap-2 rounded-xl border border-app-border bg-app-card px-5 py-10 text-sm text-gray-400">
+        <div className="flex items-center gap-2 rounded-xl border border-outline bg-surface-container-lowest px-5 py-10 text-sm text-on-surface/70">
           <Loader2 size={16} className="animate-spin" /> Calculando o lift na base…
         </div>
       )}
 
       {state.status === 'error' && (
-        <div className="rounded-xl border border-app-border bg-app-card px-5 py-6 space-y-3">
-          <div className="flex items-start gap-2.5 text-sm text-rose-300">
+        <div className="rounded-xl border border-outline bg-surface-container-lowest px-5 py-6 space-y-3">
+          <div className="flex items-start gap-2.5 text-sm text-risk-critical">
             {state.error.status === 401 ? <Lock size={16} className="mt-0.5 shrink-0" /> : <AlertTriangle size={16} className="mt-0.5 shrink-0" />}
             <div>
-              <p className="font-medium text-gray-100">
+              <p className="font-medium text-on-surface">
                 {state.error.status === 0 ? 'Servidor indisponível' : state.error.status === 401 ? 'Sessão expirada' : 'Não foi possível calcular as sugestões'}
               </p>
-              <p className="mt-0.5 text-[12px] text-gray-400">{state.error.message}</p>
+              <p className="mt-0.5 text-[12px] text-on-surface/70">{state.error.message}</p>
               {state.error.status === 0 && (
-                <p className="mt-1.5 text-[11px] text-gray-500">Depende do backend (<span className="font-mono">/api</span>) com acesso ao banco. Suba com <span className="font-mono">npm run api</span>.</p>
+                <p className="mt-1.5 text-[11px] text-on-surface-variant">Depende do backend (<span className="font-mono">/api</span>) com acesso ao banco. Suba com <span className="font-mono">npm run api</span>.</p>
               )}
             </div>
           </div>
-          <button onClick={() => load(from, to)} className="flex items-center gap-1.5 rounded-md border border-app-border px-3 py-1.5 text-[12px] text-gray-300 hover:border-app-borderLight hover:text-gray-100 transition-colors">
+          <button onClick={() => load(from, to)} className="flex items-center gap-1.5 rounded-md border border-outline px-3 py-1.5 text-[12px] text-on-surface/85 hover:border-outline-strong hover:text-on-surface transition-colors">
             <RefreshCw size={13} /> Tentar novamente
           </button>
         </div>
@@ -597,19 +612,19 @@ export default function SuggestedScorePanel() {
           {/* KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Kpi icon={<Users size={15} />} label={isFullBase ? 'Base ativa (completa)' : 'Base ativa (amostra)'} value={state.data.activeCount.toLocaleString('pt-BR')} sub={isFullBase ? 'clientes analisados' : 'amostra de dev — completa no servidor'} />
-            <Kpi icon={<TrendingDown size={15} />} label="Cancelados no período" value={state.data.cancelledCount.toLocaleString('pt-BR')} sub={`${fmtDateBR(from)} – ${fmtDateBR(to)}`} color="#ef4444" />
+            <Kpi icon={<TrendingDown size={15} />} label="Cancelados no período" value={state.data.cancelledCount.toLocaleString('pt-BR')} sub={`${fmtDateBR(from)} – ${fmtDateBR(to)}`} color={tokens.riskCritical} />
             <Kpi icon={<Database size={15} />} label="Indicadores" value={String(built.indicatorCount)} sub={`${built.indexCount} índices avaliados`} />
-            <Kpi icon={<TrendingDown size={15} />} label="Sinais de risco" value={String(built.riskCount)} sub="índices com lift > 1" color="#f97316" />
+            <Kpi icon={<TrendingDown size={15} />} label="Sinais de risco" value={String(built.riskCount)} sub="índices com lift > 1" color={tokens.riskHigh} />
           </div>
 
           {/* Janela materializada de madrugada — o filtro de data trabalha dentro dela */}
           {state.data.materializedWindow && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-app-border bg-app-card/60 px-4 py-2.5 text-[11px] text-gray-500 leading-relaxed">
-              <Info size={14} className="mt-0.5 shrink-0 text-gray-500" />
+            <div className="flex items-start gap-2.5 rounded-xl border border-outline bg-surface-container-lowest/60 px-4 py-2.5 text-[11px] text-on-surface-variant leading-relaxed">
+              <Info size={14} className="mt-0.5 shrink-0 text-on-surface-variant" />
               <p>
                 Base atualizada de madrugada. Cancelados disponíveis de{' '}
-                <strong className="text-gray-400">{fmtDateBR(state.data.materializedWindow.from)}</strong> a{' '}
-                <strong className="text-gray-400">{fmtDateBR(state.data.materializedWindow.to)}</strong>{' '}
+                <strong className="text-on-surface/70">{fmtDateBR(state.data.materializedWindow.from)}</strong> a{' '}
+                <strong className="text-on-surface/70">{fmtDateBR(state.data.materializedWindow.to)}</strong>{' '}
                 ({state.data.materializedWindow.count.toLocaleString('pt-BR')} contratos) — o filtro de data acima opera dentro dessa janela.
               </p>
             </div>
@@ -617,18 +632,18 @@ export default function SuggestedScorePanel() {
 
           {/* Nota: Rede fora — só enquanto não houver sinal de massiva nos cancelados */}
           {!built.groups.some((g) => g.engineKey === 'network') && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-app-border bg-app-card/60 px-4 py-3 text-[11px] text-gray-500 leading-relaxed">
-              <Network size={15} className="mt-0.5 shrink-0 text-gray-500" />
-              <p><strong className="text-gray-400">Rede</strong> ainda sem sinal de massiva nos cancelados do período — entra automaticamente assim que o ETL materializar a infra de rede dos cancelados (via histórico de conexão).</p>
+            <div className="flex items-start gap-2.5 rounded-xl border border-outline bg-surface-container-lowest/60 px-4 py-3 text-[11px] text-on-surface-variant leading-relaxed">
+              <Network size={15} className="mt-0.5 shrink-0 text-on-surface-variant" />
+              <p><strong className="text-on-surface/70">Rede</strong> ainda sem sinal de massiva nos cancelados do período — entra automaticamente assim que o ETL materializar a infra de rede dos cancelados (via histórico de conexão).</p>
             </div>
           )}
 
           {/* Nota: Quedas de PPPoE fora — só enquanto os cancelados não tiverem sinal de ONU */}
           {!built.groups.some((g) => g.indicators.some((i) => i.indicatorKey.startsWith('onu'))) && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-app-border bg-app-card/60 px-4 py-3 text-[11px] text-gray-500 leading-relaxed">
-              <Wifi size={15} className="mt-0.5 shrink-0 text-gray-500" />
+            <div className="flex items-start gap-2.5 rounded-xl border border-outline bg-surface-container-lowest/60 px-4 py-3 text-[11px] text-on-surface-variant leading-relaxed">
+              <Wifi size={15} className="mt-0.5 shrink-0 text-on-surface-variant" />
               <p>
-                <strong className="text-gray-400">Quedas de PPPoE (Conexão)</strong> ainda sem sinal de ONU materializado
+                <strong className="text-on-surface/70">Quedas de PPPoE (Conexão)</strong> ainda sem sinal de ONU materializado
                 nos cancelados — os indicadores por status (power_fail, loss_signal, …) entram automaticamente no lift
                 assim que o ETL casar eventos do AutoISP com a coorte de cancelados (linha <span className="font-mono">Cancelados/ONU</span> no log do ETL).
               </p>
@@ -640,7 +655,7 @@ export default function SuggestedScorePanel() {
             <CardHeader title="Indicadores × pontuação sugerida" subtitle="Ordenado por impacto dentro de cada indicador" icon={<Sparkles size={14} />} />
             <div className="px-5 py-4 space-y-5">
               {built.groups.length === 0 ? (
-                <p className="text-center text-sm text-gray-500 py-6">Nenhum cancelamento no período selecionado.</p>
+                <p className="text-center text-sm text-on-surface-variant py-6">Nenhum cancelamento no período selecionado.</p>
               ) : (
                 built.groups.map((g, i) => (
                   <EngineSection key={g.engineKey} label={g.engineLabel} indicators={g.indicators} defaultOpen={i === 0} currentOf={currentOf} onApply={applyOne} onApplyAll={applyAll} />

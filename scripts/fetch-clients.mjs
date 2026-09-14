@@ -19,7 +19,7 @@ import { makePool } from './db.mjs'
 import { makeMariaPool } from './db-maria.mjs'
 import { makeAutoIspPool } from './db-autoisp.mjs'
 import { buildEffectiveQueries } from './queries/index.mjs'
-import { FROM_DATE } from './queries/registry.mjs'
+import { FROM_DATE, NON_BILLED_CONTRACT_TYPES } from './queries/registry.mjs'
 import { buildCohort } from './queries/cohort.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -59,7 +59,7 @@ const {
   Q_REL_PROT, Q_REL_DIM, Q_REL_TYPE_LIST, Q_REL_ATT_LIST,
   Q_MARIA_SPLITTER, Q_NET_INFRA, Q_NET_INFRA_CANCELLED,
   Q_INV_AGG, Q_RENEG_AGG, Q_TRUST_AGG,
-  Q_AUTOISP_ONU_STATUS,
+  Q_AUTOISP_ONU_STATUS, Q_AUTOISP_ONU_HEALTH, Q_AUTOISP_ONU_LAN, Q_AUTOISP_CPE, Q_AUTOISP_WIFI,
   Q_WD_PROT,
 } = buildEffectiveQueries({ full: FULL })
 
@@ -94,6 +94,7 @@ try {
   // rankings/histograma e montamos um índice por CONTRATO (wdByContract) para
   // cruzar com os cancelados adiante (nível pessoa).
   const wdByContract = new Map() // contract_number -> { protocols, retrieved, visits, technicians:Set, lastDate }
+  const wdProtocols = []         // linhas cruas por protocolo (compactas) p/ o filtro por período no detalhe
   const withdrawals = (() => {
     const st = { cancelled: { total: 0, retrieved: 0 }, active: { total: 0, retrieved: 0 } }
     const techMap = new Map() // nome -> { protocols, retrieved, visits }
@@ -105,6 +106,15 @@ try {
       const v = Number(r.visits) || 0
       visitsSum += v
       if (got) retrieved++
+      // linha crua compacta p/ o detalhe: x=cancelado, r=retirado, v=visitas,
+      // t=técnico, d=data do desfecho (usada no filtro por período da tela).
+      wdProtocols.push({
+        x: r.is_cancelled ? 1 : 0,
+        r: got ? 1 : 0,
+        v,
+        t: (r.technician || '').trim(),
+        d: r.outcome_date ? new Date(r.outcome_date).toISOString().slice(0, 10) : null,
+      })
       const bucket = r.is_cancelled ? st.cancelled : st.active
       bucket.total++; if (got) bucket.retrieved++
       const name = (r.technician || '').trim() || '(sem técnico)'
@@ -152,7 +162,12 @@ try {
   // Dedupe por cliente (mantém 1 contrato por cliente), soma MRR dos contratos
   const byClient = new Map()
   for (const r of sample.rows) {
-    const price = Number(r.selling_price) || 0
+    // Cortesia e afins carregam o preço de TABELA do plano, mas nunca são
+    // faturados. Sem zerar aqui, esse valor vira "receita em risco" em toda a
+    // plataforma — já apareceu a própria SEBRATEL na lista de receita a perder.
+    // O cliente continua na base, com score e ranking; só a receita é zero.
+    const naoFaturado = NON_BILLED_CONTRACT_TYPES.includes((r.payment_form || '').trim())
+    const price = naoFaturado ? 0 : (Number(r.selling_price) || 0)
     if (byClient.has(r.client_id)) continue // mantém o contrato primário (1º)
     const toDate = (x) => (x ? new Date(x).toISOString().slice(0, 10) : null)
     byClient.set(r.client_id, {
@@ -168,6 +183,9 @@ try {
       contractDate: r.created_contract ? new Date(r.created_contract).toISOString().slice(0, 10) : null,
       plan: r.plan_name?.trim() || 'Sem plano',
       monthlyValue: price,
+      // Marca para a tela poder dizer "R$ 0 porque não é faturado", em vez de
+      // parecer dado faltando.
+      notBilled: naoFaturado || undefined,
       paymentForm: r.payment_form?.trim() || 'Não informado',
       city: r.city?.trim() || 'Não informado',
       neighborhood: r.neighborhood?.trim() || '(s/ bairro)',
@@ -223,11 +241,37 @@ try {
   const onuByContract = new Map()
   const onuByClient = new Map()
   if (process.env.DB_AUTOISP_HOST) {
+    // AutoISP é opcional e falhava em SILÊNCIO: se a query falhasse (ex.: banco
+    // AutoISP ocupado/lento na janela da madrugada → timeout), o ETL seguia sem
+    // as quedas e ninguém era avisado. Como o re-run manual costuma funcionar (a
+    // carga já passou), aqui a gente RETENTA com backoff antes de desistir — e,
+    // se desistir, avisa ALTO (não some calado). Nº de tentativas: AUTOISP_RETRIES.
+    const ATTEMPTS = Math.max(1, Number(process.env.AUTOISP_RETRIES) || 3)
+    // Um pool só para TODAS as consultas do AutoISP, e elas rodam em SÉRIE.
+    // Em paralelo seriam 4 varreduras simultâneas no banco deles — o oposto do
+    // que queremos. Em série o conjunto todo leva ~15s fora a query de quedas.
+    const autoisp = makeAutoIspPool()
+    // Retenta por consulta, não pelo bloco: assim uma falha no sinal de enlace
+    // não custa 3 re-execuções da query de quedas (que varre 4,3 mi de linhas).
+    const tryQuery = async (label, sql, params = []) => {
+      for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+        try {
+          const t0 = Date.now()
+          const res = await autoisp.query(sql, params)
+          console.log(`  ${label}: ${res.rows.length} linhas em ${((Date.now() - t0) / 1000).toFixed(1)}s`)
+          return res
+        } catch (e) {
+          console.warn(`  ${label}: tentativa ${attempt}/${ATTEMPTS} falhou — ${e.message}`)
+          if (attempt < ATTEMPTS) await new Promise((r) => setTimeout(r, attempt * 15000)) // backoff 15s, 30s…
+        }
+      }
+      return null
+    }
     try {
-      const autoisp = makeAutoIspPool()
-      try {
-        const res = await autoisp.query(Q_AUTOISP_ONU_STATUS, [FROM_DATE])
-        for (const r of res.rows) {
+      console.log('AutoISP — coletando sinais de conexão…')
+      const onuRes = await tryQuery('quedas de PPPoE', Q_AUTOISP_ONU_STATUS, [FROM_DATE])
+      if (onuRes) {
+        for (const r of onuRes.rows) {
           const status = (r.new_status || '').trim()
           const qty = Number(r.qty) || 0
           if (!status || !qty) continue
@@ -242,8 +286,101 @@ try {
             onuByClient.set(String(r.client_id), m)
           }
         }
-      } finally { await autoisp.end() }
-    } catch (e) { console.warn('ONU (AutoISP): falha —', e.message) }
+      } else {
+        console.warn(`⚠️  ONU (AutoISP): FALHOU em ${ATTEMPTS} tentativa(s) — o snapshot vai SEM as quedas de PPPoE. Provável carga/janela do banco AutoISP no horário do ETL (ETL_HOUR=${process.env.ETL_HOUR ?? '3'}).`)
+      }
+
+      // ── Qualidade do enlace (foto atual) ──
+      // As três consultas varrem a base INTEIRA do AutoISP (215 mil ONUs), mas
+      // gravamos direto no objeto do cliente via byContract: nada de mapa
+      // intermediário, então o pico de memória é só o resultado da consulta da
+      // vez (~42 MB na maior) em vez de um índice de 215 mil entradas.
+      let hits = { health: 0, lan: 0, cpe: 0, wifi: 0 }
+      const healthRes = await tryQuery('enlace óptico', Q_AUTOISP_ONU_HEALTH)
+      if (healthRes) {
+        for (const r of healthRes.rows) {
+          const c = byContract.get(String(r.contract_id))
+          if (!c) continue
+          // Leitura óptica válida fica entre −5 e −40 dBm. O AutoISP guarda
+          // milhares de linhas entre −9 e 0 (e zeros) que são ONU sem leitura,
+          // não sinal excelente — se entrassem, virariam "atenuação ótima".
+          const rx0 = r.calculated_rx_power != null ? Number(r.calculated_rx_power) : null
+          const rx = rx0 != null && rx0 <= -5 && rx0 >= -40 ? rx0 : null
+          // Um contrato pode ter MAIS DE UMA ONU (contracted_services distintos).
+          // Sem critério, a última linha lida ganhava e o score do cliente
+          // dependia da ordem do banco. Fica com a PIOR leitura: é ela que
+          // explica a reclamação, e o pior enlace é o que limita o cliente.
+          const pior = c.connRxPower == null || (rx != null && rx < c.connRxPower)
+          if (pior) {
+            if (rx != null) c.connRxPower = rx
+            c.connOnuStatus = (r.calculated_status || '').trim() || 'sem_leitura'
+          } else if (c.connOnuStatus === undefined) {
+            c.connOnuStatus = (r.calculated_status || '').trim() || 'sem_leitura'
+          }
+          const dist = r.distance != null ? Number(r.distance) : null
+          if (dist != null && dist > 0) c.connFiberDistanceM = Math.max(c.connFiberDistanceM ?? 0, dist)
+          const temp = r.optical_temperature != null ? Number(r.optical_temperature) : null
+          if (temp != null && temp > 0) c.connOnuTempC = Math.max(c.connOnuTempC ?? 0, temp)
+          hits.health++
+        }
+      }
+      const lanRes = await tryQuery('velocidade da porta LAN', Q_AUTOISP_ONU_LAN)
+      if (lanRes) {
+        for (const r of lanRes.rows) {
+          const c = byContract.get(String(r.contract_id))
+          if (!c) continue
+          // Idem multi-ONU: fica com a MAIOR velocidade negociada, que é a
+          // melhor porta disponível ao cliente. 0 = nenhuma porta com link.
+          const mbps = r.lan_mbps != null ? Number(r.lan_mbps) : 0
+          c.connLanMbps = Math.max(c.connLanMbps ?? 0, mbps)
+          hits.lan++
+        }
+      }
+      const cpeRes = await tryQuery('equipamento (TR-069)', Q_AUTOISP_CPE)
+      if (cpeRes) {
+        for (const r of cpeRes.rows) {
+          const c = byContract.get(String(r.contract_id))
+          if (!c) continue
+          // Só o modelo cru. A geração do Wi-Fi (ac/ax) é derivada dele no
+          // motor, em connectionConfig.ts — o de-para mora num lugar só, e um
+          // modelo novo aparece na tela como "Modelo não identificado" em vez
+          // de exigir um ETL novo.
+          // Primeiro modelo não vazio: se o contrato tem dois CPEs, qualquer um
+          // serve para a geração do Wi-Fi (são do mesmo padrão na prática).
+          if (!c.connCpeModel) {
+            c.connCpeModel = (r.router_model_name || '').trim()
+            c.connCpeFirmware = (r.firmware_version || '').trim()
+          }
+          hits.cpe++
+        }
+      }
+      // ── Wi-Fi dentro da casa + saúde do CPE (TR-069) ──
+      const wifiRes = await tryQuery('Wi-Fi na casa (TR-069)', Q_AUTOISP_WIFI)
+      if (wifiRes) {
+        for (const r of wifiRes.rows) {
+          const c = byContract.get(String(r.contract_id))
+          if (!c) continue
+          const rssi = r.rssi_mediano != null ? Number(r.rssi_mediano) : null
+          // Multi-CPE no mesmo contrato: fica com o PIOR Wi-Fi mediano — é ele
+          // que explica a reclamação, mesma regra da potência óptica.
+          if (rssi != null && (c.connWifiRssi == null || rssi < c.connWifiRssi)) {
+            c.connWifiRssi = rssi
+            c.connWifiWorstRssi = r.pior_rssi != null ? Number(r.pior_rssi) : null
+            c.connWifiDevices = r.devices_wifi != null ? Number(r.devices_wifi) : null
+            c.connWifiDevices24g = r.devices_24g != null ? Number(r.devices_24g) : null
+            c.connWifiDevices5g = r.devices_5g != null ? Number(r.devices_5g) : null
+          }
+          // Memória e temperatura vêm de quase 100% dos CPEs: fica com o pior
+          // (maior) valor entre os equipamentos do contrato.
+          const mem = r.cpe_mem_pct != null ? Number(r.cpe_mem_pct) : null
+          if (mem != null && mem > 0) c.connCpeMemPct = Math.max(c.connCpeMemPct ?? 0, mem)
+          const ctemp = r.cpe_temp_c != null ? Number(r.cpe_temp_c) : null
+          if (ctemp != null && ctemp > 0) c.connCpeTempC = Math.max(c.connCpeTempC ?? 0, ctemp)
+          hits.wifi++
+        }
+      }
+      console.log(`AutoISP — enlace casado com a base: ${hits.health} ópticos, ${hits.lan} portas LAN, ${hits.cpe} equipamentos, ${hits.wifi} leituras de Wi-Fi/CPE.`)
+    } finally { await autoisp.end() }
   } else {
     console.log('ONU (AutoISP): DB_AUTOISP_* ausentes no .env — sinal pulado.')
   }
@@ -438,8 +575,8 @@ try {
   // Cruza os protocolos de retirada (wdByContract) com a coorte de cancelados
   // (por contract_number). Enriquece cada cancelado com o status de retirada e
   // materializa: indicadores de recuperação de equipamento + lista de pessoas.
+  let wdPeopleFull = [] // lista completa (vai no detalhe servido sob demanda)
   {
-    const PEOPLE_CAP = 3000 // limite da lista embarcada no snapshot (leve)
     let withWithdrawal = 0, recovered = 0, notRecovered = 0, mrrAtRisk = 0, visitsSum = 0
     const people = []
     for (const c of cancelledClients) {
@@ -463,11 +600,13 @@ try {
         technicians: [...e.technicians], lastDate: e.lastDate,
       })
     }
-    // Mais recentes primeiro; cap para manter o payload leve (sem truncar em silêncio).
+    // Mais recentes primeiro. A lista COMPLETA vai no detalhe (servido sob
+    // demanda em /api/withdrawals) — o filtro por período recomputa no cliente.
     people.sort((a, b) => String(b.cancellationDate || '').localeCompare(String(a.cancellationDate || '')))
-    const peopleCapped = people.slice(0, PEOPLE_CAP)
-    if (people.length > PEOPLE_CAP) console.log(`Retiradas/Cancelados: lista de pessoas truncada em ${PEOPLE_CAP} de ${people.length}.`)
+    wdPeopleFull = people
 
+    // Agregados do período inteiro (default da tela antes de filtrar). window =
+    // janela da coorte de cancelados; cancelledTotal = denominador do "% com retirada".
     withdrawals.cancellation = {
       cancelledTotal: cancelledClients.length,
       withWithdrawal,
@@ -478,7 +617,8 @@ try {
       mrrAtRisk,
       window: { from: cancelledFrom, to: cancelledTo, months: CANCELLED_MONTHS },
     }
-    withdrawals.people = peopleCapped
+    // A lista de pessoas não vai mais no bloco leve (fica no detalhe).
+    withdrawals.people = []
     withdrawals.peopleTotal = people.length
     console.log(`Retiradas/Cancelados: ${withWithdrawal}/${cancelledClients.length} cancelados com retirada · ${recovered} recuperados · ${notRecovered} em risco (R$ ${mrrAtRisk.toLocaleString('pt-BR')}/mês).`)
   }
@@ -535,8 +675,11 @@ try {
       slots: distinctFromClients(clients, (c) => c.netSlot),
       pons: distinctFromClients(clients, (c) => c.netPon),
     },
-    // Retiradas de equipamento — KPIs/rankings/histograma (base-wide).
+    // Retiradas de equipamento — KPIs/rankings/histograma (base-wide, leve).
     withdrawals,
+    // Detalhe cru (protocolos + pessoas) p/ o filtro por período — pesado,
+    // excluído do /api/dataset/lists e servido sob demanda em /api/withdrawals.
+    withdrawalDetail: { protocols: wdProtocols, people: wdPeopleFull },
     clients: clientsOut,
     // Coorte de cancelados (materializada) + a janela coberta.
     cancelledClients,

@@ -13,13 +13,13 @@ const BASE = 'inline-flex min-h-[44px] items-center justify-center gap-2 text-sm
 
 const VARIANTS: Record<Variant, string> = {
   // ação principal — pill âmbar com texto escuro
-  primary: 'rounded-full bg-primary px-4 py-2.5 text-neutral-900 shadow-sm hover:bg-secondary focus-visible:ring-2 focus-visible:ring-amber-500/50',
-  // primário em bloco (token) — texto branco
-  token: 'rounded-xl bg-primary px-4 py-3.5 text-white shadow-md hover:bg-secondary focus-visible:ring-2 focus-visible:ring-amber-500/50',
+  primary: 'rounded-full bg-primary px-4 py-2.5 text-on-primary shadow-sm hover:bg-secondary focus-visible:ring-2 focus-visible:ring-primary/50',
+  // primário em bloco (token)
+  token: 'rounded-xl bg-primary px-4 py-3.5 text-on-primary shadow-md hover:bg-secondary focus-visible:ring-2 focus-visible:ring-primary/50',
   // secundário / ghost
-  secondary: 'rounded-xl border border-app-border bg-app-card px-4 py-2.5 text-on-surface hover:bg-surface-container-low focus-visible:ring-2 focus-visible:ring-primary/40',
-  // perigo sutil
-  danger: 'rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-rose-800 hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-500/40',
+  secondary: 'rounded-xl border border-outline bg-surface-container-lowest px-4 py-2.5 text-on-surface hover:bg-surface-container-low focus-visible:ring-2 focus-visible:ring-primary/40',
+  // perigo sutil — tinta sobre a superfície do tema, para funcionar no escuro
+  danger: 'rounded-xl border border-risk-critical/40 bg-risk-critical/10 px-4 py-2.5 text-risk-critical hover:bg-risk-critical/20 focus-visible:ring-2 focus-visible:ring-risk-critical/40',
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

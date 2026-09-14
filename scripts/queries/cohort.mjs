@@ -3,7 +3,7 @@
 //
 // Monta, para uma janela [from, to], os clientes de um coorte no MESMO shape
 // que o ETL produz (RealClient), rodando queries GÊMEAS que só diferem no
-// filtro de v_status ({{statusCmp}}: '=' cancelados | '<>' ativos):
+// filtro de v_status ({{statusFilter}}: cancelados | ativos | todos):
 //   - ATIVOS:    c.v_status <> 'Cancelado'  (amostra aleatória, limit)
 //   - CANCELADOS:c.v_status  = 'Cancelado'  (cancelados dentro de [from,to])
 //
@@ -25,7 +25,7 @@ const toDate = (x) => (x ? new Date(x).toISOString().slice(0, 10) : null)
 const arr = (x) => (Array.isArray(x) ? x.filter(Boolean).map((v) => String(v).trim()) : [])
 const num = (x) => (x != null ? Number(x) : 0)
 
-function baseRow(r) {
+export function baseRow(r) {
   return {
     clientId: String(r.client_id),
     name: r.client_name?.trim() || 'Cliente sem nome',
@@ -39,6 +39,9 @@ function baseRow(r) {
     contractDate: toDate(r.created_contract),
     cancellationDate: toDate(r.cancellation_date),
     cancellationMotive: r.cancellation_motive != null && String(r.cancellation_motive).trim() ? String(r.cancellation_motive).trim() : null,
+    // Código do último evento de cancelamento — classificação estruturada do
+    // motivo, preferida ao texto livre acima (ver cancellationMotive.ts).
+    cancellationCode: r.cancellation_code != null && String(r.cancellation_code).trim() ? String(r.cancellation_code).trim() : null,
     plan: r.plan_name?.trim() || 'Sem plano',
     monthlyValue: Number(r.selling_price) || 0,
     paymentForm: r.payment_form?.trim() || 'Não informado',
@@ -75,8 +78,8 @@ async function safeQuery(pool, sql, params, label, warnings) {
 // ─── Builder principal ─────────────────────────────────────────
 export async function buildCohort(pool, { cancelled, from, to, sampleLimit = 15000 }) {
   const warnings = []
-  // SQL efetivo (override ?? default) resolvido para o coorte. {{statusCmp}} vira
-  // '=' (cancelados) ou '<>' (ativos) conforme `cancelled`.
+  // SQL efetivo (override ?? default) resolvido para o coorte. {{statusFilter}}
+  // vira o predicado de cancelados ou o de ativos, conforme `cancelled`.
   const q = (id) => getEffectiveSql(id, { cancelled })
 
   const baseSql = q(cancelled ? 'Q_COH_CANCELLED_BASE' : 'Q_COH_ACTIVE_BASE')
@@ -91,6 +94,23 @@ export async function buildCohort(pool, { cancelled, from, to, sampleLimit = 150
   }
   const contractNumbers = [...byContract.keys()]
   if (!contractNumbers.length) return { clients: [], warnings }
+
+  await hydrateSignals(pool, byContract, { from, to, cancelled, warnings })
+  return { clients: [...byContract.values()], warnings }
+}
+
+// ─── Preenchimento dos sinais ──────────────────────────────────
+// Separado de buildCohort para que a coorte RETROATIVA (asOfCohort.mjs) use
+// exatamente as mesmas queries e o mesmo mapeamento — se o sinal divergir
+// entre as duas, o backtest deixa de comparar a mesma régua e não vale nada.
+//
+// `to` é o teto da janela de sinal. Passar a data de corte da coorte (e não
+// "hoje") é o que impede vazamento: nenhum protocolo, fatura ou renegociação
+// criada DEPOIS do desfecho entra na pontuação daquele mês.
+export async function hydrateSignals(pool, byContract, { from, to, cancelled, warnings }) {
+  const q = (id) => getEffectiveSql(id, { cancelled })
+  const contractNumbers = [...byContract.keys()]
+  if (!contractNumbers.length) return byContract
 
   const P = [contractNumbers, from, to]
   const [inv, reneg, trust, equip, fprot, fsched, freasons, iprot, isched, rprot, rdim] = await Promise.all([
@@ -120,5 +140,5 @@ export async function buildCohort(pool, { cancelled, from, to, sampleLimit = 150
   for (const r of rprot) { const c = get(r); if (!c) continue; c.relProtocolCount = num(r.protocol_count); c.relRecurrenceDays = num(r.recurrence_days); c.relAvgOverageHours = num(r.avg_overage_hours); c.relCancelThreats = num(r.cancel_threats) }
   for (const r of rdim) { const c = get(r); if (!c) continue; c.relTypes = arr(r.protocol_types); c.relAttendants = arr(r.attendant_names) }
 
-  return { clients: [...byContract.values()], warnings }
+  return byContract
 }

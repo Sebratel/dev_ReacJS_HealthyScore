@@ -3,33 +3,126 @@
 @tailwind utilities;
 
 @layer base {
+  /* Design System Sebratel — tokens canônicos.
+     Os utilitários (bg-surface, text-on-surface…) apontam para estas variáveis,
+     então o tema escuro é feito apenas redefinindo-as sob `.dark`: qualquer
+     classe escrita em token escurece sozinha, sem variante `dark:` no componente.
+     Valores em triplet RGB para o modificador de opacidade do Tailwind (`/70`). */
   :root {
-    /* App surfaces — Design System NexaView (creme quente) */
-    --app-bg:          244 241 232;  /* #f4f1e8 surface */
-    --app-surface:     235 231 219;  /* #ebe7db surface-container-low */
-    --app-card:        255 255 255;  /* cards */
-    --app-cardHover:   251 249 243;  /* warm white hover */
-    --app-border:      224 220 208;  /* #e0dcd0 contorno quente sutil */
-    --app-borderLight: 209 204 190;
+    color-scheme: light;
 
-    /* Texto principal (near-black quente) */
-    --color-white: 26 26 26;         /* #1a1a1a on-surface */
+    /* Marca */
+    --color-primary: 255 176 0; /* #ffb000 */
+    --color-primary-container: 255 193 7; /* #ffc107 */
+    --color-secondary: 255 143 0; /* #ff8f00 */
+    --color-secondary-container: 255 183 77; /* #ffb74d */
+    --color-tertiary: 180 74 50; /* #b44a32 */
 
-    /* Escala de cinza para TEXTO sobre o creme claro (escuro → claro).
-       Os componentes foram escritos para tema escuro, onde gray-100 é o texto
-       de destaque (mais claro). Aqui invertemos: gray-100 é o mais ESCURO
-       (near-black) e a legibilidade decresce suavemente até gray-900. Assim as
-       nomenclaturas ficam nítidas no fundo claro sem tocar em cada componente.
-       Uso quase exclusivo em texto — bg/border com gray são desprezíveis. */
-    --gray-100: 26 26 26;            /* #1a1a1a — destaque (near-black) */
-    --gray-200: 40 40 40;            /* #282828 */
-    --gray-300: 58 58 58;            /* #3a3a3a — secundário forte */
-    --gray-400: 75 75 73;            /* #4b4b49 */
-    --gray-500: 93 93 90;            /* #5d5d5a — rótulos/mutado (workhorse) ≈ on-surface-variant */
-    --gray-600: 110 110 106;         /* #6e6e6a */
-    --gray-700: 130 130 125;         /* #82827d */
-    --gray-800: 150 150 145;         /* #969691 */
-    --gray-900: 168 168 160;         /* #a8a8a0 — mutado mais claro */
+    /* Âmbar legível: texto/ícone pequeno sobre superfície clara, onde o
+       primary (#ffb000) não alcança contraste AA. */
+    --color-primary-strong: 180 83 9; /* #b45309 */
+
+    /* Conteúdo sobre o âmbar. Como o primary é o mesmo nos dois temas, este
+       token NÃO é redefinido no escuro — texto escuro sobre âmbar sempre. */
+    --color-on-primary: 26 26 26; /* #1a1a1a */
+
+    /* Scrim = camada fixa sobre mídia (foto do login). Não segue o tema:
+       a foto é a mesma nos dois, então o véu e o texto sobre ela também são. */
+    --color-scrim: 0 0 0;
+    --color-on-scrim: 255 255 255;
+
+    /* Superfícies — creme quente, elevação ESCURECE no claro (fundo → card) */
+    --color-surface: 244 241 232; /* #f4f1e8 fundo da página */
+    --color-surface-container-low: 235 231 219; /* #ebe7db containers/hover */
+    --color-surface-container-lowest: 255 255 255; /* #ffffff cards/painéis */
+    --color-surface-container-high: 251 249 243; /* #fbf9f3 hover de card */
+
+    /* Texto */
+    --color-on-surface: 26 26 26; /* #1a1a1a */
+    --color-on-surface-variant: 93 93 93; /* #5d5d5d */
+
+    /* Contornos */
+    --color-outline: 224 220 208; /* #e0dcd0 borda visível (padrão de card) */
+    --color-outline-strong: 209 204 190; /* #d1ccbe borda em hover/ênfase */
+    --color-outline-variant: rgba(0, 0, 0, 0.05); /* divisores finos */
+
+    --color-inverse-surface: 38 38 38; /* #262626 */
+
+    /* Faixas de risco / health — status, não marca */
+    --color-risk-low: 16 185 129; /* #10b981 */
+    --color-risk-medium: 245 158 11; /* #f59e0b */
+    --color-risk-high: 249 115 22; /* #f97316 */
+    --color-risk-critical: 239 68 68; /* #ef4444 */
+    --color-health-excellent: 8 145 178; /* #0891b2 — faixa acima de "saudável" */
+
+    /* Rampa categórica — identidade sem ordem (fonte de dado, série de gráfico).
+       Não confundir com as faixas de risco, que têm ordem semântica. Os matizes
+       são espaçados no círculo cromático para separar séries vizinhas. */
+    --color-data-1: 14 165 233; /* #0ea5e9 */
+    --color-data-2: 245 158 11; /* #f59e0b */
+    --color-data-3: 16 185 129; /* #10b981 */
+    --color-data-4: 139 92 246; /* #8b5cf6 */
+    --color-data-5: 239 68 68; /* #ef4444 */
+    --color-data-6: 249 115 22; /* #f97316 */
+    --color-data-7: 34 211 238; /* #22d3ee */
+    --color-data-8: 132 204 22; /* #84cc16 */
+
+    /* Cores de dado para gráficos (Recharts recebe hex por prop, não classe) */
+    --chart-axis: #6b7280;
+    --chart-axis-strong: #9ca3af;
+    --chart-grid: #e0dcd0;
+    --chart-track: #e0dcd0;
+  }
+
+  /* Tema escuro — superfícies cinza-QUENTE (nunca preto puro), elevação
+     CLAREIA (fundo < container < card), âmbar segue sendo a marca. */
+  .dark {
+    color-scheme: dark;
+
+    --color-primary: 255 176 0; /* #ffb000 */
+    --color-primary-container: 255 193 7; /* #ffc107 */
+    --color-secondary: 255 158 44; /* #ff9e2c */
+    --color-secondary-container: 255 183 77; /* #ffb74d */
+    --color-tertiary: 212 105 79; /* #d4694f */
+
+    --color-primary-strong: 255 193 7; /* #ffc107 — clareia p/ legibilidade */
+
+    --color-surface: 27 24 20; /* #1b1814 */
+    --color-surface-container-low: 43 38 32; /* #2b2620 */
+    --color-surface-container-lowest: 56 50 43; /* #38322b */
+    --color-surface-container-high: 67 60 51; /* #433c33 */
+
+    --color-on-surface: 245 241 233; /* #f5f1e9 off-white quente */
+    --color-on-surface-variant: 195 187 173; /* #c3bbad */
+
+    /* No escuro a sombra some (é preta sobre fundo escuro) — a elevação do
+       card vem da borda, por isso ela é mais presente aqui. */
+    --color-outline: 74 68 59; /* #4a443b ≈ white/10 sobre o card */
+    --color-outline-strong: 99 91 79; /* #635b4f */
+    --color-outline-variant: rgba(255, 255, 255, 0.14);
+
+    --color-inverse-surface: 245 241 233; /* #f5f1e9 */
+
+    /* Faixas de risco clareadas — os tons do claro perdem contraste no escuro. */
+    --color-risk-low: 52 211 153; /* #34d399 */
+    --color-risk-medium: 251 191 36; /* #fbbf24 */
+    --color-risk-high: 251 146 60; /* #fb923c */
+    --color-risk-critical: 248 113 113; /* #f87171 */
+    --color-health-excellent: 34 211 238; /* #22d3ee */
+
+    --color-data-1: 56 189 248; /* #38bdf8 */
+    --color-data-2: 251 191 36; /* #fbbf24 */
+    --color-data-3: 52 211 153; /* #34d399 */
+    --color-data-4: 167 139 250; /* #a78bfa */
+    --color-data-5: 248 113 113; /* #f87171 */
+    --color-data-6: 251 146 60; /* #fb923c */
+    --color-data-7: 103 232 249; /* #67e8f9 */
+    --color-data-8: 163 230 53; /* #a3e635 */
+
+    --chart-axis: #a8a09a;
+    --chart-axis-strong: #cfc7bd;
+    --chart-grid: #4a443b;
+    --chart-track: #4a443b;
   }
 
   * {
@@ -47,8 +140,8 @@
   }
 
   body {
-    background-color: rgb(var(--app-bg));
-    color: rgb(var(--color-white));
+    background-color: rgb(var(--color-surface));
+    color: rgb(var(--color-on-surface));
     overflow-x: hidden;
   }
 
@@ -62,24 +155,24 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgb(var(--app-border));
+    background: rgb(var(--color-outline));
     border-radius: 99px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgb(var(--app-borderLight));
+    background: rgb(var(--color-outline-strong));
   }
 }
 
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: rgb(var(--app-border)) transparent;
+    scrollbar-color: rgb(var(--color-outline)) transparent;
   }
 
   /* Lift sutil no hover — usado em cards premium */
   .hover-lift {
-    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-color 0.25s ease;
     will-change: transform;
   }
   .hover-lift:hover {
@@ -96,7 +189,7 @@
 
   /* Vidro fosco (glass) */
   .glass {
-    background-color: rgb(var(--app-card) / 0.72);
+    background-color: rgb(var(--color-surface-container-lowest) / 0.72);
     backdrop-filter: blur(14px) saturate(140%);
     -webkit-backdrop-filter: blur(14px) saturate(140%);
   }
@@ -115,5 +208,36 @@
     border-radius: 99px;
     background-image: linear-gradient(90deg, transparent, #ffb000, #ff8f00, transparent);
     opacity: 0.6;
+  }
+}
+
+@keyframes header-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
