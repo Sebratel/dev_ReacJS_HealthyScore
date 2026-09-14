@@ -52,7 +52,7 @@ export function AiProviderPanel() {
   const [teste, setTeste] = useState<Teste | null>(null)
   const [modelos, setModelos] = useState<{ id: string; label: string }[]>([])
   const [buscandoModelos, setBuscandoModelos] = useState(false)
-  const [form, setForm] = useState({ tipo: 'anthropic', modelo: '', chave: '', baseUrl: '', maxTokens: 8000, effort: '' })
+  const [form, setForm] = useState({ tipo: 'anthropic', modelo: '', chave: '', baseUrl: '', maxTokens: 16000, effort: '' })
 
   const carregar = useCallback(async () => {
     try {
@@ -63,7 +63,7 @@ export function AiProviderPanel() {
         tipo: d.tipo || 'anthropic',
         modelo: d.modelo || '',
         baseUrl: d.baseUrl || '',
-        maxTokens: d.maxTokens || 8000,
+        maxTokens: d.maxTokens || 16000,
         effort: d.effort || '',
         chave: '',
       }))
@@ -86,7 +86,7 @@ export function AiProviderPanel() {
         tipo: form.tipo,
         modelo: form.modelo,
         baseUrl: form.baseUrl || null,
-        maxTokens: Number(form.maxTokens) || 8000,
+        maxTokens: Number(form.maxTokens) || 16000,
         effort: form.effort || null,
       }
       // Campo em branco significa "não mexi na chave" — mandar string vazia
@@ -265,7 +265,7 @@ export function AiProviderPanel() {
             <span className={rotulo}>Teto de tokens</span>
             <input
               type="number" min={256} max={64000} disabled={simulado}
-              value={form.maxTokens} onChange={(e) => setForm({ ...form, maxTokens: Number(e.target.value) || 8000 })}
+              value={form.maxTokens} onChange={(e) => setForm({ ...form, maxTokens: Number(e.target.value) || 16000 })}
               className={campo}
             />
           </label>

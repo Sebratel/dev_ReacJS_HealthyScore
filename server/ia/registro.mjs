@@ -53,7 +53,7 @@ export function estado() {
     return {
       ...comum,
       configurado: false, origem: null, tipo: 'anthropic',
-      modelo: '', baseUrl: null, maxTokens: 8000, effort: null, dica: null,
+      modelo: '', baseUrl: null, maxTokens: 16000, effort: null, dica: null,
     }
   }
   if (!salvo && env) {
@@ -73,7 +73,7 @@ export function estado() {
     tipo: salvo.tipo,
     modelo: salvo.modelo,
     baseUrl: salvo.baseUrl || null,
-    maxTokens: salvo.maxTokens || 8000,
+    maxTokens: salvo.maxTokens || 16000,
     effort: salvo.effort || null,
     dica: salvo.dica || null,
     atualizadoEm: salvo.atualizadoEm || null,
@@ -95,7 +95,7 @@ export function configuracaoAtiva() {
         modelo: salvo.modelo,
         chave: decifrar(salvo.chaveCifrada),
         baseUrl: salvo.baseUrl || null,
-        maxTokens: salvo.maxTokens || 8000,
+        maxTokens: salvo.maxTokens || 16000,
         effort: salvo.effort || null,
         origem: 'tela',
       }
@@ -156,7 +156,7 @@ export function salvar(entrada, porQuem) {
     tipo: entrada.tipo,
     modelo: simulado ? 'simulado' : entrada.modelo.trim(),
     baseUrl: entrada.baseUrl?.trim() || null,
-    maxTokens: entrada.maxTokens || 8000,
+    maxTokens: entrada.maxTokens || 16000,
     effort: entrada.effort || null,
     chaveCifrada: simulado ? null : (chave ? cifrar(chave) : atual.chaveCifrada),
     dica: simulado ? null : (chave ? dica(chave) : atual?.dica ?? null),
