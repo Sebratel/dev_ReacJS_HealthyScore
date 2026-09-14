@@ -140,6 +140,67 @@ describe('pontoMensal', () => {
     expect(p.minEngines).toBe(4)
   })
 
+  it('decis ordenam do pior para o melhor e são imunes à deriva de limiar', () => {
+    // 100 contratos com nota de 1 a 100. Quem sai são as 10 piores notas.
+    // Se o decil estiver certo, o decil 1 pega tudo e o 10 não pega nada —
+    // independente de onde os limiares absolutos estejam.
+    const cem = Array.from({ length: 100 }, (_, i) => ({
+      contractNumber: `D${i}`, overall: i + 1,
+      classification: i < 50 ? 'critical' : 'excellent', enginesPresent: 3,
+    }))
+    const saem = new Map(Array.from({ length: 10 }, (_, i) => [`D${i}`, { mrr: 0 }]))
+    const p = pontoMensal({ mes: '2026-05', scored: cem, cancelDepois: saem, janelaDesfecho: '2026-06' })
+
+    expect(p.porDecil).toHaveLength(10)
+    expect(p.porDecil[0].decil).toBe(1)
+    expect(p.porDecil[0].n).toBe(10)
+    expect(p.porDecil[0].taxa).toBe(100)
+    expect(p.porDecil[9].taxa).toBe(0)
+    // Taxa geral 10%, decil 1 em 100% → 10x.
+    expect(p.liftDecil1).toBe(10)
+  })
+
+  it('base pequena demais não inventa decil', () => {
+    const p = pontoMensal({ mes: '2026-05', scored, cancelDepois, janelaDesfecho: '2026-06' })
+    expect(p.porDecil).toEqual([])
+    expect(p.liftDecil1).toBeNull()
+  })
+
+  it('cancelamento em lote sai das taxas mas fica visível', () => {
+    // C2 (crítico) e S2 (saudável) saem por venda de operação. Nenhum dos dois
+    // pode contar: o score não tinha como prever, e incluí-los mexeria tanto na
+    // taxa da faixa quanto no recall.
+    const cancel = new Map([
+      ...cancelDepois,
+      ['C2', { mrr: 999, code: 'FNC.CAN.020' }],
+      ['S2', { mrr: 999, code: 'FNC.CAN.020' }],
+    ])
+    const p = pontoMensal({ mes: '2026-05', scored, cancelDepois: cancel, janelaDesfecho: '2026-06' })
+
+    expect(p.cancelamentosEmLote).toBe(2)
+    expect(p.cancelamentos).toBe(3)
+    expect(p.mrrPerdido).toBe(160)
+    const crit = p.porClassificacao.find((x) => x.classificacao === 'critical')
+    expect(crit.cancelaram).toBe(1)
+    expect(p.recall).toBeCloseTo(66.7, 1)
+  })
+
+  it('a exclusão em lote vale também para os decis', () => {
+    const cem = Array.from({ length: 100 }, (_, i) => ({
+      contractNumber: `D${i}`, overall: i + 1, classification: 'healthy', enginesPresent: 3,
+    }))
+    // As 10 piores saem de verdade; 10 das melhores saem por venda de operação.
+    const saem = new Map([
+      ...Array.from({ length: 10 }, (_, i) => [`D${i}`, { mrr: 0 }]),
+      ...Array.from({ length: 10 }, (_, i) => [`D${90 + i}`, { mrr: 0, code: 'FNC.CAN.020' }]),
+    ])
+    const p = pontoMensal({ mes: '2026-05', scored: cem, cancelDepois: saem, janelaDesfecho: '2026-06' })
+    expect(p.porDecil[0].taxa).toBe(100)
+    // Sem a exclusão o último decil marcaria 100% e o lift desabaria.
+    expect(p.porDecil[9].taxa).toBe(0)
+    expect(p.liftDecil1).toBe(10)
+  })
+
   it('base vazia não estoura', () => {
     const vazio = pontoMensal({ mes: '2026-05', scored: [], cancelDepois, conexoes: null, janelaDesfecho: '2026-06' })
     expect(vazio.contratosAtivos).toBe(0)

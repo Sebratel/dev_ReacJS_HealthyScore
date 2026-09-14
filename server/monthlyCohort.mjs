@@ -30,6 +30,21 @@ const FLAGGED = new Set(['critical', 'high_risk'])
 // comportamento — financeiro, protocolo, equipamento. Ver pontoMensal().
 export const MIN_ENGINES = 2
 
+// Base mínima para a leitura por decil fazer sentido (10 por balde).
+export const MIN_PARA_DECIL = 100
+
+// Saídas que NÃO são churn: o contrato acabou por decisão da empresa, não do
+// cliente. Ficam fora das taxas pelo mesmo motivo que a accuracy.mjs tira quem
+// nunca chegou a instalar — não há sinal de saúde a captar, e incluí-las só
+// castiga o score por não prever o imprevisível.
+//
+// FNC.CAN.020 = "Cancelamento de Contratos em Lote (VENDA OPERAÇÃO)": 1.034
+// contratos em junho/2026 (810 num dia, 361 em outro) e ZERO em todos os
+// outros meses. Com eles dentro, junho pulava para 2.461 saídas contra ~1.500
+// dos vizinhos, e o decil de MELHOR nota cancelava 3,75% contra 0,5% —
+// justamente o sintoma de evento alheio à saúde do cliente.
+export const CODIGOS_NAO_CHURN = new Set(['FNC.CAN.020'])
+
 const round = (v, d = 2) => (v == null || !Number.isFinite(v) ? null : Number(v.toFixed(d)))
 
 // Último dia do mês de uma data 'YYYY-MM' (sem fuso: tudo em UTC e string).
@@ -81,10 +96,24 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janela
   // é. Ficam FORA das taxas e contados à parte, para não sumirem da vista.
   const avaliaveis = scored.filter((s) => (s.enginesPresent ?? 0) >= minEngines)
   const semSinal = scored.length - avaliaveis.length
+
+  // Saída que conta como churn: existe e não é evento em lote da empresa.
+  // Uma função só, usada por todas as contagens abaixo (faixas e decis), para
+  // não haver como uma excluir e a outra não.
+  const saidaDe = (contractNumber) => {
+    const c = cancelDepois.get(contractNumber)
+    if (!c) return null
+    if (c.code && CODIGOS_NAO_CHURN.has(c.code)) return null
+    return c
+  }
+
   let cancelSemSinal = 0
+  let emLote = 0
   for (const s of scored) {
+    const bruto = cancelDepois.get(s.contractNumber)
+    if (bruto?.code && CODIGOS_NAO_CHURN.has(bruto.code)) emLote++
     if ((s.enginesPresent ?? 0) >= minEngines) continue
-    if (cancelDepois.get(s.contractNumber)) cancelSemSinal++
+    if (saidaDe(s.contractNumber)) cancelSemSinal++
   }
 
   const base = avaliaveis.length
@@ -102,12 +131,43 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janela
     const flag = FLAGGED.has(cls)
     if (flag) sinalizadosNaBase++
 
-    const saiu = cancelDepois.get(s.contractNumber)
+    const saiu = saidaDe(s.contractNumber)
     if (!saiu) continue
     cancelados++
     mrrPerdido += saiu.mrr || 0
     if (linha) { linha.cancelaram++; linha.mrrPerdido += saiu.mrr || 0 }
     if (flag) cancelSinalizados++
+  }
+
+  // ── Decis: a leitura que sobrevive à deriva do sinal ────────────────────
+  // As faixas (crítico/alto risco/…) usam limiar ABSOLUTO sobre a nota. Isso
+  // quebra a comparação entre meses assim que o volume de sinal muda por
+  // motivo que não é o cliente: quando o ERP ganhou tipos novos de protocolo
+  // (MNT.CLN.TEC.134 saiu de 0 para 20.542 em ~9 meses), a contagem por
+  // contrato subiu, a base inteira escorregou de "excelente" para "crítico" e
+  // o balde de alerta inchou 2,5x sem ninguém ter ficado mais arriscado.
+  //
+  // Decil é posição DENTRO do mês, então o tamanho de cada balde é sempre 10%
+  // por construção e os meses voltam a ser comparáveis. Para a pergunta que a
+  // assertividade faz — "a nota ORDENA risco?" — é o instrumento certo.
+  const ordenados = avaliaveis.slice().sort((a, b) => (a.overall ?? 0) - (b.overall ?? 0))
+  const porDecil = []
+  // Piso de 100: com menos que isso cada decil teria menos de 10 contratos e a
+  // taxa saltaria em degraus de 10 pontos percentuais — número que parece
+  // preciso e não é. Melhor não mostrar decil do que mostrar ruído.
+  if (ordenados.length >= MIN_PARA_DECIL) {
+    const tam = ordenados.length / 10
+    for (let d = 0; d < 10; d++) {
+      const fatia = ordenados.slice(Math.floor(d * tam), Math.floor((d + 1) * tam))
+      const saiu = fatia.filter((s) => saidaDe(s.contractNumber)).length
+      porDecil.push({
+        // 1 = os 10% de PIOR nota; 10 = os 10% de melhor.
+        decil: d + 1,
+        n: fatia.length,
+        cancelaram: saiu,
+        taxa: fatia.length ? round((100 * saiu) / fatia.length) : null,
+      })
+    }
   }
 
   const taxaBase = base ? (100 * cancelados) / base : null
@@ -127,6 +187,9 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janela
     // cobertura do score está ruim e a taxa acima está medindo pouca gente.
     semSinalSuficiente: semSinal,
     cancelamentosSemSinal: cancelSemSinal,
+    // Saídas em lote, fora das taxas mas visíveis: se aparecer volume aqui,
+    // houve evento de empresa naquele mes e a leitura precisa dizer isso.
+    cancelamentosEmLote: emLote,
     minEngines,
     cancelamentos: cancelados,
     taxaCancelamento: round(taxaBase),
@@ -139,6 +202,11 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janela
     // 1,0 = o mesmo que sortear ao acaso.
     lift: recall != null && taxaSinalizada ? round(recall / taxaSinalizada, 2) : null,
     ic95: wilson95(cancelSinalizados, cancelados),
+    porDecil,
+    // Quantas vezes o decil de pior nota cancela mais que a média do mês.
+    // É ESTE o número a comparar entre meses — não o recall, que depende do
+    // tamanho do balde de alerta e por isso se mexe sozinho.
+    liftDecil1: porDecil.length && taxaBase ? round(porDecil[0].taxa / taxaBase) : null,
     porClassificacao: CLASSES.map((cls) => {
       const l = porClasse.get(cls)
       return {
