@@ -25,7 +25,7 @@ const num = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleStr
 function Indisponivel({ motivo }: { motivo: string }) {
   return (
     <Card>
-      <CardHeader title="Churn do mês" subtitle="Conexões, cancelamentos e de onde vieram as saídas" icon={<CalendarRange size={14} />} />
+      <CardHeader title="Assertividade" subtitle="Conexões, cancelamentos e de onde vieram as saídas" icon={<CalendarRange size={14} />} />
       <div className="p-4 flex items-start gap-2.5">
         <Info size={14} className="text-on-surface-variant shrink-0 mt-0.5" />
         <p className="text-xs text-on-surface/85 leading-relaxed">{motivo}</p>
@@ -182,7 +182,7 @@ export function MonthlyCohortCard() {
   if (loading) {
     return (
       <Card>
-        <CardHeader title="Churn do mês" subtitle="Conexões, cancelamentos e de onde vieram as saídas" icon={<CalendarRange size={14} />} />
+        <CardHeader title="Assertividade" subtitle="Conexões, cancelamentos e de onde vieram as saídas" icon={<CalendarRange size={14} />} />
         <div className="p-4 flex items-center gap-2 text-[11px] text-on-surface-variant">
           <Loader2 size={12} className="animate-spin" /> carregando…
         </div>
@@ -198,7 +198,7 @@ export function MonthlyCohortCard() {
   return (
     <Card>
       <CardHeader
-        title={`Churn de ${fmtMesLongo(selecionado.mesIndicador)}`}
+        title={`Assertividade · ${fmtMesLongo(selecionado.mesIndicador)}`}
         subtitle={
           ehAtual
             ? `Mês em curso, parcial até ${fmtDia(selecionado.observadoAte)} · nota congelada em ${fmtDia(selecionado.notaCongeladaEm)}`

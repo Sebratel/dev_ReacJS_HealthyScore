@@ -34,9 +34,8 @@ export const MIN_ENGINES = 2
 export const MIN_PARA_DECIL = 100
 
 // Saídas que NÃO são churn: o contrato acabou por decisão da empresa, não do
-// cliente. Ficam fora das taxas pelo mesmo motivo que a accuracy.mjs tira quem
-// nunca chegou a instalar — não há sinal de saúde a captar, e incluí-las só
-// castiga o score por não prever o imprevisível.
+// cliente. Ficam fora das taxas porque não há sinal de saúde a captar nelas —
+// incluí-las só castiga o score por não prever o imprevisível.
 //
 // FNC.CAN.020 = "Cancelamento de Contratos em Lote (VENDA OPERAÇÃO)": 1.034
 // contratos em junho/2026 (810 num dia, 361 em outro) e ZERO em todos os
