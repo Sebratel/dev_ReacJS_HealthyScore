@@ -129,6 +129,16 @@ services:
       # porque o score "depois" só é novo quando o snapshot é novo.
       # Desligue com ACTION_PLAN_OUTCOMES=off.
       ACTION_PLAN_OUTCOMES: ${ACTION_PLAN_OUTCOMES:-}
+      # Assertividade (coorte mensal): roda no dia 1º, por último no ciclo, e
+      # publica o indicador do mês que fechou. Grava monthly-cohort.json ao lado
+      # do snapshot — é o MESMO /snapshot que a `api` monta (read-only) para ler.
+      # Ligada por omissão; as variáveis ficam aqui só para serem visíveis.
+      #   MONTHLY_COHORT=off       desliga
+      #   MONTHLY_COHORT_DAY=1     dia do mês em que publica
+      #   MONTHLY_COHORT_FORCE=true  roda fora do dia marcado (teste)
+      MONTHLY_COHORT: ${MONTHLY_COHORT:-}
+      MONTHLY_COHORT_DAY: ${MONTHLY_COHORT_DAY:-}
+      MONTHLY_COHORT_FORCE: ${MONTHLY_COHORT_FORCE:-}
       SNAPSHOT_PATH: /snapshot/realClients.data
       OFFICIAL_CONFIG_PATH: /app/data/official-config.json
       DB_APP_DATABASE: ${DB_APP_DATABASE:-DB_HealthScore}
