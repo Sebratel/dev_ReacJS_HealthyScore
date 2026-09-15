@@ -23,7 +23,7 @@ dns.setDefaultResultOrder('ipv4first')
 import { getCatalog, ENGINE_LABELS } from '../scripts/queries/index.mjs'
 import { writeOverride, deleteOverride, OVERRIDES_PATH } from '../scripts/queries/overrides.mjs'
 import { getQueryDef } from '../scripts/queries/registry.mjs'
-import { getStatus as datasetStatus, getClients, getCancelledClients, getDataset, getVersion } from './dataset.mjs'
+import { getStatus as datasetStatus, getClients, getCancelledClients, getDataset } from './dataset.mjs'
 import { runEngine, runDashboard, ENGINE_KEYS } from './engines.mjs'
 import { getClientHistory, getScoreHistoryStatus } from './scoreHistory.mjs'
 import { getMonthlyCohort } from './monthlyCohortStore.mjs'
@@ -244,6 +244,13 @@ app.get('/api/clients/:id/score-history', requireAuth(), (req, res) => {
   res.json({ clientId: req.params.id, points: series, status: getScoreHistoryStatus() })
 })
 
+
+// Assertividade — indicador do mês em curso + histórico dos meses fechados.
+// Só LÊ o artefato que o job grava (o cálculo varre a base inteira e leva ~1
+// min por mês; não dá para fazer por requisição). Ver server/monthlyCohortStore.mjs.
+app.get('/api/monthly-cohort', requireAuth(), (_req, res) => {
+  res.json(getMonthlyCohort())
+})
 
 // Catálogo de queries — a tela de SQL é área do power_user (view + edit).
 app.get('/api/queries', requireAuth({ minRole: 'power_user' }), (req, res) => {
