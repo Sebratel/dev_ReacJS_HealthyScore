@@ -104,7 +104,7 @@ function Detalhe({ p }: { p: CohortPoint }) {
         </div>
         <div className="rounded-xl bg-surface-container-lowest border border-outline p-3">
           <p className="text-[10px] uppercase tracking-wider font-semibold text-on-surface-variant">Cancelamentos</p>
-          <p className="text-3xl font-bold text-on-surface leading-tight mt-0.5">{num(p.cancelamentos)}</p>
+          <p className="text-3xl font-bold text-on-surface leading-tight mt-0.5">{num(p.cancelamentosNoMes ?? p.cancelamentos)}</p>
           <p className="text-[11px] text-on-surface-variant">
             em {fmtMesLongo(p.mesIndicador)}
             {p.parcial && <> até {fmtDia(p.observadoAte)}</>}
@@ -113,15 +113,32 @@ function Detalhe({ p }: { p: CohortPoint }) {
         <div className="rounded-xl bg-surface-container-lowest border border-outline p-3">
           <p className="text-[10px] uppercase tracking-wider font-semibold text-on-surface-variant">Taxa de churn</p>
           <p className="text-3xl font-bold text-on-surface leading-tight mt-0.5">
-            {p.taxaCancelamento == null ? '—' : `${p.taxaCancelamento}%`}
+            {(p.taxaChurnConexoes ?? p.taxaCancelamento) == null ? '—' : `${p.taxaChurnConexoes ?? p.taxaCancelamento}%`}
           </p>
+          {/* Mesma régua do relatório oficial: cancelamentos do mês sobre a
+              base de conexões do mês anterior. Dizer a fórmula na tela evita a
+              reunião em que dois números certos parecem se contradizer. */}
           <p className="text-[11px] text-on-surface-variant">
-            sobre {num(p.contratosAtivos)} contratos avaliáveis
+            cancelamentos ÷ conexões do mês anterior
           </p>
         </div>
       </div>
 
       <DeOndeVieram p={p} />
+
+      {p.cancelamentosNoMes != null && p.cancelamentosNoMes !== p.cancelamentos && (
+        <p className="text-[10px] text-on-surface-variant leading-relaxed rounded-lg bg-surface-container-lowest border border-outline px-3 py-2">
+          A composição acima cobre os <span className="font-mono">{num(p.cancelamentos)}</span> cancelamentos que o score
+          pôde avaliar, dos <span className="font-mono">{num(p.cancelamentosNoMes)}</span> do mês.
+          {!!p.foraDaCoorte && (
+            <> Ficaram de fora <span className="font-mono">{num(p.foraDaCoorte)}</span> que nasceram e cancelaram dentro do
+            próprio mês — não existiam na base quando a nota foi congelada, então não havia o que prever.</>
+          )}
+          {!!p.cancelamentosEmLote && (
+            <> Outros <span className="font-mono">{num(p.cancelamentosEmLote)}</span> saíram em lote por venda de operação.</>
+          )}
+        </p>
+      )}
 
       {/* Rodapé técnico. O lift do decil 1 vem antes do recall de propósito:
           é o único dos dois que se compara entre meses (o recall se mexe
@@ -137,11 +154,6 @@ function Detalhe({ p }: { p: CohortPoint }) {
         <span>
           MRR perdido: <span className="font-mono text-on-surface/80">R$ {num(p.mrrPerdido == null ? null : Math.round(p.mrrPerdido))}</span>
         </span>
-        {p.cancelamentosEmLote > 0 && (
-          <span className="text-risk-medium">
-            + {num(p.cancelamentosEmLote)} saíram em lote (venda de operação), fora da conta
-          </span>
-        )}
       </div>
 
       {p.semSinalSuficiente > 0 && (

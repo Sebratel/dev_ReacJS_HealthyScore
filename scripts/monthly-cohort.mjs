@@ -210,6 +210,9 @@ for (const mes of meses) {
     cancelDepois,
     // Denominador do mês do indicador: base no começo dele = fim do mês do
     // escore. E a base de fechamento, que é o número que a operação reconhece.
+    // Total OFICIAL do mês: cancelRows ja vem com exatamente os filtros do
+    // relatório da diretoria, então o tamanho dele É o número deles.
+    totalNoMes: cancelRows.length,
     conexoesInicio: conexoesPorMes.get(mes) ?? null,
     conexoesFim: parcial ? (conexoesUltimoDia?.conexoes ?? null) : (conexoesPorMes.get(janela) ?? null),
     janelaDesfecho: janela,

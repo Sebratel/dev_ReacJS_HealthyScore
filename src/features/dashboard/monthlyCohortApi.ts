@@ -39,6 +39,13 @@ export interface CohortPoint {
   semSinalSuficiente: number
   cancelamentosSemSinal: number
   cancelamentosEmLote: number
+  /** Total OFICIAL do mês (mesma regra do relatório da diretoria). */
+  cancelamentosNoMes: number | null
+  /** Cancelaram no mês mas o score não pôde avaliar (nasceram depois da foto). */
+  foraDaCoorte: number | null
+  /** Churn na régua oficial: cancelamentos ÷ conexões do mês anterior. */
+  taxaChurnConexoes: number | null
+  /** Subconjunto que o score avaliou — base da composição por faixa. */
   cancelamentos: number
   taxaCancelamento: number | null
   mrrPerdido: number | null

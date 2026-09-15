@@ -239,6 +239,41 @@ describe('pontoMensal', () => {
     expect(p.liftDecil1).toBe(10)
   })
 
+  it('reconcilia com o total oficial do mês e mostra o que ficou de fora', () => {
+    // Números reais de julho/2026: o relatório da diretoria conta 1.448 (mesma
+    // query, hoje), o score avaliou 1.426. A diferença é 12 que nasceram e
+    // cancelaram dentro do mês + 10 de venda de operação. A tela precisa dos
+    // dois lados, senão contradiz o relatório oficial.
+    const cancel = new Map([...cancelDepois, ['C2', { mrr: 0, code: 'FNC.CAN.020' }]])
+    const p = pontoMensal({
+      mes: '2026-05', scored, cancelDepois: cancel, janelaDesfecho: '2026-06',
+      conexoesInicio: 1000, totalNoMes: 20,
+    })
+    expect(p.cancelamentos).toBe(3)       // avaliados pelo score
+    expect(p.cancelamentosEmLote).toBe(1) // venda de operação
+    expect(p.cancelamentosNoMes).toBe(20) // total oficial
+    // 20 − 3 avaliados − 1 lote − 0 sem sinal = 16 fora da coorte
+    expect(p.foraDaCoorte).toBe(16)
+  })
+
+  it('a taxa de churn segue a fórmula oficial: total ÷ conexões do mês anterior', () => {
+    const p = pontoMensal({
+      mes: '2026-05', scored, cancelDepois, janelaDesfecho: '2026-06',
+      conexoesInicio: 84379, totalNoMes: 1460,
+    })
+    // O número que a diretoria publicou para julho: 1.460 / 84.379 = 1,73%.
+    expect(p.taxaChurnConexoes).toBeCloseTo(1.73, 2)
+    // A taxa da coorte continua existindo, com outro denominador e outro uso.
+    expect(p.taxaCancelamento).toBe(30)
+  })
+
+  it('sem total oficial informado, não inventa reconciliação', () => {
+    const p = pontoMensal({ mes: '2026-05', scored, cancelDepois, janelaDesfecho: '2026-06' })
+    expect(p.cancelamentosNoMes).toBeNull()
+    expect(p.foraDaCoorte).toBeNull()
+    expect(p.taxaChurnConexoes).toBeNull()
+  })
+
   it('base vazia não estoura', () => {
     const vazio = pontoMensal({ mes: '2026-05', scored: [], cancelDepois, conexoes: null, janelaDesfecho: '2026-06' })
     expect(vazio.contratosAtivos).toBe(0)

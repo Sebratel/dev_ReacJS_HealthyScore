@@ -87,7 +87,7 @@ export function wilson95(hits, n) {
  *                                — cancelamentos ocorridos na janela de desfecho
  * @param {number|null} conexoes  conexões provisionadas no último dia do mês
  */
-export function pontoMensal({ mes, scored, cancelDepois, conexoesInicio = null, conexoesFim = null, janelaDesfecho, minEngines = MIN_ENGINES }) {
+export function pontoMensal({ mes, scored, cancelDepois, conexoesInicio = null, conexoesFim = null, janelaDesfecho, minEngines = MIN_ENGINES, totalNoMes = null }) {
   // Contrato pontuado por UMA engine só não tem nota — tem palpite. Na prática
   // é sempre a comercial (plano, vendedor, tempo de casa), que roda para todo
   // mundo e, sozinha, joga quase todos em "excelente". Incluir esses contratos
@@ -205,6 +205,24 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoesInicio = null, 
     // houve evento de empresa naquele mes e a leitura precisa dizer isso.
     cancelamentosEmLote: emLote,
     minEngines,
+    // ── Dois totais de cancelamento, e a diferença precisa ficar visível ──
+    // `cancelamentosNoMes` é o número OFICIAL da empresa: todo contrato que
+    // cancelou no mês passando pelos mesmos filtros do relatório da diretoria
+    // (v_status, v_stage, tipo <> 19, último evento <> OTR.CAN.006).
+    //
+    // `cancelamentos` é o subconjunto que o SCORE pôde avaliar — quem já
+    // existia na base na data da nota e tinha sinal suficiente. É sobre ele que
+    // a composição por faixa faz sentido: não dá para cobrar acerto de contrato
+    // que nasceu depois da foto.
+    //
+    // Em julho/2026 a diferença foi 1.448 contra 1.426: 12 nasceram e
+    // cancelaram dentro do mês, 10 foram venda de operação. Sem mostrar os dois
+    // números, a tela contradiz o relatório oficial e perde a discussão.
+    cancelamentosNoMes: totalNoMes,
+    foraDaCoorte: totalNoMes == null ? null : Math.max(0, totalNoMes - cancelados - emLote - cancelSemSinal),
+    // Churn na régua da diretoria: cancelamentos do mês sobre a base de
+    // conexões do mês ANTERIOR. É esta a taxa que vai para a reunião.
+    taxaChurnConexoes: totalNoMes != null && conexoesInicio ? round((100 * totalNoMes) / conexoesInicio) : null,
     cancelamentos: cancelados,
     taxaCancelamento: round(taxaBase),
     mrrPerdido: round(mrrPerdido),
