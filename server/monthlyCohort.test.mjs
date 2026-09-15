@@ -107,6 +107,33 @@ describe('pontoMensal', () => {
     expect(saud.taxa).toBeCloseTo(16.67, 2)
   })
 
+  it('separa "de onde veio a perda" de "qual o risco da faixa"', () => {
+    // As duas porcentagens respondem perguntas diferentes e são fáceis de
+    // confundir numa reunião. Crítico tem 2 contratos e 1 saiu:
+    //   taxa         = 1/2  = 50%   (metade de quem está em crítico saiu)
+    //   pctDasSaidas = 1/3  = 33,3% (um terço das saídas veio do crítico)
+    const crit = p.porClassificacao.find((x) => x.classificacao === 'critical')
+    expect(crit.taxa).toBe(50)
+    expect(crit.pctDasSaidas).toBeCloseTo(33.33, 2)
+
+    // Saudável: 6 contratos, 1 saiu → risco baixo, mas mesma fatia da perda.
+    const saud = p.porClassificacao.find((x) => x.classificacao === 'healthy')
+    expect(saud.taxa).toBeCloseTo(16.67, 2)
+    expect(saud.pctDasSaidas).toBeCloseTo(33.33, 2)
+  })
+
+  it('a composição das saídas fecha em 100% dos cancelamentos', () => {
+    const soma = p.porClassificacao.reduce((a, x) => a + x.cancelaram, 0)
+    expect(soma).toBe(p.cancelamentos)
+    const somaPct = p.porClassificacao.reduce((a, x) => a + (x.pctDasSaidas ?? 0), 0)
+    expect(somaPct).toBeCloseTo(100, 1)
+  })
+
+  it('mês sem saída não inventa composição', () => {
+    const vazio = pontoMensal({ mes: '2026-05', scored, cancelDepois: new Map(), janelaDesfecho: '2026-06' })
+    for (const c of vazio.porClassificacao) expect(c.pctDasSaidas).toBeNull()
+  })
+
   it('lista todas as classes, mesmo as vazias', () => {
     expect(p.porClassificacao).toHaveLength(5)
     const exc = p.porClassificacao.find((x) => x.classificacao === 'excellent')

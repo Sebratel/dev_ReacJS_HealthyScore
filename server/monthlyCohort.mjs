@@ -228,7 +228,19 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoesInicio = null, 
         classificacao: cls,
         naBase: l.naBase,
         cancelaram: l.cancelaram,
+        // Duas porcentagens que respondem perguntas DIFERENTES e são fáceis de
+        // trocar uma pela outra numa reunião:
+        //
+        //   taxa         — dos que estavam nesta faixa, quantos saíram.
+        //                  Mede o risco de quem está aqui. Denominador = faixa.
+        //   pctDasSaidas — dos que saíram, quantos estavam nesta faixa.
+        //                  Mede de onde vem a perda. Denominador = cancelamentos.
+        //
+        // "500 dos 1.250 cancelados eram críticos = 40%" é pctDasSaidas. Num
+        // mês em que crítico tem 1.000 contratos e 500 saem, a taxa é 50% e a
+        // pctDasSaidas é 40% — números certos, leituras distintas.
         taxa: l.naBase ? round((100 * l.cancelaram) / l.naBase) : null,
+        pctDasSaidas: cancelados ? round((100 * l.cancelaram) / cancelados) : null,
         mrrPerdido: round(l.mrrPerdido),
       }
     }),

@@ -11,6 +11,7 @@
 //   npm run cohort:mensal -- --de 2026-01 --ate 2026-08
 //
 // Opções:
+//   --mes-atual      o mês EM CURSO (parcial), com conexões do dia mais recente
 //   --mes-anterior   só o mês passado (modo do agendamento do dia 1º)
 //   --de / --ate     faixa de meses (default: últimos 6 fechados)
 //   --limite N       amostra aleatória de N contratos por mês (teste rápido)
@@ -82,12 +83,20 @@ function mesAnteriorDoEscore() {
 }
 
 const MES_ANTERIOR = process.argv.includes('--mes-anterior')
+// Mês em curso: o indicador é o do mês corrente, ainda aberto. A nota congela
+// no fim do mês passado, então o mês do ESCORE é o anterior.
+const MES_ATUAL = process.argv.includes('--mes-atual')
+function mesDoEscoreParaAtual() {
+  const h = new Date()
+  const d = new Date(Date.UTC(h.getUTCFullYear(), h.getUTCMonth() - 1, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
 const padrao = mesesPadrao()
 // `mesEscore` é o mês em que a nota congela; o indicador sai rotulado com o
 // mês SEGUINTE, que é quando os cancelamentos acontecem.
-const alvo = MES_ANTERIOR ? mesAnteriorDoEscore() : null
-const DE = MES_ANTERIOR ? alvo : arg('--de', padrao.de)
-const ATE = MES_ANTERIOR ? alvo : arg('--ate', padrao.ate)
+const alvo = MES_ATUAL ? mesDoEscoreParaAtual() : MES_ANTERIOR ? mesAnteriorDoEscore() : null
+const DE = alvo ?? arg('--de', padrao.de)
+const ATE = alvo ?? arg('--ate', padrao.ate)
 const LIMITE = Number(arg('--limite', '0')) || 0
 // Saída ao lado do snapshot (volume compartilhado), como o score-history faz
 // com HISTORY_DIR. Gravar dentro do contêiner perderia a série a cada deploy e
@@ -124,6 +133,7 @@ let mariaPool = null
 // Denominador operacional. Se a base não responder, seguimos sem ela: a
 // coorte inteira não pode depender de um número de contexto.
 const conexoesPorMes = new Map()
+let conexoesUltimoDia = null
 try {
   mariaPool = await makeMariaPool()
   const [rows] = await mariaPool.query(getEffectiveSql('Q_MARIA_CONEXOES_MES'))
@@ -132,6 +142,12 @@ try {
     conexoesPorMes.set(dia.slice(0, 7), Number(r.conexoes))
   }
   console.log(`[mensal] conexões: ${conexoesPorMes.size} meses (${[...conexoesPorMes.keys()].join(', ')})`)
+  // O mês em curso não tem "último dia" ainda: usa a foto mais recente.
+  const [ult] = await mariaPool.query(getEffectiveSql('Q_MARIA_CONEXOES_ULTIMO_DIA'))
+  if (ult?.length) {
+    conexoesUltimoDia = { dia: String(ult[0].dia).slice(0, 10), conexoes: Number(ult[0].conexoes) }
+    console.log(`[mensal] conexões mais recentes: ${conexoesUltimoDia.conexoes} em ${conexoesUltimoDia.dia}`)
+  }
 } catch (e) {
   console.warn(`[mensal] sem conexões do MariaDB (${e.message}) — seguindo só com contratos.`)
 }
@@ -166,9 +182,17 @@ for (const mes of meses) {
   const scored = scoreAllClients(base, { configs: OFFICIAL_CONFIGS, monthly: [] })
 
   // Desfecho: cancelamentos do mês SEGUINTE, por contrato.
+  // Mês em curso: a janela vai do dia 1º até a foto mais recente de conexões,
+  // não até o fim do mês (que ainda não chegou) nem até "hoje" solto. Amarrar
+  // as duas pontas na MESMA data evita o descompasso de contar cancelamento de
+  // um dia que o denominador ainda não enxerga.
+  const parcial = MES_ATUAL
+  const fimJanela = parcial
+    ? (conexoesUltimoDia?.dia ?? new Date().toISOString().slice(0, 10))
+    : fimDoMes(janela)
   const { rows: cancelRows } = await pool.query(
     getEffectiveSql('Q_ASOF_CANCEL_MES', { cancelled: 'all' }),
-    [fimDoMes(janela).slice(0, 8) + '01', fimDoMes(janela)]
+    [fimDoMes(janela).slice(0, 8) + '01', fimJanela]
   )
   const cancelDepois = new Map()
   for (const r of cancelRows) {
@@ -187,7 +211,7 @@ for (const mes of meses) {
     // Denominador do mês do indicador: base no começo dele = fim do mês do
     // escore. E a base de fechamento, que é o número que a operação reconhece.
     conexoesInicio: conexoesPorMes.get(mes) ?? null,
-    conexoesFim: conexoesPorMes.get(janela) ?? null,
+    conexoesFim: parcial ? (conexoesUltimoDia?.conexoes ?? null) : (conexoesPorMes.get(janela) ?? null),
     janelaDesfecho: janela,
   })
   // Cobertura de engine: quantas das 7 realmente pontuaram. Conexão e Rede não
@@ -196,6 +220,11 @@ for (const mes of meses) {
   const somaEngines = scored.reduce((a, s) => a + (s.enginesPresent || 0), 0)
   ponto.enginesMedia = scored.length ? Number((somaEngines / scored.length).toFixed(2)) : null
   ponto.janelaSinal = janelaSinal
+  // Mês aberto precisa dizer que está aberto: a taxa dele NÃO se compara com a
+  // de um mês fechado, porque só parte do mês teve chance de gerar saída.
+  ponto.parcial = parcial
+  ponto.observadoAte = fimJanela
+  if (parcial && conexoesUltimoDia) ponto.conexoesFimEm = conexoesUltimoDia.dia
   pontos.push(ponto)
 
   console.log(
@@ -237,7 +266,10 @@ if (anteriores.length) {
   console.log(`[mensal] série: ${anteriores.length} ponto(s) já gravado(s) + ${pontos.length} novo(s) = ${serie.length}`)
 }
 
-const { resumo } = resumirSerie(serie)
+// O mês aberto fica FORA do agregado: só parte dele teve chance de gerar
+// saída, então somá-lo puxaria a taxa média para baixo e a série pareceria
+// melhorando toda vez que o mês virasse.
+const { resumo } = resumirSerie(serie.filter((p) => !p.parcial))
 const payload = {
   geradoEm: new Date().toISOString(),
   configVersion: CONFIG_VERSION,

@@ -4,6 +4,7 @@ import { Activity, AlertTriangle, DollarSign, Users, Gauge as GaugeIcon, Chevron
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { AccuracyCard } from './AccuracyCard'
+import { MonthlyCohortCard } from './MonthlyCohortCard'
 import { RECEITA_RISCO_DEF } from './revenueAtRisk'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { HealthGauge, scoreToHealthClass } from '@/components/ui/HealthGauge'
@@ -168,6 +169,11 @@ export default function DashboardPage() {
         <KpiCard label="Health Score Global" value={`${globalHealth}/100`} subtitle="Média dos 7 módulos" icon={<Activity size={14} />} variant={globalHealth < 50 ? 'danger' : globalHealth < 70 ? 'warning' : 'success'} iconColor={globalHealth < 50 ? 'text-risk-critical' : 'text-risk-low'} />
         <KpiCard label="Clientes em Risco" value={rk.atRiskCount.toLocaleString('pt-BR')} subtitle={`Receita em risco: ${formatCurrency(rk.revenueAtRiskMonthly)}/mês`} hint={RECEITA_RISCO_DEF} icon={<AlertTriangle size={14} />} variant="danger" iconColor="text-risk-critical" />
       </div>
+
+      {/* Churn do mês — a leitura principal do sistema: quantas conexões,
+          quantos cancelaram e de onde vieram as saídas. Vem antes da
+          assertividade porque é o número que a operação abre para ver. */}
+      <MonthlyCohortCard />
 
       {/* Assertividade — a plataforma acerta? Fica na primeira dobra de propósito. */}
       <AccuracyCard />

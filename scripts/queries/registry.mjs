@@ -529,6 +529,20 @@ order by dia, conexoes desc
 `,
   },
 
+  {
+    id: 'Q_MARIA_CONEXOES_ULTIMO_DIA', engine: 'mensal', db: 'mariadb',
+    title: 'Conexões no dia mais recente disponível (MariaDB)',
+    description:
+      'Denominador do MÊS EM CURSO, que ainda não tem último dia. Pega a foto mais recente do snapshot diário — na prática a de ontem, porque a carga roda perto da meia-noite. Devolve a data junto para a tela poder dizer de quando é o número em vez de deixar o usuário supor que é de hoje.',
+    params: [],
+    sql: `
+select date(acd.\`date\`) dia, sum(acd.total) conexoes
+from DB_Applicattion.Autentication_Contracts_Daily acd
+where date(acd.\`date\`) = (select max(date(\`date\`)) from DB_Applicattion.Autentication_Contracts_Daily)
+group by dia
+`,
+  },
+
   // ── Network Engine — massivas (MariaDB) × infra (PostgreSQL) ─
   {
     id: 'Q_MARIA_SPLITTER', engine: 'rede', db: 'mariadb',

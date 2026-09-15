@@ -27,6 +27,7 @@ import { getStatus as datasetStatus, getClients, getCancelledClients, getDataset
 import { runEngine, runDashboard, ENGINE_KEYS } from './engines.mjs'
 import { getClientHistory, getScoreHistoryStatus } from './scoreHistory.mjs'
 import { computeAccuracy } from './accuracy.mjs'
+import { getMonthlyCohort } from './monthlyCohortStore.mjs'
 import { buildSuggestions, deriveLists } from '../src/features/cancellation-profiles/suggestionEngine.ts'
 import { resolveRole, atLeast, listRoles, setRole, deleteRole } from './roles.mjs'
 import { getOfficialConfig, setOfficialConfigs, setOfficialThresholds } from './officialConfig.mjs'
@@ -255,6 +256,13 @@ app.get('/api/accuracy', requireAuth(), (_req, res) => {
   const key = `${getVersion()}:${st.points}:${st.to ?? ''}`
   if (accCache.key !== key) accCache = { key, value: computeAccuracy() }
   res.json(accCache.value)
+})
+
+// Coorte mensal — indicador do mês em curso + histórico dos meses fechados.
+// Só LÊ o artefato que o job do dia 1º gravou (o cálculo varre a base inteira
+// e leva ~1 min por mês; não dá para fazer por requisição).
+app.get('/api/monthly-cohort', requireAuth(), (_req, res) => {
+  res.json(getMonthlyCohort())
 })
 
 // Catálogo de queries — a tela de SQL é área do power_user (view + edit).
