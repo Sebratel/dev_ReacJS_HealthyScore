@@ -18,23 +18,14 @@ import { DEFAULT_FIELD_CONFIG, FIELD_INDICATOR_ORDER } from '@/features/field-en
 import { DEFAULT_INSTALLATION_CONFIG, INSTALL_INDICATOR_ORDER } from '@/features/installation-engine/installationConfig'
 import { DEFAULT_RELATIONSHIP_CONFIG, REL_INDICATOR_ORDER } from '@/features/relationship-engine/relationshipConfig'
 
-export type EngineKey =
-  | 'financial' | 'commercial' | 'connection' | 'network'
-  | 'field' | 'installation' | 'relationship'
+// Engine e setor são a mesma coisa vista de dois ângulos (o cálculo e o dono
+// do indicador), então as chaves e os rótulos moram num lugar só — em
+// features/auth/sectors.ts, que também define o escopo de edição.
+import { SECTOR_ORDER, SECTOR_LABELS, type SectorKey } from '@/features/auth/sectors'
 
-export const ENGINE_ORDER: EngineKey[] = [
-  'financial', 'commercial', 'connection', 'network', 'field', 'installation', 'relationship',
-]
-
-export const ENGINE_LABELS: Record<EngineKey, string> = {
-  financial: 'Financeiro',
-  commercial: 'Comercial',
-  connection: 'Conexão',
-  network: 'Rede',
-  field: 'Manutenção',
-  installation: 'Instalação',
-  relationship: 'Relacionamento',
-}
+export type EngineKey = SectorKey
+export const ENGINE_ORDER: EngineKey[] = SECTOR_ORDER
+export const ENGINE_LABELS: Record<EngineKey, string> = SECTOR_LABELS
 
 type ConfigLike = { indicators: Record<string, { label: string; description?: string }> }
 

@@ -30,6 +30,20 @@ const FLAGGED = new Set(['critical', 'high_risk'])
 // comportamento — financeiro, protocolo, equipamento. Ver pontoMensal().
 export const MIN_ENGINES = 2
 
+// Base mínima para a leitura por decil fazer sentido (10 por balde).
+export const MIN_PARA_DECIL = 100
+
+// Saídas que NÃO são churn: o contrato acabou por decisão da empresa, não do
+// cliente. Ficam fora das taxas porque não há sinal de saúde a captar nelas —
+// incluí-las só castiga o score por não prever o imprevisível.
+//
+// FNC.CAN.020 = "Cancelamento de Contratos em Lote (VENDA OPERAÇÃO)": 1.034
+// contratos em junho/2026 (810 num dia, 361 em outro) e ZERO em todos os
+// outros meses. Com eles dentro, junho pulava para 2.461 saídas contra ~1.500
+// dos vizinhos, e o decil de MELHOR nota cancelava 3,75% contra 0,5% —
+// justamente o sintoma de evento alheio à saúde do cliente.
+export const CODIGOS_NAO_CHURN = new Set(['FNC.CAN.020'])
+
 const round = (v, d = 2) => (v == null || !Number.isFinite(v) ? null : Number(v.toFixed(d)))
 
 // Último dia do mês de uma data 'YYYY-MM' (sem fuso: tudo em UTC e string).
@@ -73,7 +87,7 @@ export function wilson95(hits, n) {
  *                                — cancelamentos ocorridos na janela de desfecho
  * @param {number|null} conexoes  conexões provisionadas no último dia do mês
  */
-export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janelaDesfecho, minEngines = MIN_ENGINES }) {
+export function pontoMensal({ mes, scored, cancelDepois, conexoesInicio = null, conexoesFim = null, janelaDesfecho, minEngines = MIN_ENGINES, totalNoMes = null }) {
   // Contrato pontuado por UMA engine só não tem nota — tem palpite. Na prática
   // é sempre a comercial (plano, vendedor, tempo de casa), que roda para todo
   // mundo e, sozinha, joga quase todos em "excelente". Incluir esses contratos
@@ -81,10 +95,24 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janela
   // é. Ficam FORA das taxas e contados à parte, para não sumirem da vista.
   const avaliaveis = scored.filter((s) => (s.enginesPresent ?? 0) >= minEngines)
   const semSinal = scored.length - avaliaveis.length
+
+  // Saída que conta como churn: existe e não é evento em lote da empresa.
+  // Uma função só, usada por todas as contagens abaixo (faixas e decis), para
+  // não haver como uma excluir e a outra não.
+  const saidaDe = (contractNumber) => {
+    const c = cancelDepois.get(contractNumber)
+    if (!c) return null
+    if (c.code && CODIGOS_NAO_CHURN.has(c.code)) return null
+    return c
+  }
+
   let cancelSemSinal = 0
+  let emLote = 0
   for (const s of scored) {
+    const bruto = cancelDepois.get(s.contractNumber)
+    if (bruto?.code && CODIGOS_NAO_CHURN.has(bruto.code)) emLote++
     if ((s.enginesPresent ?? 0) >= minEngines) continue
-    if (cancelDepois.get(s.contractNumber)) cancelSemSinal++
+    if (saidaDe(s.contractNumber)) cancelSemSinal++
   }
 
   const base = avaliaveis.length
@@ -102,7 +130,7 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janela
     const flag = FLAGGED.has(cls)
     if (flag) sinalizadosNaBase++
 
-    const saiu = cancelDepois.get(s.contractNumber)
+    const saiu = saidaDe(s.contractNumber)
     if (!saiu) continue
     cancelados++
     mrrPerdido += saiu.mrr || 0
@@ -110,24 +138,95 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janela
     if (flag) cancelSinalizados++
   }
 
+  // ── Decis: a leitura que sobrevive à deriva do sinal ────────────────────
+  // As faixas (crítico/alto risco/…) usam limiar ABSOLUTO sobre a nota. Isso
+  // quebra a comparação entre meses assim que o volume de sinal muda por
+  // motivo que não é o cliente: quando o ERP ganhou tipos novos de protocolo
+  // (MNT.CLN.TEC.134 saiu de 0 para 20.542 em ~9 meses), a contagem por
+  // contrato subiu, a base inteira escorregou de "excelente" para "crítico" e
+  // o balde de alerta inchou 2,5x sem ninguém ter ficado mais arriscado.
+  //
+  // Decil é posição DENTRO do mês, então o tamanho de cada balde é sempre 10%
+  // por construção e os meses voltam a ser comparáveis. Para a pergunta que a
+  // assertividade faz — "a nota ORDENA risco?" — é o instrumento certo.
+  const ordenados = avaliaveis.slice().sort((a, b) => (a.overall ?? 0) - (b.overall ?? 0))
+  const porDecil = []
+  // Piso de 100: com menos que isso cada decil teria menos de 10 contratos e a
+  // taxa saltaria em degraus de 10 pontos percentuais — número que parece
+  // preciso e não é. Melhor não mostrar decil do que mostrar ruído.
+  if (ordenados.length >= MIN_PARA_DECIL) {
+    const tam = ordenados.length / 10
+    for (let d = 0; d < 10; d++) {
+      const fatia = ordenados.slice(Math.floor(d * tam), Math.floor((d + 1) * tam))
+      const saiu = fatia.filter((s) => saidaDe(s.contractNumber)).length
+      porDecil.push({
+        // 1 = os 10% de PIOR nota; 10 = os 10% de melhor.
+        decil: d + 1,
+        n: fatia.length,
+        cancelaram: saiu,
+        taxa: fatia.length ? round((100 * saiu) / fatia.length) : null,
+      })
+    }
+  }
+
   const taxaBase = base ? (100 * cancelados) / base : null
   const taxaSinalizada = base ? (100 * sinalizadosNaBase) / base : null
   const recall = cancelados ? (100 * cancelSinalizados) / cancelados : null
 
   return {
+    // ── Dois meses, e confundi-los inverte a leitura ─────────────────────
+    // `mesIndicador` é o mês a que o indicador SE REFERE: aquele em que os
+    // cancelamentos aconteceram. É o rótulo da tela — no dia 1º de setembro o
+    // que se publica é "o indicador de agosto".
+    // `mes` é quando a NOTA foi congelada: o fim do mês anterior. Tem que ser
+    // antes, senão a nota usaria dados criados pelo próprio cancelamento.
+    mesIndicador: janelaDesfecho,
     mes,
+    notaCongeladaEm: fimDoMes(mes),
     fimDoMes: fimDoMes(mes),
     janelaDesfecho,
-    // Denominadores lado a lado: conexão é o número que a operação reconhece,
-    // contrato é o que tem identidade. Divergem ~2% e isso é esperado.
-    conexoes,
+    // Conexões provisionadas nas duas pontas do mês do indicador.
+    // `conexoesInicio` (fim do mês anterior) é o denominador CERTO para taxa de
+    // cancelamento: é quem estava lá para poder sair. `conexoesFim` já exclui
+    // quem saiu, então dividir por ele infla a taxa. Os dois ficam expostos
+    // porque a operação reconhece o número de fechamento do mês, e esconder um
+    // deles só gera a pergunta "esse número não bate com o meu".
+    conexoesInicio,
+    conexoesFim,
+    // Contrato é o que tem identidade; conexão é o que a operação reconhece.
+    // Divergem ~2% de forma estável e isso é esperado.
     contratosAtivos: base,
     // Transparência da exclusão: quantos ficaram de fora por não ter sinal
     // suficiente, e quantos DESSES cancelaram. Se o segundo número for alto, a
     // cobertura do score está ruim e a taxa acima está medindo pouca gente.
     semSinalSuficiente: semSinal,
     cancelamentosSemSinal: cancelSemSinal,
+    // Saídas em lote, fora das taxas mas visíveis: se aparecer volume aqui,
+    // houve evento de empresa naquele mes e a leitura precisa dizer isso.
+    cancelamentosEmLote: emLote,
     minEngines,
+    // ── Dois totais de cancelamento, e a diferença precisa ficar visível ──
+    // `cancelamentosNoMes` é o número OFICIAL da empresa: todo contrato que
+    // cancelou no mês passando pelos mesmos filtros do relatório da diretoria
+    // (v_status, v_stage, tipo <> 19, último evento <> OTR.CAN.006).
+    //
+    // `cancelamentos` é o subconjunto que o SCORE pôde avaliar — quem já
+    // existia na base na data da nota e tinha sinal suficiente. É sobre ele que
+    // a composição por faixa faz sentido: não dá para cobrar acerto de contrato
+    // que nasceu depois da foto.
+    //
+    // `totalNoMes` JÁ CHEGA sem os cancelamentos em lote: venda de operação é
+    // decisão da empresa, não churn, e por decisão do time sai das duas contas
+    // (oficial e coorte). Fica só reportada em `cancelamentosEmLote`.
+    //
+    // Em julho/2026 sobra 1.438 contra 1.426: os 12 que nasceram e cancelaram
+    // dentro do mês. Sem mostrar os dois números, a tela contradiz o relatório
+    // oficial e perde a discussão.
+    cancelamentosNoMes: totalNoMes,
+    foraDaCoorte: totalNoMes == null ? null : Math.max(0, totalNoMes - cancelados - cancelSemSinal),
+    // Churn na régua da diretoria: cancelamentos do mês sobre a base de
+    // conexões do mês ANTERIOR. É esta a taxa que vai para a reunião.
+    taxaChurnConexoes: totalNoMes != null && conexoesInicio ? round((100 * totalNoMes) / conexoesInicio) : null,
     cancelamentos: cancelados,
     taxaCancelamento: round(taxaBase),
     mrrPerdido: round(mrrPerdido),
@@ -139,13 +238,30 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoes = null, janela
     // 1,0 = o mesmo que sortear ao acaso.
     lift: recall != null && taxaSinalizada ? round(recall / taxaSinalizada, 2) : null,
     ic95: wilson95(cancelSinalizados, cancelados),
+    porDecil,
+    // Quantas vezes o decil de pior nota cancela mais que a média do mês.
+    // É ESTE o número a comparar entre meses — não o recall, que depende do
+    // tamanho do balde de alerta e por isso se mexe sozinho.
+    liftDecil1: porDecil.length && taxaBase ? round(porDecil[0].taxa / taxaBase) : null,
     porClassificacao: CLASSES.map((cls) => {
       const l = porClasse.get(cls)
       return {
         classificacao: cls,
         naBase: l.naBase,
         cancelaram: l.cancelaram,
+        // Duas porcentagens que respondem perguntas DIFERENTES e são fáceis de
+        // trocar uma pela outra numa reunião:
+        //
+        //   taxa         — dos que estavam nesta faixa, quantos saíram.
+        //                  Mede o risco de quem está aqui. Denominador = faixa.
+        //   pctDasSaidas — dos que saíram, quantos estavam nesta faixa.
+        //                  Mede de onde vem a perda. Denominador = cancelamentos.
+        //
+        // "500 dos 1.250 cancelados eram críticos = 40%" é pctDasSaidas. Num
+        // mês em que crítico tem 1.000 contratos e 500 saem, a taxa é 50% e a
+        // pctDasSaidas é 40% — números certos, leituras distintas.
         taxa: l.naBase ? round((100 * l.cancelaram) / l.naBase) : null,
+        pctDasSaidas: cancelados ? round((100 * l.cancelaram) / cancelados) : null,
         mrrPerdido: round(l.mrrPerdido),
       }
     }),
@@ -186,8 +302,9 @@ export function resumirSerie(pontos) {
     pontos,
     resumo: {
       meses: comDesfecho.length,
-      primeiroMes: comDesfecho[0].mes,
-      ultimoMes: comDesfecho[comDesfecho.length - 1].mes,
+      // Pelo mês do INDICADOR, que é como a série é lida e rotulada.
+      primeiroMes: comDesfecho[0].mesIndicador,
+      ultimoMes: comDesfecho[comDesfecho.length - 1].mesIndicador,
       cancelamentos: somaCancel,
       taxaMedia: somaBase ? round((100 * somaCancel) / somaBase) : null,
       recallMedio: somaCancel ? round((100 * somaSinal) / somaCancel, 1) : null,

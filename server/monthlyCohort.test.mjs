@@ -62,7 +62,7 @@ const cancelDepois = new Map([
 ])
 
 describe('pontoMensal', () => {
-  const p = pontoMensal({ mes: '2026-05', scored, cancelDepois, conexoes: 9, janelaDesfecho: '2026-06' })
+  const p = pontoMensal({ mes: '2026-05', scored, cancelDepois, conexoesInicio: 9, conexoesFim: 11, janelaDesfecho: '2026-06' })
 
   it('conta base, saídas e MRR perdido', () => {
     expect(p.contratosAtivos).toBe(10)
@@ -72,8 +72,19 @@ describe('pontoMensal', () => {
   })
 
   it('mantém conexões e contratos como denominadores separados', () => {
-    expect(p.conexoes).toBe(9)
+    expect(p.conexoesInicio).toBe(9)
+    expect(p.conexoesFim).toBe(11)
     expect(p.contratosAtivos).toBe(10)
+  })
+
+  it('rotula o ponto pelo mês dos cancelamentos, não pelo da nota', () => {
+    // No dia 1º de junho publica-se "o indicador de junho"? Não: publica-se o
+    // de MAIO, se maio for o mês que fechou. Aqui a nota congela em 31/05 e os
+    // cancelamentos observados são os de junho, então o rótulo é junho.
+    expect(p.mesIndicador).toBe('2026-06')
+    expect(p.notaCongeladaEm).toBe('2026-05-31')
+    // A nota tem que ser anterior às saídas que ela é cobrada de prever.
+    expect(p.notaCongeladaEm < `${p.mesIndicador}-01`).toBe(true)
   })
 
   it('recall é sobre quem saiu, não sobre a base', () => {
@@ -94,6 +105,33 @@ describe('pontoMensal', () => {
     expect(crit.taxa).toBe(50)
     const saud = p.porClassificacao.find((x) => x.classificacao === 'healthy')
     expect(saud.taxa).toBeCloseTo(16.67, 2)
+  })
+
+  it('separa "de onde veio a perda" de "qual o risco da faixa"', () => {
+    // As duas porcentagens respondem perguntas diferentes e são fáceis de
+    // confundir numa reunião. Crítico tem 2 contratos e 1 saiu:
+    //   taxa         = 1/2  = 50%   (metade de quem está em crítico saiu)
+    //   pctDasSaidas = 1/3  = 33,3% (um terço das saídas veio do crítico)
+    const crit = p.porClassificacao.find((x) => x.classificacao === 'critical')
+    expect(crit.taxa).toBe(50)
+    expect(crit.pctDasSaidas).toBeCloseTo(33.33, 2)
+
+    // Saudável: 6 contratos, 1 saiu → risco baixo, mas mesma fatia da perda.
+    const saud = p.porClassificacao.find((x) => x.classificacao === 'healthy')
+    expect(saud.taxa).toBeCloseTo(16.67, 2)
+    expect(saud.pctDasSaidas).toBeCloseTo(33.33, 2)
+  })
+
+  it('a composição das saídas fecha em 100% dos cancelamentos', () => {
+    const soma = p.porClassificacao.reduce((a, x) => a + x.cancelaram, 0)
+    expect(soma).toBe(p.cancelamentos)
+    const somaPct = p.porClassificacao.reduce((a, x) => a + (x.pctDasSaidas ?? 0), 0)
+    expect(somaPct).toBeCloseTo(100, 1)
+  })
+
+  it('mês sem saída não inventa composição', () => {
+    const vazio = pontoMensal({ mes: '2026-05', scored, cancelDepois: new Map(), janelaDesfecho: '2026-06' })
+    for (const c of vazio.porClassificacao) expect(c.pctDasSaidas).toBeNull()
   })
 
   it('lista todas as classes, mesmo as vazias', () => {
@@ -138,6 +176,103 @@ describe('pontoMensal', () => {
     expect(p.contratosAtivos).toBe(2)
     expect(p.semSinalSuficiente).toBe(8)
     expect(p.minEngines).toBe(4)
+  })
+
+  it('decis ordenam do pior para o melhor e são imunes à deriva de limiar', () => {
+    // 100 contratos com nota de 1 a 100. Quem sai são as 10 piores notas.
+    // Se o decil estiver certo, o decil 1 pega tudo e o 10 não pega nada —
+    // independente de onde os limiares absolutos estejam.
+    const cem = Array.from({ length: 100 }, (_, i) => ({
+      contractNumber: `D${i}`, overall: i + 1,
+      classification: i < 50 ? 'critical' : 'excellent', enginesPresent: 3,
+    }))
+    const saem = new Map(Array.from({ length: 10 }, (_, i) => [`D${i}`, { mrr: 0 }]))
+    const p = pontoMensal({ mes: '2026-05', scored: cem, cancelDepois: saem, janelaDesfecho: '2026-06' })
+
+    expect(p.porDecil).toHaveLength(10)
+    expect(p.porDecil[0].decil).toBe(1)
+    expect(p.porDecil[0].n).toBe(10)
+    expect(p.porDecil[0].taxa).toBe(100)
+    expect(p.porDecil[9].taxa).toBe(0)
+    // Taxa geral 10%, decil 1 em 100% → 10x.
+    expect(p.liftDecil1).toBe(10)
+  })
+
+  it('base pequena demais não inventa decil', () => {
+    const p = pontoMensal({ mes: '2026-05', scored, cancelDepois, janelaDesfecho: '2026-06' })
+    expect(p.porDecil).toEqual([])
+    expect(p.liftDecil1).toBeNull()
+  })
+
+  it('cancelamento em lote sai das taxas mas fica visível', () => {
+    // C2 (crítico) e S2 (saudável) saem por venda de operação. Nenhum dos dois
+    // pode contar: o score não tinha como prever, e incluí-los mexeria tanto na
+    // taxa da faixa quanto no recall.
+    const cancel = new Map([
+      ...cancelDepois,
+      ['C2', { mrr: 999, code: 'FNC.CAN.020' }],
+      ['S2', { mrr: 999, code: 'FNC.CAN.020' }],
+    ])
+    const p = pontoMensal({ mes: '2026-05', scored, cancelDepois: cancel, janelaDesfecho: '2026-06' })
+
+    expect(p.cancelamentosEmLote).toBe(2)
+    expect(p.cancelamentos).toBe(3)
+    expect(p.mrrPerdido).toBe(160)
+    const crit = p.porClassificacao.find((x) => x.classificacao === 'critical')
+    expect(crit.cancelaram).toBe(1)
+    expect(p.recall).toBeCloseTo(66.7, 1)
+  })
+
+  it('a exclusão em lote vale também para os decis', () => {
+    const cem = Array.from({ length: 100 }, (_, i) => ({
+      contractNumber: `D${i}`, overall: i + 1, classification: 'healthy', enginesPresent: 3,
+    }))
+    // As 10 piores saem de verdade; 10 das melhores saem por venda de operação.
+    const saem = new Map([
+      ...Array.from({ length: 10 }, (_, i) => [`D${i}`, { mrr: 0 }]),
+      ...Array.from({ length: 10 }, (_, i) => [`D${90 + i}`, { mrr: 0, code: 'FNC.CAN.020' }]),
+    ])
+    const p = pontoMensal({ mes: '2026-05', scored: cem, cancelDepois: saem, janelaDesfecho: '2026-06' })
+    expect(p.porDecil[0].taxa).toBe(100)
+    // Sem a exclusão o último decil marcaria 100% e o lift desabaria.
+    expect(p.porDecil[9].taxa).toBe(0)
+    expect(p.liftDecil1).toBe(10)
+  })
+
+  it('reconcilia com o total oficial do mês e mostra o que ficou de fora', () => {
+    // Números reais de julho/2026: o relatório da diretoria conta 1.448 (mesma
+    // query, hoje), o score avaliou 1.426. A diferença é 12 que nasceram e
+    // cancelaram dentro do mês + 10 de venda de operação. A tela precisa dos
+    // dois lados, senão contradiz o relatório oficial.
+    const cancel = new Map([...cancelDepois, ['C2', { mrr: 0, code: 'FNC.CAN.020' }]])
+    const p = pontoMensal({
+      mes: '2026-05', scored, cancelDepois: cancel, janelaDesfecho: '2026-06',
+      conexoesInicio: 1000, totalNoMes: 20,
+    })
+    expect(p.cancelamentos).toBe(3)       // avaliados pelo score
+    expect(p.cancelamentosEmLote).toBe(1) // venda de operação, contada à parte
+    // `totalNoMes` chega JÁ sem os em lote (o runner filtra), então a conta é
+    // direta: 20 − 3 avaliados − 0 sem sinal = 17 fora da coorte.
+    expect(p.cancelamentosNoMes).toBe(20)
+    expect(p.foraDaCoorte).toBe(17)
+  })
+
+  it('a taxa de churn segue a fórmula oficial: total ÷ conexões do mês anterior', () => {
+    const p = pontoMensal({
+      mes: '2026-05', scored, cancelDepois, janelaDesfecho: '2026-06',
+      conexoesInicio: 84379, totalNoMes: 1460,
+    })
+    // O número que a diretoria publicou para julho: 1.460 / 84.379 = 1,73%.
+    expect(p.taxaChurnConexoes).toBeCloseTo(1.73, 2)
+    // A taxa da coorte continua existindo, com outro denominador e outro uso.
+    expect(p.taxaCancelamento).toBe(30)
+  })
+
+  it('sem total oficial informado, não inventa reconciliação', () => {
+    const p = pontoMensal({ mes: '2026-05', scored, cancelDepois, janelaDesfecho: '2026-06' })
+    expect(p.cancelamentosNoMes).toBeNull()
+    expect(p.foraDaCoorte).toBeNull()
+    expect(p.taxaChurnConexoes).toBeNull()
   })
 
   it('base vazia não estoura', () => {
