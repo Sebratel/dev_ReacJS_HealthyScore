@@ -71,6 +71,24 @@ async function buscar(url, headers) {
 const limpaBarra = (u) => String(u).replace(/\/+$/, '')
 const uso = (entrada, saida) => ({ tokensEntrada: entrada ?? null, tokensSaida: saida ?? null })
 
+// JSON Schema → dialeto do Gemini. Ele aceita um subconjunto do OpenAPI 3.0:
+// `additionalProperties` é recusado, e a ordem das chaves não é garantida sem
+// `propertyOrdering`. Tira o que ele não entende e acrescenta a ordem — o
+// resto (type, properties, required, items, enum) passa igual.
+export function paraGemini(schema) {
+  if (!schema || typeof schema !== 'object') return schema
+  if (Array.isArray(schema)) return schema.map(paraGemini)
+  const out = {}
+  for (const [k, v] of Object.entries(schema)) {
+    if (k === 'additionalProperties') continue
+    out[k] = v && typeof v === 'object' ? paraGemini(v) : v
+  }
+  if (out.type === 'object' && out.properties) {
+    out.propertyOrdering = Object.keys(out.properties)
+  }
+  return out
+}
+
 // --------------------------------------------------------------- Anthropic
 const anthropic = (cfg) => ({
   nome: 'anthropic',
@@ -173,8 +191,13 @@ const gemini = (cfg) => ({
       contents: [{ role: 'user', parts: [{ text: pergunta }] }],
       generationConfig: {
         maxOutputTokens: cfg.maxTokens || 16000,
-        // Modo JSON, como no OpenAI: forma garantida, schema não.
-        ...(schema ? { responseMimeType: 'application/json' } : {}),
+        // responseSchema é o schema nativo do Gemini — ele aceita um
+        // subconjunto do OpenAPI 3.0, que NÃO inclui `additionalProperties`.
+        // Mandar o schema cru faz o Gemini recusar a requisição inteira, daí o
+        // saneamento. Só o modo JSON (sem schema) não basta: garante JSON
+        // válido e nada sobre os nomes dos campos — foi assim que a primeira
+        // rodada real voltou com `acao` no lugar de `titulo`.
+        ...(schema ? { responseMimeType: 'application/json', responseSchema: paraGemini(schema) } : {}),
       },
     }, { 'x-goog-api-key': cfg.chave })
     const texto = (json.candidates?.[0]?.content?.parts || [])

@@ -6,9 +6,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { construir, TIPOS, ROTULO_TIPO, MODELO_PADRAO, provedorDoEnv } from './provedor.mjs'
+import { construir, TIPOS, ROTULO_TIPO, MODELO_PADRAO, provedorDoEnv, paraGemini } from './provedor.mjs'
 import * as registro from './registro.mjs'
-import { validateRecommendation } from '../actionPlans/schema.mjs'
+import {
+  validateRecommendation, contratoEmTexto, ACTION_PLAN_JSON_SCHEMA, PRIORIDADES, RESPONSAVEIS,
+} from '../actionPlans/schema.mjs'
 import { renderPrompt } from '../actionPlans/dossier.mjs'
 
 const dossie = {
@@ -208,5 +210,70 @@ describe('registro do provedor', () => {
     const e = registro.remover()
     expect(existsSync(join(dir, 'ia.json'))).toBe(false)
     expect(e.configurado).toBe(false)
+  })
+})
+
+// ─── Saneamento do schema para o Gemini ────────────────────────
+describe('paraGemini', () => {
+  it('remove additionalProperties em todos os níveis (o Gemini recusa a requisição com ele)', () => {
+    const g = paraGemini(ACTION_PLAN_JSON_SCHEMA)
+    const texto = JSON.stringify(g)
+    expect(texto).not.toContain('additionalProperties')
+  })
+
+  it('preserva o que importa: tipos, obrigatórios e os enums fechados', () => {
+    const g = paraGemini(ACTION_PLAN_JSON_SCHEMA)
+    expect(g.type).toBe('object')
+    expect(g.required).toContain('acoes_recomendadas')
+    const acao = g.properties.acoes_recomendadas.items
+    expect(acao.properties.prioridade.enum).toEqual(['alta', 'media', 'baixa'])
+    expect(acao.properties.responsavel_sugerido.enum).toEqual(['cobranca', 'atendimento', 'comercial', 'juridico'])
+    expect(acao.required).toHaveLength(6)
+  })
+
+  it('acrescenta propertyOrdering nos objetos — o Gemini não garante ordem sem isso', () => {
+    const g = paraGemini(ACTION_PLAN_JSON_SCHEMA)
+    expect(g.propertyOrdering).toEqual(Object.keys(ACTION_PLAN_JSON_SCHEMA.properties))
+    expect(g.properties.acoes_recomendadas.items.propertyOrdering).toContain('responsavel_sugerido')
+  })
+
+  it('não estraga o schema original', () => {
+    const antes = JSON.stringify(ACTION_PLAN_JSON_SCHEMA)
+    paraGemini(ACTION_PLAN_JSON_SCHEMA)
+    expect(JSON.stringify(ACTION_PLAN_JSON_SCHEMA)).toBe(antes)
+  })
+})
+
+// ─── O contrato que viaja no prompt ────────────────────────────
+// Estes testes existem por causa de uma falha real: o prompt mandava "responda
+// no formato especificado" e nunca mostrava a especificação. Com JSON Schema
+// nativo (Anthropic) passava; em modo JSON (Gemini) o modelo inventava os
+// nomes dos campos e a rodada inteira era descartada.
+describe('contratoEmTexto', () => {
+  const txt = contratoEmTexto()
+
+  it('nomeia TODOS os campos que o validador exige', () => {
+    for (const campo of ACTION_PLAN_JSON_SCHEMA.required) {
+      expect(txt, `campo "${campo}" precisa aparecer no contrato`).toContain(`"${campo}"`)
+    }
+    const acao = ACTION_PLAN_JSON_SCHEMA.properties.acoes_recomendadas.items
+    for (const campo of acao.required) {
+      expect(txt, `campo "${campo}" da ação precisa aparecer`).toContain(`"${campo}"`)
+    }
+  })
+
+  it('lista os valores aceitos dos dois campos fechados', () => {
+    for (const v of PRIORIDADES) expect(txt).toContain(`"${v}"`)
+    for (const v of RESPONSAVEIS) expect(txt).toContain(`"${v}"`)
+  })
+
+  it('traz um exemplo que ele mesmo passaria na validação', () => {
+    const exemplo = JSON.parse(txt.slice(txt.indexOf('{\n  "cliente_id"')))
+    expect(validateRecommendation(exemplo).errors).toEqual([])
+  })
+
+  it('proíbe markdown e campos extras — os dois desvios que já aconteceram', () => {
+    expect(txt).toMatch(/sem markdown/i)
+    expect(txt).toMatch(/não acrescente nenhum campo/i)
   })
 })

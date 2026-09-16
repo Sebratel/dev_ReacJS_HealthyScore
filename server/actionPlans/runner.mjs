@@ -11,7 +11,7 @@ import { getClients, getDataset } from '../dataset.mjs'
 import { getOfficialConfig } from '../officialConfig.mjs'
 import { provedorAtivo } from '../ia/registro.mjs'
 import { buildDossier, renderPrompt } from './dossier.mjs'
-import { validateRecommendation, ACTION_PLAN_JSON_SCHEMA } from './schema.mjs'
+import { validateRecommendation, contratoEmTexto, ACTION_PLAN_JSON_SCHEMA } from './schema.mjs'
 import {
   getActiveTemplate, createRun, updateRun, insertDossier, insertRecommendation,
 } from './store.mjs'
@@ -93,7 +93,12 @@ export function selectClients(criterio = {}) {
 // aqui para a rodada e a "nova tentativa" percorrerem exatamente o caminho.
 async function gerarEValidar({ provedor, cfg, template, dossie }) {
   const t0 = Date.now()
-  const sistema = renderPrompt(template.conteudo, dossie)
+  // O contrato vai ANEXADO pelo código, não escrito no template: o prompt é
+  // editável pela tela, e um contrato que alguém pode apagar sem perceber não
+  // é contrato. Também garante que o texto acompanhe o validador sozinho.
+  const sistema = `${renderPrompt(template.conteudo, dossie)}
+
+${contratoEmTexto()}`
   const base = { modelo: cfg.modelo || cfg.tipo, tokensEntrada: null, tokensSaida: null }
 
   let r

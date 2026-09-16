@@ -50,6 +50,86 @@ export const ACTION_PLAN_JSON_SCHEMA = {
   additionalProperties: false,
 }
 
+// ─── O contrato em texto, para viajar DENTRO do prompt ─────────
+//
+// Por que isto existe: o schema forçado na origem só funciona onde o provedor
+// suporta JSON Schema — hoje só a Anthropic. Em "modo JSON" (OpenAI, Gemini) o
+// provedor garante que a saída é JSON válido, e NADA sobre quais campos ela
+// tem. O modelo então inventa nomes razoáveis e o plano inteiro é descartado.
+//
+// Foi exatamente o que aconteceu na primeira rodada real com o Gemini: ele
+// devolveu `acao` no lugar de `titulo`, `por_que` no lugar de `descricao`, e
+// `responsavel_sugerido: "financeiro"` — que nem existe no nosso enum. O plano
+// era bom; o formato é que ninguém tinha contado a ele.
+//
+// Gerado a partir das MESMAS constantes que validam, para não haver como o
+// texto do prompt divergir da regra que reprova.
+const TIPO_LEGIVEL = {
+  string: 'texto',
+  integer: 'número inteiro',
+  number: 'número',
+}
+
+function descreveCampo(nome, def, obrigatorio) {
+  if (def.type === 'array') {
+    const it = def.items || {}
+    if (it.type === 'object') return null // as ações têm bloco próprio abaixo
+    return `- "${nome}": lista de ${TIPO_LEGIVEL[it.type] ?? it.type}s${obrigatorio ? '' : ' (opcional)'}`
+  }
+  const enumTxt = def.enum ? ` — exatamente um de: ${def.enum.map((v) => `"${v}"`).join(' | ')}` : ''
+  return `- "${nome}": ${TIPO_LEGIVEL[def.type] ?? def.type}${enumTxt}${obrigatorio ? '' : ' (opcional)'}`
+}
+
+export function contratoEmTexto() {
+  const s = ACTION_PLAN_JSON_SCHEMA
+  const req = new Set(s.required)
+  const raiz = Object.entries(s.properties)
+    .map(([k, v]) => descreveCampo(k, v, req.has(k)))
+    .filter(Boolean)
+
+  const acao = s.properties.acoes_recomendadas.items
+  const reqAcao = new Set(acao.required)
+  const campos = Object.entries(acao.properties)
+    .map(([k, v]) => `  ${descreveCampo(k, v, reqAcao.has(k)).slice(2)}`)
+
+  return [
+    'FORMATO OBRIGATÓRIO DA RESPOSTA',
+    '',
+    'Responda com UM objeto JSON e nada mais — sem markdown, sem cercas de',
+    'código, sem texto antes ou depois. Use EXATAMENTE estes nomes de campo, em',
+    'português e sem acento, e não acrescente nenhum campo além dos listados.',
+    '',
+    ...raiz,
+    '',
+    'Cada item de "acoes_recomendadas" é um objeto com EXATAMENTE estes campos:',
+    ...campos,
+    '',
+    'Atenção aos dois campos de lista fechada: "prioridade" e',
+    '"responsavel_sugerido" só aceitam os valores acima. Se a área que você',
+    'considera ideal não estiver na lista, escolha a mais próxima entre as',
+    'disponíveis e explique o encaminhamento dentro de "descricao".',
+    '',
+    'Exemplo da forma esperada (conteúdo meramente ilustrativo):',
+    JSON.stringify({
+      cliente_id: '123456',
+      setor: 'financeiro',
+      versao_prompt: 'v1',
+      diagnostico: 'Resumo do quadro do cliente em uma ou duas frases.',
+      causas_provaveis: ['Causa provável em uma frase.'],
+      acoes_recomendadas: [{
+        titulo: 'Título curto da ação',
+        descricao: 'O que fazer, quando e por quê, de forma específica.',
+        prioridade: 'alta',
+        prazo_sugerido_dias: 3,
+        responsavel_sugerido: 'cobranca',
+        impacto_esperado: 'O que se espera que mude.',
+      }],
+      indicadores_considerados: ['faturas_atrasadas'],
+      confianca_modelo: 0.7,
+    }, null, 2),
+  ].join('\n')
+}
+
 const isStr = (v) => typeof v === 'string' && v.trim() !== ''
 const isStrArray = (v) => Array.isArray(v) && v.every((x) => isStr(x))
 
