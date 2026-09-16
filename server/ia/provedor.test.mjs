@@ -231,10 +231,13 @@ describe('paraGemini', () => {
     expect(acao.required).toHaveLength(6)
   })
 
-  it('acrescenta propertyOrdering nos objetos — o Gemini não garante ordem sem isso', () => {
+  it('nao inventa campo nenhum — so remove; campo extra nao reconhecido vira 400 em tudo', () => {
     const g = paraGemini(ACTION_PLAN_JSON_SCHEMA)
-    expect(g.propertyOrdering).toEqual(Object.keys(ACTION_PLAN_JSON_SCHEMA.properties))
-    expect(g.properties.acoes_recomendadas.items.propertyOrdering).toContain('responsavel_sugerido')
+    const chaves = (o) => (o && typeof o === 'object' && !Array.isArray(o) ? Object.keys(o) : [])
+    const original = new Set([...chaves(ACTION_PLAN_JSON_SCHEMA), ...chaves(ACTION_PLAN_JSON_SCHEMA.properties.acoes_recomendadas.items)])
+    for (const k of [...chaves(g), ...chaves(g.properties.acoes_recomendadas.items)]) {
+      expect(original.has(k), `campo "${k}" nao existia no schema original`).toBe(true)
+    }
   })
 
   it('não estraga o schema original', () => {
@@ -252,14 +255,36 @@ describe('paraGemini', () => {
 describe('contratoEmTexto', () => {
   const txt = contratoEmTexto()
 
-  it('nomeia TODOS os campos que o validador exige', () => {
+  // "aparece em algum lugar do texto" nao basta: o campo precisa estar NA
+  // LISTA da raiz. Foi assim que `acoes_recomendadas` escapou -- o nome vinha
+  // so na frase que descreve os itens, e a lista da raiz parecia completa sem
+  // ele. Por isso o teste olha as linhas de bullet, nao o texto inteiro.
+  const linhasDe = (prefixo) => txt.split('\n').filter((l) => l.startsWith(prefixo))
+  const bullets = linhasDe('- "')
+
+  it('lista TODOS os campos obrigatorios da raiz, inclusive o de lista de objetos', () => {
     for (const campo of ACTION_PLAN_JSON_SCHEMA.required) {
-      expect(txt, `campo "${campo}" precisa aparecer no contrato`).toContain(`"${campo}"`)
+      expect(
+        bullets.some((l) => l.startsWith(`- "${campo}"`)),
+        `"${campo}" precisa estar na lista de campos da raiz`,
+      ).toBe(true)
     }
+    expect(bullets).toHaveLength(ACTION_PLAN_JSON_SCHEMA.required.length)
+  })
+
+  it('lista TODOS os campos de cada acao', () => {
     const acao = ACTION_PLAN_JSON_SCHEMA.properties.acoes_recomendadas.items
+    // So o bloco das acoes: o exemplo JSON mais abaixo tem a mesma indentacao
+    // e entraria na contagem.
+    const bloco = txt.slice(txt.indexOf('Cada item de'), txt.indexOf('Atenção aos dois campos'))
+    const linhas = bloco.split('\n').filter((l) => l.startsWith('  "'))
     for (const campo of acao.required) {
-      expect(txt, `campo "${campo}" da ação precisa aparecer`).toContain(`"${campo}"`)
+      expect(
+        linhas.some((l) => l.startsWith(`  "${campo}"`)),
+        `"${campo}" precisa estar na lista de campos da acao`,
+      ).toBe(true)
     }
+    expect(linhas).toHaveLength(acao.required.length)
   })
 
   it('lista os valores aceitos dos dois campos fechados', () => {

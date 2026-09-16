@@ -73,7 +73,13 @@ const TIPO_LEGIVEL = {
 function descreveCampo(nome, def, obrigatorio) {
   if (def.type === 'array') {
     const it = def.items || {}
-    if (it.type === 'object') return null // as ações têm bloco próprio abaixo
+    // Lista de objetos entra aqui MESMO tendo bloco próprio mais abaixo. Sem
+    // esta linha, o campo sumia da lista da raiz e um modelo atento concluía
+    // que o objeto tinha só os outros campos — a ambiguidade que já custou
+    // uma rodada inteira.
+    if (it.type === 'object') {
+      return `- "${nome}": lista de objetos${obrigatorio ? '' : ' (opcional)'} — o formato de cada item está logo abaixo`
+    }
     return `- "${nome}": lista de ${TIPO_LEGIVEL[it.type] ?? it.type}s${obrigatorio ? '' : ' (opcional)'}`
   }
   const enumTxt = def.enum ? ` — exatamente um de: ${def.enum.map((v) => `"${v}"`).join(' | ')}` : ''

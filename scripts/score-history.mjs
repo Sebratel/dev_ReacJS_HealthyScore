@@ -8,6 +8,13 @@
 //
 //   <HISTORY_DIR>/score-YYYY-MM-DD.json.gz
 //
+// Cada registro leva, além do score: `v` com os VALORES de foto do enlace
+// (potência óptica, porta LAN, RSSI do Wi-Fi, memória/temperatura do CPE) e
+// `lk` dizendo se havia leitura de enlace. O score responde "quanto valia"; o
+// `v` responde "por quê" — e é o único que não dá para reconstruir depois, já
+// que o AutoISP guarda só a leitura mais recente e o vínculo com o cliente é
+// desfeito quando o equipamento é recolhido.
+//
 // Cadência: por padrão só grava se o ponto mais recente tiver ≥ HISTORY_MIN_DAYS
 // dias (30 = mensal · 7 = semanal · 1 = diário). Idempotente: rodar 2x no mesmo
 // dia sobrescreve o arquivo do dia. Use --force para ignorar a trava.
@@ -25,6 +32,7 @@ import { gunzipSync, gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join } from 'node:path'
 import { scoreAllClients } from '../server/engines.mjs'
+import { linkKeysOf } from '../src/features/connection-engine/connectionEngine.ts'
 import { DEFAULT_FINANCIAL_CONFIG } from '../src/features/financial-engine/financialConfig.ts'
 import { DEFAULT_COMMERCIAL_CONFIG } from '../src/features/commercial-engine/commercialConfig.ts'
 import { DEFAULT_CONNECTION_CONFIG } from '../src/features/connection-engine/connectionConfig.ts'
@@ -99,12 +107,65 @@ const monthly = snap.monthly || []
 const scoredActive = scoreAllClients(active, { configs: OFFICIAL_CONFIGS, monthly })
 const scoredCancelled = scoreAllClients(cancelled, { configs: OFFICIAL_CONFIGS, monthly })
 
-// Registro compacto: id, contrato, overall(o), classe(cls), cancelado(x), scores por engine(e).
+// ── Valores de FOTO congelados junto com o score ──
+// O score responde "quanto o cliente valia naquele dia"; estes campos respondem
+// "por quê" — e são os únicos que NÃO dá para reconstruir depois. O AutoISP
+// guarda só a leitura mais recente: quando o cliente sai, o CPE para de
+// informar, o equipamento é recolhido e o vínculo com o cliente é desfeito (76%
+// dos CPEs parados já estão sem cliente). Sem congelar aqui, a pergunta "quem
+// cancelou estava com o Wi-Fi ruim 60 dias antes?" fica sem resposta possível.
+const byId = new Map([...active, ...cancelled].map((c) => [c.clientId, c]))
+const linkValues = (c) => {
+  if (!c) return null
+  const v = {}
+  if (c.connRxPower != null) v.rx = c.connRxPower          // potência óptica (dBm)
+  if (c.connLanMbps != null) v.lan = c.connLanMbps         // porta LAN (Mbps)
+  if (c.connWifiRssi != null) v.rssi = c.connWifiRssi      // Wi-Fi na casa, mediana (dBm)
+  if (c.connWifiDevices != null) v.nap = c.connWifiDevices // aparelhos no Wi-Fi
+  if (c.connCpeMemPct != null) v.mem = c.connCpeMemPct     // memória do CPE (%)
+  if (c.connCpeTempC != null) v.tmp = c.connCpeTempC       // temperatura do CPE (°C)
+  if (c.connOnuStatus) v.onu = c.connOnuStatus             // status da ONU na carga
+  return Object.keys(v).length ? v : null
+}
+
+// ── Comparabilidade do score de Conexão (lk) ──
+// O score de Conexão do CANCELADO não é comparável com o do ativo, porque os
+// insumos da engine não chegam igual nos dois grupos. Medido no snapshot de
+// 13/09/2026 (2 mil ativos × 38,7 mil cancelados):
+//
+//                        ativos   cancelados
+//   equipamento alocado   98,9%      99,5%    ← igual, não distorce
+//   quedas de PPPoE       99,2%      46,4%    ← some pela metade
+//   potência óptica       95,1%       0,0%    ← só ativo tem
+//   RSSI do Wi-Fi         17,3%       0,0%    ← só ativo tem
+//
+// Os sinais de enlace são aplicados no ETL via `byContract`, que é o índice dos
+// ATIVOS; o cancelado recebe só quedas de PPPoE e infra. Como "sem dado não
+// pontua", quem tem menos insumo perde menos ponto: o score médio de Conexão dá
+// 70,8 nos ativos contra 93,2 nos cancelados — 22 pontos de diferença que são
+// ausência de medição, não qualidade de conexão. Sem esse recorte, qualquer
+// leitura de assertividade conclui que quem cancelou tinha conexão MELHOR.
+//
+// `lk` marca o fato observável (havia leitura de enlace?) e serve de divisor
+// porque separa os dois mundos perfeitamente: 96% dos ativos têm, 0% dos
+// cancelados. `linkKeysOf` é a mesma função que o motor usa para casar os
+// índices — a definição de "tem leitura de enlace" mora num lugar só.
+const hasLink = (c) => !!c && Object.values(linkKeysOf(c)).some(Boolean)
+
+// Registro compacto: id, contrato, overall(o), classe(cls), cancelado(x),
+// scores por engine(e), tinha leitura de enlace(lk) e valores congelados(v).
 const ENGINE_ORDER = ['financial', 'commercial', 'connection', 'network', 'field', 'installation', 'relationship']
-const pack = (s, x) => ({
-  id: s.clientId, ct: s.contractNumber, o: s.overall, cls: s.classification, x,
-  e: ENGINE_ORDER.map((k) => (s.byEngine[k] ?? null)),
-})
+const pack = (s, x) => {
+  const c = byId.get(s.clientId)
+  const v = linkValues(c)
+  const r = {
+    id: s.clientId, ct: s.contractNumber, o: s.overall, cls: s.classification, x,
+    e: ENGINE_ORDER.map((k) => (s.byEngine[k] ?? null)),
+    lk: hasLink(c) ? 1 : 0,
+  }
+  if (v) r.v = v
+  return r
+}
 const records = [...scoredActive.map((s) => pack(s, 0)), ...scoredCancelled.map((s) => pack(s, 1))]
 
 const payload = {
@@ -113,7 +174,16 @@ const payload = {
   configVersion: CONFIG_VERSION,
   engineOrder: ENGINE_ORDER,
   coverage: snap.meta?.coverage ?? null,
-  counts: { active: scoredActive.length, cancelled: scoredCancelled.length, total: records.length },
+  counts: {
+    active: scoredActive.length, cancelled: scoredCancelled.length, total: records.length,
+    // Quantos de cada grupo tinham leitura de enlace. É o tamanho do viés: se
+    // withLink.cancelled for ~0 e withLink.active for alto, o score de Conexão
+    // dos dois grupos não é comparável direto — ver `lk` e comparableByEngine.
+    withLink: {
+      active: records.filter((r) => !r.x && r.lk).length,
+      cancelled: records.filter((r) => r.x && r.lk).length,
+    },
+  },
   clients: records,
 }
 
