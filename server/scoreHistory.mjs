@@ -18,7 +18,28 @@ const HISTORY_DIR = process.env.HISTORY_DIR
   ? resolve(process.env.HISTORY_DIR)
   : join(dirname(SNAPSHOT_PATH), 'history')
 
-let index = null          // Map clientId -> [{ date, overall, classification, cancelled, byEngine }]
+// Engines cujo score só é comparável entre populações quando o cliente tinha
+// leitura de enlace. Hoje só Conexão, e a razão é a disponibilidade desigual
+// dos insumos: o ativo tem potência óptica em 95% dos casos e o cancelado em
+// 0%; quedas de PPPoE chegam a 99% dos ativos e 46% dos cancelados. Como "sem
+// dado não pontua", quem tem menos insumo perde menos ponto — o score médio de
+// Conexão sai 70,8 nos ativos contra 93,2 nos cancelados, 22 pontos de pura
+// ausência de medição. Sem esse recorte, comparar as duas populações conclui
+// que quem cancelou tinha conexão melhor.
+// `hasLink` é o divisor porque separa os dois mundos com precisão (96% dos
+// ativos, 0% dos cancelados), não porque o enlace sozinho explique a diferença.
+const ENGINES_QUE_EXIGEM_ENLACE = ['connection']
+
+export function comparableOf(byEngine, hasLink) {
+  if (hasLink) return byEngine
+  // hasLink null = ponto antigo, sem o campo: não dá para afirmar que é
+  // comparável, então o score restrito é omitido do mesmo jeito.
+  const out = { ...byEngine }
+  for (const k of ENGINES_QUE_EXIGEM_ENLACE) delete out[k]
+  return out
+}
+
+let index = null          // Map clientId -> [{ date, overall, classification, cancelled, byEngine, comparableByEngine, hasLink, values }]
 let engineOrder = []      // ordem das engines no vetor `e`
 let dates = []            // datas dos pontos carregados (asc)
 let signature = ''        // assinatura dos arquivos carregados
@@ -53,7 +74,22 @@ function ensureFresh() {
       for (const r of payload.clients || []) {
         const byEngine = {}
         if (Array.isArray(r.e) && engineOrder.length) engineOrder.forEach((k, i) => { if (r.e[i] != null) byEngine[k] = r.e[i] })
-        const point = { date, overall: r.o, classification: r.cls, cancelled: !!r.x, byEngine }
+        // `hasLink` diz se havia leitura de enlace (óptica/LAN/CPE/Wi-Fi) na
+        // data. Pontos gravados antes desse campo existir não têm `lk`: aí
+        // `hasLink` fica null (desconhecido), que é diferente de false.
+        const hasLink = r.lk == null ? null : !!r.lk
+        const point = {
+          date, overall: r.o, classification: r.cls, cancelled: !!r.x, byEngine,
+          hasLink,
+          values: r.v ?? null,
+          // Mesma régua para os dois lados: o score de Conexão só entra aqui
+          // quando o cliente TINHA leitura de enlace. Os sinais de enlace
+          // existem só para ativos (o cancelado não recebe nenhum no ETL), e
+          // como "sem dado não pontua", quem não tem sai com o score inflado
+          // por ausência. Quem for comparar quem saiu com quem ficou usa este
+          // campo e não precisa conhecer a armadilha.
+          comparableByEngine: comparableOf(byEngine, hasLink),
+        }
         const key = String(r.id)
         const arr = index.get(key)
         if (arr) arr.push(point); else index.set(key, [point])
@@ -88,6 +124,9 @@ export function getScoreHistoryStatus() {
     to: dates[dates.length - 1] ?? null,
     clients: index?.size ?? 0,
     engineOrder,
+    // Quem consome a série para comparar populações precisa saber que o score
+    // de Conexão exige o recorte por `hasLink` — ver comparableByEngine.
+    enginesQueExigemEnlace: ENGINES_QUE_EXIGEM_ENLACE,
     error: lastError,
   }
 }
