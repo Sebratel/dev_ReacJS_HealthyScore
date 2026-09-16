@@ -23,8 +23,12 @@ import {
   bucketByMax, MASSIVE_RANGES, OFFLINE_RANGES, OVERAGE_RANGES,
 } from '@/features/network-engine/networkConfig'
 import {
-  DEFAULT_CONNECTION_CONFIG, ONU_INDICATOR_KEYS, ONU_STATUS_OF,
+  DEFAULT_CONNECTION_CONFIG, ONU_INDICATOR_KEYS, ONU_STATUS_OF, LINK_INDICATOR_KEYS,
 } from '@/features/connection-engine/connectionConfig'
+// A classificacao em faixas vem da PROPRIA engine de Conexao. Duplicar os
+// cortes aqui faria a sugestao e a pontuacao discordarem em silencio assim que
+// um deles fosse ajustado.
+import { linkKeysOf } from '@/features/connection-engine/connectionEngine'
 import {
   PROTOCOL_RANGES as FIELD_PROTOCOL_RANGES, SCHEDULE_RANGES as FIELD_SCHEDULE_RANGES,
   SLA_OVERDUE_RANGES as FIELD_SLA_OVERDUE_RANGES, AVG_SLA_RANGES as FIELD_AVG_SLA_RANGES,
@@ -264,6 +268,28 @@ const DESCRIPTORS: Descriptor[] = [
     presence: false, multi: true, relevant: (c) => c.equipment.length > 0,
     classify: (c) => c.equipment, indicesOf: (l) => l.models,
   },
+  // Qualidade do enlace (foto atual, AutoISP): potência óptica, porta LAN,
+  // geração do Wi-Fi, RSSI, status da ONU, distância, temperaturas, memória do
+  // CPE. Derivado de LINK_INDICATOR_KEYS para que indicador novo no painel de
+  // Conexão apareça aqui sozinho — antes a lista era fixa e os nove ficaram de
+  // fora das sugestões sem ninguém perceber.
+  ...LINK_INDICATOR_KEYS.map((key): Descriptor => {
+    const def = DEFAULT_CONNECTION_CONFIG.indicators[key]
+    return {
+      engineKey: 'connection', engineLabel: 'Conexão', indicatorKey: key,
+      indicatorLabel: def.label, description: def.description,
+      presence: false, multi: false,
+      // Só entra quem tem leitura: sem isso, "sem sinal" viraria uma categoria
+      // e o lift mediria cobertura do AutoISP, não saúde do cliente.
+      relevant: (c) => !!linkKeysOf(c)[key],
+      classify: (c) => {
+        const k = linkKeysOf(c)[key]
+        return k ? [k] : []
+      },
+      indicesOf: () => (def.indices ?? []).map((i) => ({ key: i.key, label: i.label })),
+    }
+  }),
+
   // Quedas de PPPoE — presença por status da ONU (AutoISP). Denominador =
   // clientes com algum evento de ONU materializado (base monitorada).
   ...ONU_INDICATOR_KEYS.map((key): Descriptor => {
