@@ -270,15 +270,39 @@ export function MonthlyCohortCard() {
           </div>
         )}
 
-        {!!data.enginesIndisponiveisNoPassado?.length && (
-          <div className="flex items-start gap-2 text-[10px] text-on-surface-variant leading-relaxed">
-            <AlertTriangle size={12} className="text-risk-medium shrink-0 mt-0.5" />
-            <p>
-              A nota retroativa não inclui as engines de {data.enginesIndisponiveisNoPassado.join(' e ')} — elas só existem em
-              estado atual, não há como reconstruí-las para uma data passada. Por isso esta nota não é idêntica à da tela de hoje.
-            </p>
-          </div>
-        )}
+        {/* Rodapé de conciliação. Existe porque o numero daqui e o do e-mail
+            oficial de cancelamentos NAO batem na virgula, e quem compara os
+            dois sem explicacao conclui que um deles esta errado. */}
+        <div className="border-t border-outline pt-3 space-y-2">
+          <p className="text-[11px] font-semibold text-on-surface">Por que este número difere do e-mail oficial de cancelamentos</p>
+          <ul className="text-[10px] text-on-surface-variant leading-relaxed space-y-1 list-disc pl-4">
+            <li>
+              <span className="font-semibold text-on-surface/80">Cancelamento do passado muda.</span> O e-mail é uma foto tirada
+              no fechamento; aqui a base é consultada de novo a cada cálculo. Contratos são reclassificados depois (passam a
+              "nunca instalado", ou o evento vira duplicado) e saem da contagem. Em julho/2026 foram 12 — o e-mail publicou
+              1.460 e a mesma consulta hoje devolve 1.448. Nenhum deles voltou a ficar ativo.
+            </li>
+            <li>
+              <span className="font-semibold text-on-surface/80">Venda de operação não entra.</span> Cancelamento em lote é
+              decisão da empresa, não saída de cliente. Fica de fora das duas taxas e aparece contado à parte — em junho/2026
+              foram 1.034 de uma vez, que sozinhos levariam o churn do mês de 1,8% para 3,0%.
+            </li>
+            <li>
+              <span className="font-semibold text-on-surface/80">A composição por faixa cobre menos que o total.</span> Contrato
+              que foi vendido e cancelado dentro do mesmo mês não existia quando a nota foi congelada, então não há acerto nem
+              erro a atribuir. Ele conta no churn, mas não na composição.
+            </li>
+          </ul>
+          {!!data.enginesIndisponiveisNoPassado?.length && (
+            <div className="flex items-start gap-2 text-[10px] text-on-surface-variant leading-relaxed">
+              <AlertTriangle size={12} className="text-risk-medium shrink-0 mt-0.5" />
+              <p>
+                A nota retroativa não inclui as engines de {data.enginesIndisponiveisNoPassado.join(' e ')} — elas só existem em
+                estado atual, não há como reconstruí-las para uma data passada. Por isso esta nota não é idêntica à da tela de hoje.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </Card>
   )

@@ -250,10 +250,11 @@ describe('pontoMensal', () => {
       conexoesInicio: 1000, totalNoMes: 20,
     })
     expect(p.cancelamentos).toBe(3)       // avaliados pelo score
-    expect(p.cancelamentosEmLote).toBe(1) // venda de operação
-    expect(p.cancelamentosNoMes).toBe(20) // total oficial
-    // 20 − 3 avaliados − 1 lote − 0 sem sinal = 16 fora da coorte
-    expect(p.foraDaCoorte).toBe(16)
+    expect(p.cancelamentosEmLote).toBe(1) // venda de operação, contada à parte
+    // `totalNoMes` chega JÁ sem os em lote (o runner filtra), então a conta é
+    // direta: 20 − 3 avaliados − 0 sem sinal = 17 fora da coorte.
+    expect(p.cancelamentosNoMes).toBe(20)
+    expect(p.foraDaCoorte).toBe(17)
   })
 
   it('a taxa de churn segue a fórmula oficial: total ÷ conexões do mês anterior', () => {

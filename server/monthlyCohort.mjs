@@ -215,11 +215,15 @@ export function pontoMensal({ mes, scored, cancelDepois, conexoesInicio = null, 
     // a composição por faixa faz sentido: não dá para cobrar acerto de contrato
     // que nasceu depois da foto.
     //
-    // Em julho/2026 a diferença foi 1.448 contra 1.426: 12 nasceram e
-    // cancelaram dentro do mês, 10 foram venda de operação. Sem mostrar os dois
-    // números, a tela contradiz o relatório oficial e perde a discussão.
+    // `totalNoMes` JÁ CHEGA sem os cancelamentos em lote: venda de operação é
+    // decisão da empresa, não churn, e por decisão do time sai das duas contas
+    // (oficial e coorte). Fica só reportada em `cancelamentosEmLote`.
+    //
+    // Em julho/2026 sobra 1.438 contra 1.426: os 12 que nasceram e cancelaram
+    // dentro do mês. Sem mostrar os dois números, a tela contradiz o relatório
+    // oficial e perde a discussão.
     cancelamentosNoMes: totalNoMes,
-    foraDaCoorte: totalNoMes == null ? null : Math.max(0, totalNoMes - cancelados - emLote - cancelSemSinal),
+    foraDaCoorte: totalNoMes == null ? null : Math.max(0, totalNoMes - cancelados - cancelSemSinal),
     // Churn na régua da diretoria: cancelamentos do mês sobre a base de
     // conexões do mês ANTERIOR. É esta a taxa que vai para a reunião.
     taxaChurnConexoes: totalNoMes != null && conexoesInicio ? round((100 * totalNoMes) / conexoesInicio) : null,

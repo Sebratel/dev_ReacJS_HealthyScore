@@ -27,7 +27,7 @@ import { makeMariaPool } from './db-maria.mjs'
 import { buildAsOfCohort, SIGNAL_WINDOW_DAYS } from './queries/asOfCohort.mjs'
 import { getEffectiveSql } from './queries/index.mjs'
 import { scoreAllClients } from '../server/engines.mjs'
-import { fimDoMes, mesesEntre, pontoMensal, resumirSerie } from '../server/monthlyCohort.mjs'
+import { fimDoMes, mesesEntre, pontoMensal, resumirSerie, CODIGOS_NAO_CHURN } from '../server/monthlyCohort.mjs'
 import { DEFAULT_FINANCIAL_CONFIG } from '../src/features/financial-engine/financialConfig.ts'
 import { DEFAULT_COMMERCIAL_CONFIG } from '../src/features/commercial-engine/commercialConfig.ts'
 import { DEFAULT_CONNECTION_CONFIG } from '../src/features/connection-engine/connectionConfig.ts'
@@ -210,9 +210,11 @@ for (const mes of meses) {
     cancelDepois,
     // Denominador do mês do indicador: base no começo dele = fim do mês do
     // escore. E a base de fechamento, que é o número que a operação reconhece.
-    // Total OFICIAL do mês: cancelRows ja vem com exatamente os filtros do
-    // relatório da diretoria, então o tamanho dele É o número deles.
-    totalNoMes: cancelRows.length,
+    // Total do mês na régua oficial, MENOS os cancelamentos em lote: venda de
+    // operação é decisão da empresa e não churn de cliente. Ela continua
+    // contada à parte, em `cancelamentosEmLote`, para o pico de junho/2026
+    // (1.034 num mês só) ser explicável em vez de sumir sem rastro.
+    totalNoMes: cancelRows.filter((r) => !CODIGOS_NAO_CHURN.has(r.cancellation_code)).length,
     conexoesInicio: conexoesPorMes.get(mes) ?? null,
     conexoesFim: parcial ? (conexoesUltimoDia?.conexoes ?? null) : (conexoesPorMes.get(janela) ?? null),
     janelaDesfecho: janela,
