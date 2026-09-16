@@ -28,8 +28,12 @@ import { runEngine, runDashboard, ENGINE_KEYS } from './engines.mjs'
 import { getClientHistory, getScoreHistoryStatus } from './scoreHistory.mjs'
 import { getMonthlyCohort } from './monthlyCohortStore.mjs'
 import { buildSuggestions, deriveLists } from '../src/features/cancellation-profiles/suggestionEngine.ts'
-import { resolveRole, atLeast, listRoles, setRole, deleteRole } from './roles.mjs'
-import { getOfficialConfig, setOfficialConfigs, setOfficialThresholds } from './officialConfig.mjs'
+import {
+  resolveAccess, atLeast, listRoles, setRole, deleteRole,
+  canEditSector, canEditQueryGroup, editableQueryGroups, hasAllSectors,
+  SECTORS, SECTOR_LABELS,
+} from './roles.mjs'
+import { getOfficialConfig, setOfficialConfigs, setOfficialThresholds, mergeConfigsWithScope } from './officialConfig.mjs'
 import { runChurnForecast } from './churnForecast.mjs'
 import { actionPlanRoutes } from './actionPlans/routes.mjs'
 
@@ -81,7 +85,9 @@ async function getUserFromToken(token) {
 }
 
 // Auth + RBAC. minRole: 'viewer' (default) | 'power_user' | 'admin'.
-// req.user recebe { email, name, role } (papel efetivo resolvido em roles.mjs).
+// req.user recebe { email, name, role, scopes } — papel efetivo e setores que
+// o usuário edita ('*' = todos), resolvidos em roles.mjs. O escopo não barra
+// leitura: quem entra vê todas as telas; ele só limita a ESCRITA por setor.
 function requireAuth({ minRole = 'viewer' } = {}) {
   return async (req, res, next) => {
     const m = /^Bearer (.+)$/.exec(req.headers.authorization || '')
@@ -92,8 +98,8 @@ function requireAuth({ minRole = 'viewer' } = {}) {
     if (!user.email.endsWith('@' + ALLOWED_DOMAIN)) {
       return res.status(403).json({ error: `Acesso restrito a contas @${ALLOWED_DOMAIN}.` })
     }
-    const role = resolveRole(user.email)
-    req.user = { ...user, role }
+    const { role, scopes } = resolveAccess(user.email)
+    req.user = { ...user, role, scopes }
     if (!atLeast(role, minRole)) {
       const label = minRole === 'admin' ? 'administrador' : 'power user'
       return res.status(403).json({ error: `Ação restrita a ${label}. Sua conta é "${role}".` })
@@ -110,27 +116,48 @@ app.get('/api/health', (_req, res) => {
 // Identidade + papel do usuário logado — o front usa pra mostrar/esconder
 // controles (pesos, SQL, limiares, gestão de usuários).
 app.get('/api/me', requireAuth(), (req, res) => {
-  res.json({ email: req.user.email, name: req.user.name, role: req.user.role })
+  res.json({
+    email: req.user.email,
+    name: req.user.name,
+    role: req.user.role,
+    // '*' ou lista de setores que este usuário edita. O front usa pra decidir
+    // onde mostrar "Configurar"; o servidor revalida em toda escrita.
+    scopes: req.user.scopes,
+    sectors: SECTORS.map((key) => ({ key, label: SECTOR_LABELS[key] })),
+  })
 })
 
 // ─── Config oficial (pesos + limiares) ─────────────────────────
-// Leitura por todos (@domínio); escrita: pesos e limiares → power_user+
-// (admin herda). Gestão de usuários continua exclusiva de admin.
+// Leitura por todos (@domínio). Escrita:
+//   • pesos dos indicadores → power_user, SÓ nos setores do seu escopo;
+//   • limiares do Health Score → admin (são globais, valem para todo setor);
+//   • gestão de usuários → admin.
 app.get('/api/config', requireAuth(), (_req, res) => {
   const o = getOfficialConfig()
   res.json({ configs: o?.configs ?? null, thresholds: o?.thresholds ?? null, updatedAt: o?.updatedAt ?? null, updatedBy: o?.updatedBy ?? null })
 })
 
+// O front manda o store inteiro (as 7 engines). O merge decide o que entra:
+// setor no escopo passa inteiro; fora do escopo, só renomeação (ver
+// mergeConfigsWithScope). Quem não pode mexer em nenhum peso recebe 403 — em
+// vez de um 200 que não muda nada e parece que salvou.
 app.put('/api/config/configs', requireAuth({ minRole: 'power_user' }), (req, res) => {
   try {
-    const saved = setOfficialConfigs(req.body?.configs, req.user.email)
-    res.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy })
+    const { configs, applied, namesOnly } = mergeConfigsWithScope(
+      req.body?.configs,
+      (engine) => canEditSector(req.user.scopes, engine),
+    )
+    if (!applied.length && namesOnly.length) {
+      console.warn(`[config] ${req.user.email} enviou ${namesOnly.join(', ')} fora do escopo — só nomes aplicados.`)
+    }
+    const saved = setOfficialConfigs(configs, req.user.email)
+    res.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy, applied, namesOnly })
   } catch (e) {
     res.status(400).json({ error: e.message })
   }
 })
 
-app.put('/api/config/thresholds', requireAuth({ minRole: 'power_user' }), (req, res) => {
+app.put('/api/config/thresholds', requireAuth({ minRole: 'admin' }), (req, res) => {
   try {
     const saved = setOfficialThresholds(req.body?.thresholds, req.user.email)
     res.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy })
@@ -252,15 +279,40 @@ app.get('/api/monthly-cohort', requireAuth(), (_req, res) => {
   res.json(getMonthlyCohort())
 })
 
-// Catálogo de queries — a tela de SQL é área do power_user (view + edit).
+// Catálogo de queries — a tela de SQL é área do power_user. Ver: todas (quem
+// abre a tela lê o SQL inteiro do sistema). Editar: só as do seu escopo.
+// `editableGroups` diz ao front quais grupos mostram o botão de editar;
+// '*' = todos (power user irrestrito e admin).
 app.get('/api/queries', requireAuth({ minRole: 'power_user' }), (req, res) => {
-  // canEdit sempre true aqui (só power_user+ chega); mantido p/ compat do front.
-  res.json({ queries: getCatalog(), engineLabels: ENGINE_LABELS, canEdit: atLeast(req.user.role, 'power_user') })
+  res.json({
+    queries: getCatalog(),
+    engineLabels: ENGINE_LABELS,
+    canEdit: atLeast(req.user.role, 'power_user'),
+    editableGroups: editableQueryGroups(req.user.scopes),
+  })
 })
+
+// Guarda de escopo das queries: o grupo do catálogo (financeiro, rede, …) tem
+// de estar no escopo do autor. Grupo transversal (base/mensal/cancelados/
+// retiradas) alimenta a plataforma toda e exige escopo total.
+function denyQueryScope(req, res, id) {
+  const def = getQueryDef(id)
+  if (!def) { res.status(404).json({ error: `Query desconhecida: ${id}` }); return true }
+  if (!canEditQueryGroup(req.user.scopes, def.engine)) {
+    const grupo = ENGINE_LABELS[def.engine] || def.engine
+    res.status(403).json({
+      error: hasAllSectors(req.user.scopes)
+        ? `Sem permissão para editar a query "${id}".`
+        : `A query "${id}" é do grupo "${grupo}", fora dos seus setores.`,
+    })
+    return true
+  }
+  return false
+}
 
 app.put('/api/queries/:id', requireAuth({ minRole: 'power_user' }), (req, res) => {
   const { id } = req.params
-  if (!getQueryDef(id)) return res.status(404).json({ error: `Query desconhecida: ${id}` })
+  if (denyQueryScope(req, res, id)) return
   const sql = req.body?.sql
   if (typeof sql !== 'string') return res.status(400).json({ error: 'Campo "sql" (string) é obrigatório.' })
   try {
@@ -273,23 +325,25 @@ app.put('/api/queries/:id', requireAuth({ minRole: 'power_user' }), (req, res) =
 
 app.delete('/api/queries/:id', requireAuth({ minRole: 'power_user' }), (req, res) => {
   const { id } = req.params
-  if (!getQueryDef(id)) return res.status(404).json({ error: `Query desconhecida: ${id}` })
+  if (denyQueryScope(req, res, id)) return
   const removed = deleteOverride(id)
   res.json({ ok: true, id, removed })
 })
 
 // ─── Usuários e Acessos (admin) ────────────────────────────────
-// Lista/atribui/remove papéis. Entradas de env (bootstrap) são fixas (source
-// 'env') e não podem ser rebaixadas; as demais ficam em data/roles.json.
+// Lista/atribui/remove papéis e SETORES. Entradas de env (bootstrap) são fixas
+// (source 'env', escopo total) e não podem ser rebaixadas; as demais ficam em
+// data/roles.json. Admin é sempre escopo total — quem manda em tudo não tem setor.
 app.get('/api/access/users', requireAuth({ minRole: 'admin' }), (_req, res) => {
-  res.json({ users: listRoles() })
+  res.json({ users: listRoles(), sectors: SECTORS.map((key) => ({ key, label: SECTOR_LABELS[key] })) })
 })
 
 app.put('/api/access/users/:email', requireAuth({ minRole: 'admin' }), (req, res) => {
   const role = req.body?.role
+  const scopes = req.body?.scopes // '*' ou lista de setores; ausente = todos
   try {
-    const effective = setRole(req.params.email, role)
-    res.json({ ok: true, email: String(req.params.email).toLowerCase(), role: effective })
+    const effective = setRole(req.params.email, role, scopes === undefined ? '*' : scopes)
+    res.json({ ok: true, email: String(req.params.email).toLowerCase(), role: effective.role, scopes: effective.scopes })
   } catch (e) {
     res.status(400).json({ error: e.message })
   }

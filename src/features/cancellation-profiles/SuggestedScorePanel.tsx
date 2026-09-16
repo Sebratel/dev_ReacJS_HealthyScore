@@ -135,7 +135,8 @@ function IndexRow({ ind, idx, current, onApply }: {
 }) {
   const [open, setOpen] = useState(false)
   const tokens = useChartTokens()
-  const { isPowerUser } = useRole() // aplicar pontuação = editar pesos → power_user+
+  // Aplicar pontuação = editar peso → power_user do setor daquele indicador.
+  const canApplyHere = useRole().canEditSector(ind.engineKey)
   const applied = idx.suggestedPoints !== null && current === idx.suggestedPoints
   const canApply = idx.suggestedPoints !== null && !applied
   return (
@@ -163,7 +164,7 @@ function IndexRow({ ind, idx, current, onApply }: {
         <td className="px-3 py-2 text-right">
           {applied ? (
             <span className="inline-flex items-center gap-1 text-[10px] text-risk-low"><Check size={11} /> aplicado</span>
-          ) : isPowerUser ? (
+          ) : canApplyHere ? (
             <button
               onClick={(e) => { e.stopPropagation(); onApply() }}
               disabled={!canApply}
@@ -198,7 +199,8 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
   const [open, setOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [sort, setSort] = useState<SortState>(null)
-  const { isPowerUser } = useRole() // "Aplicar todas" = editar pesos → power_user+
+  // "Aplicar todas" = editar pesos → power_user do setor deste indicador.
+  const canApplyHere = useRole().canEditSector(ind.engineKey)
 
   const valid = ind.indices.filter((i) => i.suggestedPoints !== null)
   const top = valid[0] ?? null
@@ -253,7 +255,7 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
               {valid.length} de {ind.indices.length} {ind.presence ? 'condição' : 'índices'} com amostra suficiente
               {ind.presence && <span className="text-on-surface-variant/90"> · % = clientes com ao menos uma ocorrência no histórico</span>}
             </span>
-            {isPowerUser && appliableCount > 0 && (
+            {canApplyHere && appliableCount > 0 && (
               <button onClick={() => onApplyAll(ind)} className="inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-md bg-gradient-brand text-on-primary shadow-glow hover:-translate-y-0.5 transition-all">
                 <Wand2 size={11} /> Aplicar todas ({appliableCount})
               </button>

@@ -54,7 +54,9 @@ services:
       # Admins SEMENTE (CSV) — sempre admin, não removíveis pela tela. Garante
       # que sempre haja alguém pra abrir "Usuários e Acessos".
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
-      # Power users de bootstrap por env (CSV). Opcional — o resto é gerido na tela.
+      # Power users de bootstrap por env (CSV). Opcional — o resto é gerido na
+      # tela, onde cada um recebe os SETORES que pode editar. Quem vem por env
+      # tem todos os setores (a semente não é rebaixável).
       POWER_USER_EMAILS: ${POWER_USER_EMAILS:-}
       # Legado: QUERY_EDITOR_EMAILS ainda conta como power_user (compat).
       QUERY_EDITOR_EMAILS: ${QUERY_EDITOR_EMAILS:-}

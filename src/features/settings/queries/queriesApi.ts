@@ -25,6 +25,10 @@ export interface CatalogResponse {
   queries: QueryItem[]
   engineLabels: Record<string, string>
   canEdit: boolean
+  // Grupos do catálogo que ESTA conta pode editar: '*' = todos (power user
+  // irrestrito e admin), ou a lista derivada dos setores do escopo. Ver todas
+  // as queries é liberado a quem abre a tela; editar é que é por setor.
+  editableGroups?: '*' | string[]
 }
 
 const BASE = '/api'

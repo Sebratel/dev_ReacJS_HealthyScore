@@ -7,7 +7,7 @@ import { QueryCard } from './QueryCard'
 type State =
   | { status: 'loading' }
   | { status: 'error'; error: ApiError }
-  | { status: 'ready'; items: QueryItem[]; engineLabels: Record<string, string>; canEdit: boolean }
+  | { status: 'ready'; items: QueryItem[]; engineLabels: Record<string, string>; canEdit: boolean; editableGroups: '*' | string[] }
 
 export function QueriesPanel() {
   const [state, setState] = useState<State>({ status: 'loading' })
@@ -18,7 +18,10 @@ export function QueriesPanel() {
     setState({ status: 'loading' })
     try {
       const data = await fetchCatalog()
-      setState({ status: 'ready', items: data.queries, engineLabels: data.engineLabels, canEdit: data.canEdit })
+      setState({
+        status: 'ready', items: data.queries, engineLabels: data.engineLabels,
+        canEdit: data.canEdit, editableGroups: data.editableGroups ?? '*',
+      })
     } catch (e) {
       setState({ status: 'error', error: e instanceof ApiError ? e : new ApiError(0, 'Erro inesperado.') })
     }
@@ -48,6 +51,11 @@ export function QueriesPanel() {
       .map(([key, label]) => ({ key, label, items: filtered.filter((it) => it.engine === key) }))
       .filter((g) => g.items.length > 0)
   }, [ready, filtered])
+
+  // Grupo do catálogo que esta conta edita. Fora do escopo, a query aparece
+  // inteira (leitura), só sem o botão de editar — e o backend recusa de novo.
+  const canEditGroup = (key: string) =>
+    ready?.canEdit === true && (ready.editableGroups === '*' || ready.editableGroups.includes(key))
 
   function updateItem(next: QueryItem) {
     setState((s) => (s.status === 'ready'
@@ -115,7 +123,9 @@ export function QueriesPanel() {
             <h3 className="text-sm font-semibold text-on-surface">Queries do Sistema</h3>
             <p className="mt-0.5 text-[11px] text-on-surface-variant">
               {r.items.length} queries SQL do ETL · {editedCount} editada{editedCount === 1 ? '' : 's'}
-              {!r.canEdit && ' · somente leitura para sua conta'}
+              {!r.canEdit
+                ? ' · somente leitura para sua conta'
+                : r.editableGroups !== '*' && ` · você edita ${r.editableGroups.length} grupo${r.editableGroups.length === 1 ? '' : 's'} (seus setores); o resto é leitura`}
             </p>
           </div>
           <button
@@ -172,7 +182,7 @@ export function QueriesPanel() {
               {!isCollapsed && (
                 <div className="space-y-2.5 border-t border-outline px-3.5 py-3.5">
                   {g.items.map((it) => (
-                    <QueryCard key={it.id} item={it} canEdit={r.canEdit} onChange={updateItem} />
+                    <QueryCard key={it.id} item={it} canEdit={canEditGroup(g.key)} onChange={updateItem} />
                   ))}
                 </div>
               )}

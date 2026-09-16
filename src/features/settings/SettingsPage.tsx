@@ -91,6 +91,9 @@ function HealthThresholdsTab() {
   const t = useAppStore((s) => s.healthThresholds)
   const updateHealthThresholds = useAppStore((s) => s.updateHealthThresholds)
   const resetHealthThresholds = useAppStore((s) => s.resetHealthThresholds)
+  // As faixas valem para TODOS os setores, então só admin publica. Power user
+  // setorial vê em leitura — melhor do que deixar mexer num campo que não salva.
+  const { isAdmin } = useRole()
 
   const isDefault =
     t.excellent === DEFAULT_HEALTH_THRESHOLDS.excellent &&
@@ -124,7 +127,7 @@ function HealthThresholdsTab() {
           action={
             <button
               onClick={resetHealthThresholds}
-              disabled={isDefault}
+              disabled={isDefault || !isAdmin}
               className="flex items-center gap-1.5 text-[11px] text-on-surface-variant hover:text-on-surface disabled:opacity-40 disabled:hover:text-on-surface-variant transition-colors"
             >
               <RotateCcw size={12} />Restaurar padrão
@@ -155,8 +158,9 @@ function HealthThresholdsTab() {
                       value={t[key]}
                       min={b.min}
                       max={b.max}
+                      disabled={!isAdmin}
                       onChange={(e) => updateHealthThresholds({ [key]: Number(e.target.value) })}
-                      className="w-16 bg-surface border border-outline rounded-md px-2 py-1 text-sm font-mono text-right text-on-surface focus:outline-none focus:border-primary/50 transition-colors"
+                      className="w-16 bg-surface border border-outline rounded-md px-2 py-1 text-sm font-mono text-right text-on-surface focus:outline-none focus:border-primary/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
                   <span className="ml-auto text-[11px] font-mono text-on-surface-variant">{rangeText[cls]}</span>
@@ -179,6 +183,10 @@ function HealthThresholdsTab() {
               As faixas valem para todos os módulos, contadores, gráficos e alertas da IA — a reclassificação é
               imediata. Os limites são validados automaticamente para nunca se sobreporem. Alterações são salvas como
               <strong> config oficial no servidor</strong> (valem para todos os usuários).
+              {!isAdmin && (
+                <> Como valem para <strong>todos os setores</strong>, só um <strong>administrador</strong> altera —
+                aqui você vê as faixas em vigor.</>
+              )}
             </p>
           </div>
         </div>
