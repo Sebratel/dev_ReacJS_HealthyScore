@@ -71,10 +71,14 @@ async function buscar(url, headers) {
 const limpaBarra = (u) => String(u).replace(/\/+$/, '')
 const uso = (entrada, saida) => ({ tokensEntrada: entrada ?? null, tokensSaida: saida ?? null })
 
-// JSON Schema → dialeto do Gemini. Ele aceita um subconjunto do OpenAPI 3.0:
-// `additionalProperties` é recusado, e a ordem das chaves não é garantida sem
-// `propertyOrdering`. Tira o que ele não entende e acrescenta a ordem — o
-// resto (type, properties, required, items, enum) passa igual.
+// JSON Schema → dialeto do Gemini. Ele aceita um subconjunto do OpenAPI 3.0 e
+// RECUSA `additionalProperties`, o que derruba a requisição inteira. Tira só
+// isso; type, properties, required, items e enum passam iguais.
+//
+// Deliberadamente conservador: nada de acrescentar campo que o Gemini "talvez"
+// aceite. Num caminho que acabou de quebrar, um campo extra não reconhecido
+// troca uma falha de formato por um 400 em todas as gerações — e aqui não há
+// nada a ganhar, já que o parser não depende da ordem das chaves.
 export function paraGemini(schema) {
   if (!schema || typeof schema !== 'object') return schema
   if (Array.isArray(schema)) return schema.map(paraGemini)
@@ -82,9 +86,6 @@ export function paraGemini(schema) {
   for (const [k, v] of Object.entries(schema)) {
     if (k === 'additionalProperties') continue
     out[k] = v && typeof v === 'object' ? paraGemini(v) : v
-  }
-  if (out.type === 'object' && out.properties) {
-    out.propertyOrdering = Object.keys(out.properties)
   }
   return out
 }
