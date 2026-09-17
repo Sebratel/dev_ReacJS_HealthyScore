@@ -82,7 +82,7 @@ export function Sidebar() {
           </div>
           <div className="mt-1 flex items-center gap-1">
             <Zap size={9} className="text-primary-strong" />
-            <span className="text-[10px] text-primary-strong font-mono">{realTotals.clients.toLocaleString('pt-BR')} clientes · 7 módulos</span>
+            <span className="text-[10px] text-primary-strong font-mono">{realTotals.contracts.toLocaleString('pt-BR')} contratos · 7 módulos</span>
           </div>
         </div>
       )}

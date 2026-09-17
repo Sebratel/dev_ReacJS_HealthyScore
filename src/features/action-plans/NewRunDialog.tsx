@@ -42,8 +42,8 @@ export function NewRunDialog({ padrao, onClose, onStarted }: Props) {
     mrrMax: mrrMax ? Number(mrrMax) : null,
   })
 
-  // Prévia a cada mudança: o gestor vê quantos clientes entram ANTES de gastar
-  // uma chamada de IA por cliente.
+  // Prévia a cada mudança: o gestor vê quantos contratos entram ANTES de gastar
+  // uma chamada de IA por contrato.
   useEffect(() => {
     let alive = true
     setCarregandoPreview(true)
@@ -85,7 +85,7 @@ export function NewRunDialog({ padrao, onClose, onStarted }: Props) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
           <div>
             <h2 className="text-sm font-bold text-on-surface">Nova rodada de planos</h2>
-            <p className="text-[11px] text-on-surface-variant mt-0.5">Setor Financeiro · um plano por cliente selecionado</p>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">Setor Financeiro · um plano por contrato selecionado</p>
           </div>
           <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors" aria-label="Fechar">
             <X size={16} />
@@ -95,7 +95,7 @@ export function NewRunDialog({ padrao, onClose, onStarted }: Props) {
         <div className="px-5 py-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Quantidade de clientes</span>
+              <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Quantidade de contratos</span>
               <input
                 type="number" min={1} max={200} value={quantidade}
                 onChange={(e) => setQuantidade(Math.max(1, Math.min(200, Number(e.target.value) || 1)))}
@@ -145,7 +145,7 @@ export function NewRunDialog({ padrao, onClose, onStarted }: Props) {
           <div className="rounded-lg border border-outline bg-surface-container-low/50 px-3 py-2.5">
             {carregandoPreview ? (
               <div className="flex items-center gap-2 text-[11px] text-on-surface-variant">
-                <Loader2 size={12} className="animate-spin" /> Calculando quantos clientes entram…
+                <Loader2 size={12} className="animate-spin" /> Calculando quantos contratos entram…
               </div>
             ) : previewErro ? (
               <div className="flex items-start gap-2 text-[11px] text-risk-critical">
@@ -156,7 +156,7 @@ export function NewRunDialog({ padrao, onClose, onStarted }: Props) {
                 <div className="flex items-center gap-2 text-[11px] text-on-surface">
                   <Users size={12} className="text-primary shrink-0" />
                   <span>
-                    <strong>{preview.selecionados}</strong> cliente(s) entram nesta rodada
+                    <strong>{preview.selecionados}</strong> contrato(s) entram nesta rodada
                     {preview.disponiveis > preview.selecionados && (
                       <span className="text-on-surface-variant"> · {preview.disponiveis} atendem ao critério</span>
                     )}

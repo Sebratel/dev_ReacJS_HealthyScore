@@ -244,7 +244,7 @@ export default function ActionPlansPage() {
         </Card>
       ) : (
         <Card>
-          <CardHeader title="Rodadas" subtitle="Cada rodada é um conjunto de clientes analisado de uma vez" icon={<ClipboardList size={14} />} />
+          <CardHeader title="Rodadas" subtitle="Cada rodada é um conjunto de contratos analisado de uma vez" icon={<ClipboardList size={14} />} />
           {runs === null ? (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-on-surface/70">
               <Loader2 size={16} className="animate-spin" /> Carregando rodadas…
@@ -268,7 +268,7 @@ export default function ActionPlansPage() {
               <p className="mt-2 text-xs text-on-surface-variant">Nenhuma rodada gerada ainda.</p>
               <p className="mt-1 text-[10px] text-on-surface-variant/70">
                 {podeDecidir
-                  ? 'Comece por "Nova rodada": os piores clientes do Financeiro entram primeiro.'
+                  ? 'Comece por "Nova rodada": os piores contratos do Financeiro entram primeiro.'
                   : 'Um power user precisa gerar a primeira rodada.'}
               </p>
             </div>
@@ -277,7 +277,7 @@ export default function ActionPlansPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-outline bg-surface-container-low/50">
-                    {['#', 'Criada em', 'Critério', 'Clientes', 'Válidos', 'Falhas', 'Decididos', 'Situação'].map((h, i) => (
+                    {['#', 'Criada em', 'Critério', 'Contratos', 'Válidos', 'Falhas', 'Decididos', 'Situação'].map((h, i) => (
                       <th key={h} className={cn('px-3 py-2.5 text-[10px] text-on-surface-variant uppercase tracking-wider font-medium whitespace-nowrap', i >= 3 ? 'text-right' : 'text-left')}>{h}</th>
                     ))}
                   </tr>

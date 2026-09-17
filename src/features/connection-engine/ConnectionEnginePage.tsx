@@ -120,21 +120,21 @@ export default function ConnectionEnginePage() {
           .sort((a, b) => b[1].events - a[1].events)
           .map(([status, v]) => ({
             label: statusLabel(status),
-            value: `${v.events.toLocaleString('pt-BR')} eventos · ${v.clients.toLocaleString('pt-BR')} clientes · média ${(v.events / v.clients).toFixed(1)}/cliente · ${(v.events / v.clients / months).toFixed(1)}/cliente/mês`,
+            value: `${v.events.toLocaleString('pt-BR')} eventos · ${v.clients.toLocaleString('pt-BR')} contratos · média ${(v.events / v.clients).toFixed(1)}/cliente · ${(v.events / v.clients / months).toFixed(1)}/cliente/mês`,
           }))
 
         // Distribuições do enlace — vêm agregadas do servidor (base inteira da
         // engine), não da página, por isso saem de `agg` e não de `rows`.
         const pct = (n: number, total: number) => (total ? ` · ${((n / total) * 100).toFixed(1)}%` : '')
         const dist = (list: { label: string; count: number; avgScore: number }[], total: number) =>
-          list.map((d) => ({ label: d.label, value: `${d.count.toLocaleString('pt-BR')} clientes${pct(d.count, total)} · score médio ${d.avgScore}` }))
+          list.map((d) => ({ label: d.label, value: `${d.count.toLocaleString('pt-BR')} contratos${pct(d.count, total)} · score médio ${d.avgScore}` }))
 
         const linkGroups = []
         if (agg?.withLink) {
           linkGroups.push({
             title: 'Enlace óptico — visão geral',
             entries: [
-              { label: 'Clientes com leitura óptica', value: agg.withLink.toLocaleString('pt-BR') },
+              { label: 'Contratos com leitura óptica', value: agg.withLink.toLocaleString('pt-BR') },
               { label: 'Atenuação média', value: agg.avgRxPower != null ? `${agg.avgRxPower.toFixed(2)} dBm` : '—' },
               { label: 'Sinal pior que −26 dBm', value: `${agg.poorSignalCount.toLocaleString('pt-BR')}${pct(agg.poorSignalCount, agg.withLink)}` },
               { label: 'Porta LAN abaixo de 1 Gbps', value: agg.cappedLanCount.toLocaleString('pt-BR') },

@@ -166,7 +166,7 @@ export default function DashboardPage() {
         {/* A unidade do sistema é o CONTRATO: é ele que cancela, que tem plano,
             endereço e nota. A pessoa vira subtítulo — quem tem 3 contratos e
             cancela 1 precisa aparecer como 1 saída, não como nada. */}
-        <KpiCard label="Contratos Ativos" value={(totals?.contracts ?? 0).toLocaleString('pt-BR')} subtitle={`${(totals?.clients ?? 0).toLocaleString('pt-BR')} clientes`} icon={<Users size={14} />} variant="brand" />
+        <KpiCard label="Contratos Ativos" value={(totals?.contracts ?? 0).toLocaleString('pt-BR')} subtitle={`Ticket médio ${formatCurrency((totals?.mrr ?? 0) / Math.max(1, totals?.contracts ?? 0))}`} icon={<Users size={14} />} variant="brand" />
         <KpiCard label="MRR (Base Ativa)" value={formatCurrency(totals?.mrr ?? 0)} subtitle="Receita recorrente mensal" icon={<DollarSign size={14} />} variant="success" iconColor="text-risk-low" />
         <KpiCard label="Health Score Global" value={`${globalHealth}/100`} subtitle="Média dos 7 módulos" icon={<Activity size={14} />} variant={globalHealth < 50 ? 'danger' : globalHealth < 70 ? 'warning' : 'success'} iconColor={globalHealth < 50 ? 'text-risk-critical' : 'text-risk-low'} />
         <KpiCard label="Contratos em Risco" value={rk.atRiskCount.toLocaleString('pt-BR')} subtitle={`Receita em risco: ${formatCurrency(rk.revenueAtRiskMonthly)}/mês`} hint={RECEITA_RISCO_DEF} icon={<AlertTriangle size={14} />} variant="danger" iconColor="text-risk-critical" />

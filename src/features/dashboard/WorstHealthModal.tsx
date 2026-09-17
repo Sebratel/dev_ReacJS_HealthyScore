@@ -119,7 +119,7 @@ export function WorstHealthModal({ open, onClose, cities }: { open: boolean; onC
             <div className="w-8 h-8 rounded-lg bg-gradient-danger flex items-center justify-center"><ShieldAlert size={15} className="text-on-primary" /></div>
             <div>
               <h2 className="text-sm font-bold text-on-surface">Piores Health Scores</h2>
-              <p className="text-[11px] text-on-surface-variant">Clientes ordenados do pior score combinado para o melhor — filtre e exporte</p>
+              <p className="text-[11px] text-on-surface-variant">Contratos ordenados do pior score combinado para o melhor — filtre e exporte</p>
             </div>
           </div>
           <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors p-1"><X size={18} /></button>
@@ -154,7 +154,7 @@ export function WorstHealthModal({ open, onClose, cities }: { open: boolean; onC
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-on-surface-variant font-mono">{filtered.length.toLocaleString('pt-BR')} clientes</span>
+            <span className="text-[11px] text-on-surface-variant font-mono">{filtered.length.toLocaleString('pt-BR')} contratos</span>
             <button onClick={exportCsv} disabled={filtered.length === 0}
               className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-all font-medium disabled:opacity-30">
               <Download size={12} /> Exportar CSV

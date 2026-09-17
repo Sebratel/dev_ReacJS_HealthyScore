@@ -27,7 +27,7 @@ const CLASS_OPTS: { key: 'all' | HealthClassification; label: string }[] = [
 
 // Cor da urgência pela janela mediana (dias): quanto menor, mais urgente.
 // Reaproveita a rampa ordinal de risco — aqui "low" significa "menos urgente",
-// não "saudável": todas as linhas desta tela já são clientes em risco.
+// não "saudável": todas as linhas desta tela já são contratos em risco.
 function urgencyColor(t: ChartTokens, days: number): string {
   if (days <= 30) return t.riskCritical
   if (days <= 90) return t.riskHigh
@@ -74,7 +74,7 @@ function narrative(r: ForecastRow): string {
     : r.windowMedianDays <= 90 ? 'Há espaço para uma ação de retenção no curto prazo.'
     : 'O risco existe, mas com prazo mais folgado para agir.'
   return `${r.customerName} está classificado como ${HEALTH_LABELS[r.classification as HealthClassification]} `
-    + `(health ${r.overallHealth}) e é cliente há ${meses} meses. ${driverTxt}`
+    + `(health ${r.overallHealth}) e está na base há ${meses} meses. ${driverTxt}`
     + `Comparando com cancelados de perfil semelhante que passaram desse tempo de contrato, a estimativa é de `
     + `cancelamento em ${fmtWindow(r.windowMedianDays)} (faixa ${r.windowP25Days}–${r.windowP75Days} dias), `
     + `com confiança ${confLabel(r.sampleN)} (${r.sampleN} casos). ${urg} `
@@ -212,7 +212,7 @@ export default function ChurnForecastPage() {
           <div className="w-9 h-9 rounded-xl bg-gradient-danger flex items-center justify-center shadow-glow-danger shrink-0"><AlarmClock size={16} className="text-on-primary" /></div>
           <div>
             <h1 className="text-lg font-bold gradient-text tracking-tight leading-none">Previsão de Cancelamento</h1>
-            <p className="text-[11px] text-on-surface-variant mt-1">Clientes em risco ordenados por urgência — janela estimada de cancelamento a partir de hoje</p>
+            <p className="text-[11px] text-on-surface-variant mt-1">Contratos em risco ordenados por urgência — janela estimada de cancelamento a partir de hoje</p>
           </div>
         </div>
         <div className="mt-3 flex items-start gap-2 rounded-lg bg-primary/5 border border-primary/15 px-3 py-2 text-[11px] text-on-surface-variant leading-relaxed">
@@ -238,7 +238,7 @@ export default function ChurnForecastPage() {
             <label className="flex flex-col gap-1">
               <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Quantidade</span>
               <select value={qty} onChange={(e) => setQty(Number(e.target.value))} className="h-8 px-2 text-xs bg-surface-container-low border border-outline rounded-lg text-on-surface focus:outline-none focus:border-primary/50">
-                {QTY_OPTS.map((n) => <option key={n} value={n}>{n} clientes</option>)}
+                {QTY_OPTS.map((n) => <option key={n} value={n}>{n} contratos</option>)}
               </select>
             </label>
             <label className="flex flex-col gap-1">
@@ -261,7 +261,7 @@ export default function ChurnForecastPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-on-surface-variant font-mono">{filtered.length.toLocaleString('pt-BR')} clientes</span>
+            <span className="text-[11px] text-on-surface-variant font-mono">{filtered.length.toLocaleString('pt-BR')} contratos</span>
             <button onClick={exportCsv} disabled={filtered.length === 0} className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-all font-medium disabled:opacity-30">
               <Download size={12} /> Exportar CSV
             </button>
@@ -290,7 +290,7 @@ export default function ChurnForecastPage() {
                 <tbody>
                   {pageRows.map((r, i) => <Row key={r.customerId} r={r} rank={page * PAGE_SIZE + i + 1} />)}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-on-surface-variant">Nenhum cliente em risco com janela calculável para esses filtros.</td></tr>
+                    <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-on-surface-variant">Nenhum contrato em risco com janela calculável para esses filtros.</td></tr>
                   )}
                 </tbody>
               </table>

@@ -77,7 +77,7 @@ function Explanation({ ind, idx }: { ind: IndicatorSuggestion; idx: IndexSuggest
         <Info size={13} className="mt-0.5 shrink-0 text-on-surface-variant" />
         <span>
           Amostra insuficiente na base ativa para sugerir com confiança
-          (apenas <strong className="text-on-surface/85">{idx.activeCount}</strong> cliente(s) com este atributo). Precisa de pelo menos 5.
+          (apenas <strong className="text-on-surface/85">{idx.activeCount}</strong> contrato(s) com este atributo). Precisa de pelo menos 5.
         </span>
       </div>
     )
@@ -118,9 +118,9 @@ function Explanation({ ind, idx }: { ind: IndicatorSuggestion; idx: IndexSuggest
         <p className="text-[10px] text-on-surface-variant leading-relaxed flex items-start gap-1.5">
           <Info size={11} className="mt-0.5 shrink-0" />
           <span>
-            Percentual <strong className="text-on-surface/70">por cliente</strong>, não por fatura/evento: conta quem teve{' '}
+            Percentual <strong className="text-on-surface/70">por contrato</strong>, não por fatura/evento: conta quem teve{' '}
             <strong className="text-on-surface/70">ao menos uma</strong> ocorrência no histórico. Por isso indicadores de
-            presença não somam 100% entre si — o mesmo cliente pode ter, por exemplo, faturas atrasadas <em>e</em> faturas
+            presença não somam 100% entre si — o mesmo contrato pode ter, por exemplo, faturas atrasadas <em>e</em> faturas
             pagas no prazo.
           </span>
         </p>
@@ -232,7 +232,7 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-on-surface">{ind.indicatorLabel}</span>
-            {ind.presence && <span title="Indicador de presença: o % é por cliente (ao menos uma ocorrência no histórico). Não é excludente com outros indicadores — os percentuais não somam 100% entre si." className="text-[9px] px-1.5 py-0.5 rounded bg-surface-container-low border border-outline text-on-surface-variant uppercase tracking-wider cursor-help">presença</span>}
+            {ind.presence && <span title="Indicador de presença: o % é por contrato (ao menos uma ocorrência no histórico). Não é excludente com outros indicadores — os percentuais não somam 100% entre si." className="text-[9px] px-1.5 py-0.5 rounded bg-surface-container-low border border-outline text-on-surface-variant uppercase tracking-wider cursor-help">presença</span>}
             {ind.multi && <span className="text-[9px] px-1.5 py-0.5 rounded bg-surface-container-low border border-outline text-on-surface-variant uppercase tracking-wider">multi</span>}
           </div>
           <p className="text-[11px] text-on-surface-variant mt-0.5 truncate">{ind.description}</p>
@@ -253,7 +253,7 @@ function IndicatorBlock({ ind, currentOf, onApply, onApplyAll }: {
           <div className="flex items-center justify-between px-4 py-2 bg-surface-container-low/30">
             <span className="text-[10px] text-on-surface-variant">
               {valid.length} de {ind.indices.length} {ind.presence ? 'condição' : 'índices'} com amostra suficiente
-              {ind.presence && <span className="text-on-surface-variant/90"> · % = clientes com ao menos uma ocorrência no histórico</span>}
+              {ind.presence && <span className="text-on-surface-variant/90"> · % = contratos com ao menos uma ocorrência no histórico</span>}
             </span>
             {canApplyHere && appliableCount > 0 && (
               <button onClick={() => onApplyAll(ind)} className="inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-md bg-gradient-brand text-on-primary shadow-glow hover:-translate-y-0.5 transition-all">

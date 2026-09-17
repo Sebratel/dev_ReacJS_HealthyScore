@@ -209,7 +209,7 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
 
   const rightStat = props.rightStat
     ? (data ? props.rightStat(data.meta) : null)
-    : <> · {(data?.meta.totals?.clients ?? 0).toLocaleString('pt-BR')} ativos</>
+    : <> · {(data?.meta.totals?.contracts ?? 0).toLocaleString('pt-BR')} contratos ativos</>
 
   return (
     <div className="space-y-5 animate-slide-up">
@@ -325,7 +325,7 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
 
           <div className="flex items-center justify-between px-5 py-3 border-t border-outline">
             <span className="text-[10px] text-on-surface-variant">
-              {data && data.total > 0 ? `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, data.total)} de ${data.total.toLocaleString('pt-BR')}` : '0'} clientes
+              {data && data.total > 0 ? `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, data.total)} de ${data.total.toLocaleString('pt-BR')}` : '0'} contratos
             </span>
             <div className="flex gap-1.5">
               <button disabled={page === 0 || loading} onClick={() => setPage((p) => p - 1)} className="text-[10px] px-2.5 py-1 rounded border border-outline text-on-surface/70 disabled:opacity-30 hover:border-outline-strong transition-all">Anterior</button>
@@ -347,7 +347,7 @@ export function EngineScreen<Agg, S extends EngineScoreBase>(props: EngineScreen
         open={dataOpen}
         onClose={() => setDataOpen(false)}
         title={props.dataTitle}
-        subtitle={dataLoading ? 'Carregando…' : `${dataRows.length.toLocaleString('pt-BR')} clientes de maior risco · pontuados no servidor`}
+        subtitle={dataLoading ? 'Carregando…' : `${dataRows.length.toLocaleString('pt-BR')} contratos de maior risco · pontuados no servidor`}
         columns={props.dataColumns}
         rows={dataRows}
         aggregates={aggregates}

@@ -105,11 +105,11 @@ export default function AiPredictivePage() {
     if (!data) return []
     const bc = data.baseCounts
     return [
-      { type: 'critical', message: `${data.ranking.criticalCount} clientes com health combinado crítico (<${criticalThreshold}) — ação imediata`, action: 'Ver financeiro', path: '/financeiro' },
-      { type: 'critical', message: `${bc.cancelThreats} clientes com registro de "${cancelThreatsLabel}"`, action: 'Relacionamento', path: '/engine-relacionamento' },
-      { type: 'high', message: `${bc.overdueClients} clientes com registro de "${resolveIndicatorLabel(labelMap, 'financial', 'overdueBills')}"`, action: 'Financeiro', path: '/financeiro' },
-      { type: 'medium', message: `${bc.slaLateClients} clientes com registro de "${resolveIndicatorLabel(labelMap, 'field', 'slaOverdue')}" na manutenção`, action: 'Manutenção', path: '/manutencao' },
-      { type: 'info', message: `${bc.massiveClients} clientes impactados por massivas de rede no período`, action: 'Rede', path: '/engine-rede' },
+      { type: 'critical', message: `${data.ranking.criticalCount} contratos com health combinado crítico (<${criticalThreshold}) — ação imediata`, action: 'Ver financeiro', path: '/financeiro' },
+      { type: 'critical', message: `${bc.cancelThreats} contratos com registro de "${cancelThreatsLabel}"`, action: 'Relacionamento', path: '/engine-relacionamento' },
+      { type: 'high', message: `${bc.overdueClients} contratos com registro de "${resolveIndicatorLabel(labelMap, 'financial', 'overdueBills')}"`, action: 'Financeiro', path: '/financeiro' },
+      { type: 'medium', message: `${bc.slaLateClients} contratos com registro de "${resolveIndicatorLabel(labelMap, 'field', 'slaOverdue')}" na manutenção`, action: 'Manutenção', path: '/manutencao' },
+      { type: 'info', message: `${bc.massiveClients} contratos impactados por massivas de rede no período`, action: 'Rede', path: '/engine-rede' },
     ]
   }, [data, criticalThreshold, labelMap, cancelThreatsLabel])
 
@@ -151,9 +151,9 @@ export default function AiPredictivePage() {
             <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center shrink-0"><Brain size={18} className="text-on-primary" /></div>
             <div>
               <h2 className="text-base font-bold text-on-surface">IA Preditiva — Health Score combinado</h2>
-              <p className="text-sm text-on-surface/70 mt-0.5">{data.summaries.length} módulos · risco por cliente</p>
+              <p className="text-sm text-on-surface/70 mt-0.5">{data.summaries.length} módulos · risco por contrato</p>
               <div className="flex items-center gap-4 mt-2 flex-wrap">
-                {[{ label: 'Módulos', value: String(data.summaries.length) }, { label: 'Clientes', value: rk.total.toLocaleString('pt-BR') }, { label: 'Em risco', value: rk.atRiskCount.toLocaleString('pt-BR') }].map(({ label, value }) => (
+                {[{ label: 'Módulos', value: String(data.summaries.length) }, { label: 'Contratos', value: rk.total.toLocaleString('pt-BR') }, { label: 'Em risco', value: rk.atRiskCount.toLocaleString('pt-BR') }].map(({ label, value }) => (
                   <div key={label} className="flex items-center gap-1.5"><span className="text-[10px] text-on-surface-variant">{label}:</span><span className="text-[11px] font-semibold text-primary-strong font-mono">{value}</span></div>
                 ))}
               </div>
@@ -167,7 +167,7 @@ export default function AiPredictivePage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Clientes Críticos" value={rk.criticalCount.toLocaleString('pt-BR')} subtitle={`Health combinado < ${criticalThreshold}`} variant="danger" icon={<AlertTriangle size={14} />} iconColor="text-risk-critical" />
+        <KpiCard label="Contratos Críticos" value={rk.criticalCount.toLocaleString('pt-BR')} subtitle={`Health combinado < ${criticalThreshold}`} variant="danger" icon={<AlertTriangle size={14} />} iconColor="text-risk-critical" />
         <KpiCard label="Receita Anual em Risco" value={formatCurrency(rk.annualRevenueRisk)} subtitle="Risco × MRR × 12" hint={RECEITA_RISCO_ANUAL_DEF} variant="warning" icon={<DollarSign size={14} />} iconColor="text-risk-medium" />
         <KpiCard label={cancelThreatsLabel} value={data.baseCounts.cancelThreats.toLocaleString('pt-BR')} subtitle="Registradas no relacionamento" variant="danger" icon={<MessageSquare size={14} />} iconColor="text-risk-high" />
         <KpiCard label="Alertas Automáticos" value={autoAlerts.length} subtitle="Ações recomendadas" variant="brand" icon={<Radio size={14} />} iconColor="text-primary" />
@@ -233,7 +233,7 @@ export default function AiPredictivePage() {
 
       {/* Top risk com explicações de IA */}
       <Card>
-        <CardHeader title="Clientes com Maior Risco — Explicação de IA" subtitle="Health combinado dos módulos com análise automatizada por cliente" icon={<Brain size={14} />} />
+        <CardHeader title="Contratos com Maior Risco — Explicação de IA" subtitle="Health combinado dos módulos com análise automatizada por contrato" icon={<Brain size={14} />} />
         <div className="divide-y divide-outline">
           {topRisk.map((r, i) => {
             const color = palette[r.classification]
@@ -272,12 +272,12 @@ export default function AiPredictivePage() {
               </div>
             )
           })}
-          {topRisk.length === 0 && <p className="px-5 py-8 text-center text-sm text-on-surface-variant">Nenhum cliente encontrado com esses filtros.</p>}
+          {topRisk.length === 0 && <p className="px-5 py-8 text-center text-sm text-on-surface-variant">Nenhum contrato encontrado com esses filtros.</p>}
         </div>
       </Card>
 
       <p className="text-[10px] text-on-surface-variant text-center">
-        {rk.total.toLocaleString('pt-BR')} clientes pontuados · atualizado em {data.meta.generatedAt ? new Date(data.meta.generatedAt).toLocaleString('pt-BR') : '—'}
+        {rk.total.toLocaleString('pt-BR')} contratos pontuados · atualizado em {data.meta.generatedAt ? new Date(data.meta.generatedAt).toLocaleString('pt-BR') : '—'}
       </p>
     </div>
   )

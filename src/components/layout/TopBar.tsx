@@ -56,7 +56,7 @@ export function TopBar() {
           <AlertTriangle size={11} />
           <span className="text-[11px] font-semibold">
             {/* This would be dynamic in a real app */}
-            Clientes críticos
+            Contratos críticos
           </span>
         </div>
 

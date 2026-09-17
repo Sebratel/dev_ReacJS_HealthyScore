@@ -65,6 +65,9 @@ export async function fetchEngine<Agg = unknown, Score = unknown>(
 // Rótulo de cobertura a partir do meta do backend (equivalente ao coverageLabel
 // do snapshot, mas com os dados que vêm da resposta).
 export function coverageLabelFromMeta(meta: EngineMeta): string {
-  if (meta.coverage === 'full') return `base completa · ${(meta.totals?.clients ?? 0).toLocaleString('pt-BR')} clientes`
-  return `amostra de ${(meta.clients ?? 0).toLocaleString('pt-BR')} clientes`
+  // A unidade da plataforma é o CONTRATO. `totals.clients` conta pessoas e não
+  // corresponde a nenhuma linha da tela — mostrá-lo aqui fazia a cobertura
+  // parecer menor que a base realmente analisada.
+  if (meta.coverage === 'full') return `base completa · ${(meta.totals?.contracts ?? 0).toLocaleString('pt-BR')} contratos`
+  return `amostra de ${(meta.clients ?? 0).toLocaleString('pt-BR')} contratos`
 }
