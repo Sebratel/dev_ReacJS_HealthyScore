@@ -148,11 +148,11 @@ export function isRealDataLoaded() {
 }
 
 // Rótulo de cobertura para os rodapés das telas:
-//   base completa → "base completa · 81.335 clientes"
-//   amostra       → "amostra de 2.000 clientes"
+//   base completa → "base completa · 86.713 contratos"
+//   amostra       → "amostra de 2.000 contratos"
 export function coverageLabel(): string {
-  if (realMeta.coverage === 'full') return `base completa · ${realTotals.clients.toLocaleString('pt-BR')} clientes`
-  return `amostra de ${realMeta.sampleSize.toLocaleString('pt-BR')} clientes`
+  if (realMeta.coverage === 'full') return `base completa · ${realTotals.contracts.toLocaleString('pt-BR')} contratos`
+  return `amostra de ${realMeta.sampleSize.toLocaleString('pt-BR')} contratos`
 }
 
 async function decompressGzip(res: Response): Promise<string> {

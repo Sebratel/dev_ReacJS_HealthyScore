@@ -1,10 +1,10 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Wifi, Wrench, Brain, ChevronLeft, ChevronRight, Zap,
-  DollarSign, Briefcase, Network, PackageOpen, MessageSquare, UserMinus, Truck, AlarmClock, ClipboardList,
+  DollarSign, Briefcase, Network, PackageOpen, MessageSquare, UserMinus, Truck, AlarmClock, ClipboardList, Moon,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
-import { realTotals } from '@/data/realClients'
+import { realTotals, realMeta } from '@/data/realClients'
 import { cn } from '@/utils/cn'
 
 const NAV_ITEMS = [
@@ -83,6 +83,20 @@ export function Sidebar() {
           <div className="mt-1 flex items-center gap-1">
             <Zap size={9} className="text-primary-strong" />
             <span className="text-[10px] text-primary-strong font-mono">{realTotals.contracts.toLocaleString('pt-BR')} contratos · 7 módulos</span>
+          </div>
+          {/* A cadência precisa estar escrita. "Monitoramento ativo" com ponto
+              pulsando é lido como tempo real, e aí um cancelamento de hoje de
+              manhã "deveria" aparecer — não aparece, porque a base é a foto da
+              madrugada. Mostrar QUANDO foi a carga resolve a dúvida sem obrigar
+              ninguém a conhecer o ETL. */}
+          <div className="mt-1.5 pt-1.5 border-t border-outline/60 flex items-start gap-1">
+            <Moon size={9} className="text-on-surface-variant shrink-0 mt-[2px]" />
+            <span className="text-[9px] text-on-surface-variant leading-snug">
+              Carga diária na madrugada — não é tempo real.
+              {realMeta.generatedAt && (
+                <><br />Atualizado em {new Date(realMeta.generatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</>
+              )}
+            </span>
           </div>
         </div>
       )}
