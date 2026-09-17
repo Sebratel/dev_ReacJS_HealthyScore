@@ -34,7 +34,7 @@ services:
       start_period: 5s
 
   # Backend de queries — serve/edita o catálogo de queries do ETL. O nginx do
-  # `web` faz proxy de /api/ para cá. Os overrides ficam em ./data (volume),
+  # `web` faz proxy de /api/ para cá. Os overrides ficam no volume `appdata`,
   # compartilhado com a máquina/job que roda o ETL (fetch-clients.mjs).
   api:
     build:
@@ -83,9 +83,10 @@ services:
       DB_MARIA_USER: ${DB_MARIA_USER:-}
       DB_MARIA_PASSWORD: ${DB_MARIA_PASSWORD:-}
       # ── Provedor de IA (Planos de Ação) ──
-      # O provedor é cadastrado pela TELA e fica cifrado no volume ./data.
+      # O provedor é cadastrado pela TELA e fica cifrado no volume `appdata`.
       # APP_SECRET é a chave que cifra: sem ela, uma é gerada em data/.secret
-      # (funciona, mas aí perder o volume é perder o que foi cifrado).
+      # (funciona, mas aí perder o volume é perder o que foi cifrado) — por isso
+      # vale defini-la na stack, para a chave não depender do volume.
       #   openssl rand -base64 48 · trocá-la torna ilegível o que já foi cifrado.
       APP_SECRET: ${APP_SECRET:-}
       # Bootstrap opcional — só vale enquanto nada foi cadastrado na tela.
