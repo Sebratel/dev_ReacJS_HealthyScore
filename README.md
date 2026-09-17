@@ -2,6 +2,10 @@
 
 Plataforma analítica enterprise para previsão e redução de churn em provedores de internet, com foco em ISPs regionais do RS.
 
+> 📘 **[DIRETRIZES.md](DIRETRIZES.md)** — como usar a plataforma: acessos por
+> setor, como ler o Health Score, e as boas práticas de Planos de Ação e das
+> sugestões de IA. Leitura para quem opera; este README é para quem instala.
+
 ## Stack
 
 | Camada | Tecnologia |
