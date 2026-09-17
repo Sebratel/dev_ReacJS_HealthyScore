@@ -137,7 +137,7 @@ export default function LoginPage() {
             transition={{ duration: 0.5, ease: EASE }}
           >
             <img src={LOGO} alt="" width={44} height={44} className="h-11 w-11 rounded-full object-contain ring-1 ring-on-scrim/40 shadow-lg" aria-hidden />
-            <span className="text-base font-extrabold uppercase tracking-[0.24em] text-on-scrim drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] sm:text-lg">Operação Sebratel</span>
+            <span className="text-base font-extrabold uppercase tracking-[0.24em] text-on-scrim drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] sm:text-lg">Sebratel</span>
           </motion.div>
           <motion.h2
             className="max-w-xl text-balance text-2xl font-bold leading-[1.15] tracking-tight text-on-scrim drop-shadow-[0_2px_12px_rgba(0,0,0,0.75)] sm:text-3xl lg:text-[2rem] xl:text-4xl"
@@ -145,7 +145,7 @@ export default function LoginPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, delay: 0.08, ease: EASE }}
           >
-            A conexão que move <span className="text-primary-container">o que importa.</span>
+            A inovação <span className="text-primary-container">a gente garante.</span>
           </motion.h2>
           <motion.p
             className="max-w-md text-sm leading-relaxed text-on-scrim drop-shadow-[0_1px_8px_rgba(0,0,0,0.8)] sm:text-base"
