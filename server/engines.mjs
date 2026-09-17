@@ -44,9 +44,24 @@ function fnv1a(str) {
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) }
   return (h >>> 0).toString(36)
 }
+// Impressão digital BARATA da coorte. `clients.length` sozinho não identifica
+// quem está dentro: duas populações diferentes do mesmo tamanho (a base de dois
+// meses distintos na coorte mensal, ativos × cancelados na previsão) caíam na
+// mesma entrada de cache e a segunda recebia o score da primeira — silenciosa.
+// Amostra ids em passo fixo para não varrer 86 mil registros a cada chamada.
+function cohortFingerprint(clients) {
+  const n = clients.length
+  if (!n) return '0'
+  const passo = Math.max(1, Math.floor(n / 32))
+  let acc = `${n}`
+  for (let i = 0; i < n; i += passo) acc += `|${clients[i]?.clientId ?? ''}`
+  acc += `|${clients[n - 1]?.clientId ?? ''}`
+  return fnv1a(acc)
+}
+
 function scoredEngineData(key, clients, config, thresholds, monthly) {
   const eng = ENGINES[key]
-  const cacheK = `${key}:${fnv1a(JSON.stringify(config))}:${fnv1a(JSON.stringify(thresholds || {}))}:${getVersion()}:${clients.length}`
+  const cacheK = `${key}:${fnv1a(JSON.stringify(config))}:${fnv1a(JSON.stringify(thresholds || {}))}:${getVersion()}:${cohortFingerprint(clients)}`
   const hit = scoreCache.get(cacheK)
   if (hit) return hit
   // Miss: pontua a população inteira da engine (parte cara) e guarda.

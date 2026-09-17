@@ -159,7 +159,16 @@ try {
   const t = totals.rows[0]
   console.log(`Totais: ${t.clients} clientes, ${t.contracts} contratos, MRR R$ ${Number(t.mrr).toLocaleString('pt-BR')}`)
 
-  // Dedupe por cliente (mantém 1 contrato por cliente), soma MRR dos contratos
+  // ── Uma linha por CONTRATO ───────────────────────────────────────────────
+  // Antes isto deduplicava por `client_id` e ficava com o primeiro contrato de
+  // cada pessoa. Custo medido: 3.356 dos 86.603 contratos nunca eram
+  // analisados (e o MRR deles não entrava em receita em risco). Quem tem 3
+  // contratos e cancela 1 aparecia como "não cancelou"; 2.838 pessoas têm mais
+  // de um contrato, e uma tem 25.
+  //
+  // A unidade do sistema é o CONTRATO. A identidade (`clientId`, que as engines
+  // usam para agrupar) aponta para o número do contrato; a pessoa continua
+  // disponível em `personId` para quem quiser a visão por assinante.
   const byClient = new Map()
   for (const r of sample.rows) {
     // Cortesia e afins carregam o preço de TABELA do plano, mas nunca são
@@ -168,10 +177,13 @@ try {
     // O cliente continua na base, com score e ranking; só a receita é zero.
     const naoFaturado = NON_BILLED_CONTRACT_TYPES.includes((r.payment_form || '').trim())
     const price = naoFaturado ? 0 : (Number(r.selling_price) || 0)
-    if (byClient.has(r.client_id)) continue // mantém o contrato primário (1º)
+    // Sem número de contrato não há identidade estável — a linha não entra.
+    const contractNumber = r.contract_number != null ? String(r.contract_number) : ''
+    if (!contractNumber || byClient.has(contractNumber)) continue
     const toDate = (x) => (x ? new Date(x).toISOString().slice(0, 10) : null)
-    byClient.set(r.client_id, {
-      clientId: String(r.client_id),
+    byClient.set(contractNumber, {
+      clientId: contractNumber,
+      personId: String(r.client_id),
       name: r.client_name?.trim() || 'Cliente sem nome',
       clientGender: r.client_gender != null ? String(r.client_gender) : '(sem gênero)',
       clientBirth: toDate(r.client_birth),
@@ -179,7 +191,7 @@ try {
       sellerGender: r.seller_gender != null ? String(r.seller_gender) : '(sem gênero)',
       sellerBirth: toDate(r.seller_birth),
       sellerAdmitted: toDate(r.seller_admitted),
-      contractNumber: r.contract_number != null ? String(r.contract_number) : '',
+      contractNumber,
       contractDate: r.created_contract ? new Date(r.created_contract).toISOString().slice(0, 10) : null,
       plan: r.plan_name?.trim() || 'Sem plano',
       monthlyValue: price,
@@ -212,10 +224,18 @@ try {
   }
   const clients = FULL ? Array.from(byClient.values()) : Array.from(byClient.values()).slice(0, SAMPLE_SIZE)
   const byContract = new Map(clients.filter((c) => c.contractNumber).map((c) => [c.contractNumber, c]))
-  const byClientId = new Map(clients.map((c) => [c.clientId, c]))
+  // Índice por PESSOA → lista de contratos. Algumas queries devolvem client_id
+  // (infra de rede, fallback de ONU); como a pessoa pode ter vários contratos,
+  // o sinal dela precisa chegar em TODOS eles. Com um Map 1:1 aqui, o segundo
+  // contrato ficava sem infra e sem quedas de PPPoE, silenciosamente.
+  const byPersonId = new Map()
+  for (const c of clients) {
+    const arr = byPersonId.get(c.personId)
+    if (arr) arr.push(c); else byPersonId.set(c.personId, [c])
+  }
   const contractNumbers = Array.from(byContract.keys())
-  const clientIds = clients.map((c) => c.clientId)
-  console.log(`Amostra: ${clients.length} clientes, ${contractNumbers.length} contratos. Buscando sinais financeiros…`)
+  const clientIds = Array.from(byPersonId.keys())
+  console.log(`Amostra: ${clients.length} contratos de ${byPersonId.size} pessoas. Buscando sinais financeiros…`)
 
   // MariaDB — massivas por splitter_code (cross-DB)
   const maria = await makeMariaPool()
@@ -385,7 +405,8 @@ try {
     console.log('ONU (AutoISP): DB_AUTOISP_* ausentes no .env — sinal pulado.')
   }
   const applyOnu = (c) => {
-    const m = (c.contractNumber && onuByContract.get(c.contractNumber)) || onuByClient.get(c.clientId)
+    // `clientId` agora é o contrato; o fallback do AutoISP vem por pessoa.
+    const m = (c.contractNumber && onuByContract.get(c.contractNumber)) || onuByClient.get(c.personId)
     if (m) c.onuStatusCounts = { ...m }
   }
 
@@ -412,7 +433,8 @@ try {
   const netAcc = new Map()
   let withInfra = 0
   for (const r of netInfra.rows) {
-    const c = byClientId.get(String(r.client_id)); if (!c) continue
+    // A pessoa pode ter vários contratos: a infra vai para todos eles.
+    for (const c of byPersonId.get(String(r.client_id)) ?? []) {
     let a = netAcc.get(c.clientId)
     if (!a) {
       a = { codes: new Set(), countSum: 0, offlineW: 0, overageSum: 0, overageN: 0 }
@@ -428,22 +450,23 @@ try {
     }
     const code = r.splitter_code != null ? String(r.splitter_code) : ''
     if (!code) continue
-    const agg = massiveBySplitter.get(code); if (!agg) continue
-    if (a.codes.has(code)) continue
+    const agg = massiveBySplitter.get(code)
+    if (!agg || a.codes.has(code)) continue
     a.codes.add(code)
     a.countSum += agg.count
     a.offlineW += agg.offline * agg.count
     if (agg.overage > 0) { a.overageSum += agg.overage; a.overageN++ }
+    }
   }
   let withMassive = 0
-  for (const [clientId, a] of netAcc) {
-    const c = byClientId.get(clientId); if (!c) continue
+  for (const [contractNumber, a] of netAcc) {
+    const c = byContract.get(contractNumber); if (!c) continue
     c.netMassiveCount = a.countSum
     c.netAvgOfflineMin = a.countSum > 0 ? Math.round(a.offlineW / a.countSum) : 0
     c.netAvgOverageMin = a.overageN > 0 ? Math.round(a.overageSum / a.overageN) : 0
     if (a.countSum > 0) withMassive++
   }
-  console.log(`Network: ${withInfra}/${clients.length} clientes com infra · ${withMassive} em splitters afetados por massiva.`)
+  console.log(`Network: ${withInfra}/${clients.length} contratos com infra · ${withMassive} em splitters afetados por massiva.`)
 
   for (const r of equip.rows) {
     const c = byContract.get(String(r.contract_number)); if (!c) continue
@@ -501,10 +524,10 @@ try {
 
   for (const c of clients) applyOnu(c)
   const withOnu = clients.filter((c) => Object.keys(c.onuStatusCounts).length > 0).length
-  if (onuByContract.size || onuByClient.size) console.log(`ONU (AutoISP): ${withOnu}/${clients.length} clientes com mudanças de status casadas na base.`)
+  if (onuByContract.size || onuByClient.size) console.log(`ONU (AutoISP): ${withOnu}/${clients.length} contratos com mudanças de status casadas na base.`)
 
   const withInv = clients.filter((c) => c.totalInvoices > 0).length
-  console.log(`Sinais aplicados: ${withInv}/${clients.length} clientes com faturas no período.`)
+  console.log(`Sinais aplicados: ${withInv}/${clients.length} contratos com faturas no período.`)
 
   // Remove PII/geo de cada cliente antes de exportar (não usados no front).
   const clientsOut = clients.map((c) => { const o = { ...c }; for (const k of STRIP_FIELDS) delete o[k]; return o })
@@ -690,7 +713,7 @@ try {
   const json = JSON.stringify(payload)
   const gz = gzipSync(json, { level: 9 })
   writeFileSync(OUT, gz)
-  console.log(`OK — ${clients.length} clientes (${FULL ? 'BASE COMPLETA' : 'amostra'}) · JSON ${(json.length / 1048576).toFixed(1)} MB → gzip ${(gz.length / 1048576).toFixed(1)} MB em ${OUT}`)
+  console.log(`OK — ${clients.length} contratos (${FULL ? 'BASE COMPLETA' : 'amostra'}) · JSON ${(json.length / 1048576).toFixed(1)} MB → gzip ${(gz.length / 1048576).toFixed(1)} MB em ${OUT}`)
 } catch (e) {
   console.error('ERRO:', e.message)
   process.exitCode = 1

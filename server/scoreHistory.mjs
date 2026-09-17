@@ -90,15 +90,21 @@ function ensureFresh() {
           // campo e não precisa conhecer a armadilha.
           comparableByEngine: comparableOf(byEngine, hasLink),
         }
-        const key = String(r.id)
-        const arr = index.get(key)
-        if (arr) arr.push(point); else index.set(key, [point])
+        // Indexa pelo id E pelo número do contrato. A identidade do sistema
+        // mudou de PESSOA para CONTRATO: sem a segunda chave, todo ponto
+        // gravado antes da virada ficaria órfão e a linha do tempo apareceria
+        // vazia. O passado não dá para regravar, então o índice aceita os dois.
+        for (const key of new Set([String(r.id), r.ct != null ? String(r.ct) : ''])) {
+          if (!key) continue
+          const arr = index.get(key)
+          if (arr) arr.push(point); else index.set(key, [point])
+        }
       }
     } catch (e) { lastError = `${f}: ${e.message}` }
   }
   // Ordena cada série por data (asc).
   for (const arr of index.values()) arr.sort((a, b) => a.date.localeCompare(b.date))
-  console.log(`[score-history] índice: ${index.size} clientes · ${dates.length} pontos (${dates[0] ?? '—'}..${dates[dates.length - 1] ?? '—'})`)
+  console.log(`[score-history] índice: ${index.size} chaves · ${dates.length} pontos (${dates[0] ?? '—'}..${dates[dates.length - 1] ?? '—'})`)
 }
 
 export function getClientHistory(clientId) {

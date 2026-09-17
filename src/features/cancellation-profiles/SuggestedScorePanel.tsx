@@ -613,7 +613,7 @@ export default function SuggestedScorePanel() {
         <>
           {/* KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi icon={<Users size={15} />} label={isFullBase ? 'Base ativa (completa)' : 'Base ativa (amostra)'} value={state.data.activeCount.toLocaleString('pt-BR')} sub={isFullBase ? 'clientes analisados' : 'amostra de dev — completa no servidor'} />
+            <Kpi icon={<Users size={15} />} label={isFullBase ? 'Base ativa (completa)' : 'Base ativa (amostra)'} value={state.data.activeCount.toLocaleString('pt-BR')} sub={isFullBase ? 'contratos analisados' : 'amostra de dev — completa no servidor'} />
             <Kpi icon={<TrendingDown size={15} />} label="Cancelados no período" value={state.data.cancelledCount.toLocaleString('pt-BR')} sub={`${fmtDateBR(from)} – ${fmtDateBR(to)}`} color={tokens.riskCritical} />
             <Kpi icon={<Database size={15} />} label="Indicadores" value={String(built.indicatorCount)} sub={`${built.indexCount} índices avaliados`} />
             <Kpi icon={<TrendingDown size={15} />} label="Sinais de risco" value={String(built.riskCount)} sub="índices com lift > 1" color={tokens.riskHigh} />

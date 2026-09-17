@@ -163,10 +163,13 @@ export default function DashboardPage() {
       {loading && <div className="flex items-center justify-end gap-1.5 text-[11px] text-on-surface-variant -mb-3"><Loader2 size={11} className="animate-spin" /> atualizando…</div>}
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Clientes Ativos" value={(totals?.clients ?? 0).toLocaleString('pt-BR')} subtitle={`${(totals?.contracts ?? 0).toLocaleString('pt-BR')} contratos`} icon={<Users size={14} />} variant="brand" />
+        {/* A unidade do sistema é o CONTRATO: é ele que cancela, que tem plano,
+            endereço e nota. A pessoa vira subtítulo — quem tem 3 contratos e
+            cancela 1 precisa aparecer como 1 saída, não como nada. */}
+        <KpiCard label="Contratos Ativos" value={(totals?.contracts ?? 0).toLocaleString('pt-BR')} subtitle={`${(totals?.clients ?? 0).toLocaleString('pt-BR')} clientes`} icon={<Users size={14} />} variant="brand" />
         <KpiCard label="MRR (Base Ativa)" value={formatCurrency(totals?.mrr ?? 0)} subtitle="Receita recorrente mensal" icon={<DollarSign size={14} />} variant="success" iconColor="text-risk-low" />
         <KpiCard label="Health Score Global" value={`${globalHealth}/100`} subtitle="Média dos 7 módulos" icon={<Activity size={14} />} variant={globalHealth < 50 ? 'danger' : globalHealth < 70 ? 'warning' : 'success'} iconColor={globalHealth < 50 ? 'text-risk-critical' : 'text-risk-low'} />
-        <KpiCard label="Clientes em Risco" value={rk.atRiskCount.toLocaleString('pt-BR')} subtitle={`Receita em risco: ${formatCurrency(rk.revenueAtRiskMonthly)}/mês`} hint={RECEITA_RISCO_DEF} icon={<AlertTriangle size={14} />} variant="danger" iconColor="text-risk-critical" />
+        <KpiCard label="Contratos em Risco" value={rk.atRiskCount.toLocaleString('pt-BR')} subtitle={`Receita em risco: ${formatCurrency(rk.revenueAtRiskMonthly)}/mês`} hint={RECEITA_RISCO_DEF} icon={<AlertTriangle size={14} />} variant="danger" iconColor="text-risk-critical" />
       </div>
 
       {/* Assertividade — a plataforma acerta? Fica na primeira dobra de
