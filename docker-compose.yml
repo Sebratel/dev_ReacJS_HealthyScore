@@ -98,12 +98,21 @@ services:
       AI_BASE_URL: ${AI_BASE_URL:-}
       AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-}
     volumes:
-      # VOLUME NOMEADO, não `./data`. O Portainer recria o diretório do clone a
-      # cada redeploy e `data/` está no .gitignore — com bind mount relativo, o
-      # deploy montava uma pasta VAZIA e levava junto usuários liberados pela
-      # tela, config oficial, overrides de SQL, provedor de IA e a chave .secret.
-      # Só sobrevivia quem estava em ADMIN_EMAILS (vem da env da stack).
-      - appdata:/app/data
+      # CAMINHO ABSOLUTO DO HOST — nunca `./data`. Este é o único estado do
+      # sistema que não dá para regerar: usuários liberados pela tela, config
+      # oficial de scoring, overrides de SQL, provedor de IA e a chave .secret.
+      #
+      # Era `./data`, bind mount RELATIVO. Como a stack é publicada por
+      # Repository, o Portainer recria o diretório do clone a cada redeploy e
+      # `data/` está no .gitignore: vinha sem a pasta, o Docker criava uma vazia
+      # e montava por cima. Todo redeploy apagava tudo. Só sobrevivia quem
+      # estava em ADMIN_EMAILS, que vem da env da stack.
+      #
+      # Caminho do host (e não volume nomeado) de propósito: fica fora do
+      # alcance de `docker volume prune`, `compose down -v` e da remoção da
+      # stack no Portainer. O dado vive no servidor, entra no backup normal da
+      # máquina e é inspecionável sem entrar no container.
+      - ${DATA_DIR:-/opt/healthscore/data}:/app/data
       - snapshot:/snapshot:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8787/api/health"]
@@ -175,9 +184,11 @@ services:
       DB_AUTOISP_PORT: ${DB_AUTOISP_PORT:-5432}
       DB_AUTOISP_SSL: ${DB_AUTOISP_SSL:-}
     volumes:
-      # Mesmo volume nomeado da `api` — os dois serviços leem/gravam a mesma
-      # config oficial e os mesmos overrides de query.
-      - appdata:/app/data
+      # Mesmo caminho da `api` — os dois serviços leem/gravam a mesma config
+      # oficial e os mesmos overrides de query. Se mudar DATA_DIR, muda para os
+      # dois: são a mesma pasta, e divergir aqui faria o ETL pontuar com uma
+      # config e a tela mostrar outra.
+      - ${DATA_DIR:-/opt/healthscore/data}:/app/data
       - snapshot:/snapshot
 
 # Rede interna dedicada da stack. O nginx do `web` resolve o backend pelo nome
@@ -191,11 +202,10 @@ networks:
 # Volume do snapshot completo: o `etl` grava, a `api` lê (materialização em
 # memória). Sobrevive a redeploys — os dados atualizam sozinhos de madrugada.
 #
-# `appdata` guarda o que é CONFIGURADO PELA TELA e não existe em lugar nenhum
-# além dele: roles.json (usuários e setores), official-config.json (pesos e
-# limiares oficiais), query-overrides.json, ia.json e .secret. Perder este
-# volume é perder tudo isso — é o único estado do sistema que não dá para
-# regerar a partir do banco de origem.
+# O que é CONFIGURADO PELA TELA (roles.json, official-config.json,
+# query-overrides.json, ia.json, .secret) NÃO fica aqui: mora em DATA_DIR, um
+# caminho do host. Volume nomeado sobrevive a redeploy, mas some com
+# `volume prune` / `down -v` / remoção da stack — e esse é o único dado do
+# sistema que não dá para regerar a partir do banco de origem.
 volumes:
   snapshot:
-  appdata:
