@@ -97,7 +97,12 @@ services:
       AI_BASE_URL: ${AI_BASE_URL:-}
       AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-}
     volumes:
-      - ./data:/app/data
+      # VOLUME NOMEADO, não `./data`. O Portainer recria o diretório do clone a
+      # cada redeploy e `data/` está no .gitignore — com bind mount relativo, o
+      # deploy montava uma pasta VAZIA e levava junto usuários liberados pela
+      # tela, config oficial, overrides de SQL, provedor de IA e a chave .secret.
+      # Só sobrevivia quem estava em ADMIN_EMAILS (vem da env da stack).
+      - appdata:/app/data
       - snapshot:/snapshot:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8787/api/health"]
@@ -169,7 +174,9 @@ services:
       DB_AUTOISP_PORT: ${DB_AUTOISP_PORT:-5432}
       DB_AUTOISP_SSL: ${DB_AUTOISP_SSL:-}
     volumes:
-      - ./data:/app/data
+      # Mesmo volume nomeado da `api` — os dois serviços leem/gravam a mesma
+      # config oficial e os mesmos overrides de query.
+      - appdata:/app/data
       - snapshot:/snapshot
 
 # Rede interna dedicada da stack. O nginx do `web` resolve o backend pelo nome
@@ -182,5 +189,12 @@ networks:
 
 # Volume do snapshot completo: o `etl` grava, a `api` lê (materialização em
 # memória). Sobrevive a redeploys — os dados atualizam sozinhos de madrugada.
+#
+# `appdata` guarda o que é CONFIGURADO PELA TELA e não existe em lugar nenhum
+# além dele: roles.json (usuários e setores), official-config.json (pesos e
+# limiares oficiais), query-overrides.json, ia.json e .secret. Perder este
+# volume é perder tudo isso — é o único estado do sistema que não dá para
+# regerar a partir do banco de origem.
 volumes:
   snapshot:
+  appdata:
