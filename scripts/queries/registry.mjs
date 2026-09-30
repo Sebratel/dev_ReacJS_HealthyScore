@@ -621,6 +621,34 @@ group by contract_number
 `,
   },
   {
+    id: 'Q_INV_DIAS', engine: 'financeiro', db: 'postgres',
+    title: 'Dias de atraso e pagamento antecipado por contrato',
+    description:
+      'Alimenta as FAIXAS da planilha do Financeiro. Devolve, por contrato: o PIOR atraso entre as faturas pagas (dias), quantas foram pagas antes do vencimento e quantas no próprio dia. A faixa em si é decidida no código (lateKeyOf), não aqui — o SQL entrega o número cru, para os cortes viverem num lugar só.',
+    params: ['$1 = contract_numbers (text[])'],
+    sql: `
+select c.contract_number,
+  max(frt2.client_paid_date::date - frt.expiration_date::date)
+    filter (where frt2.client_paid_date::date > frt.expiration_date::date) pior_atraso_dias,
+  count(*) filter (where frt2.client_paid_date::date < frt.expiration_date::date) pagas_antes,
+  count(*) filter (where frt2.client_paid_date::date = frt.expiration_date::date) pagas_no_dia
+from contracts c
+join financial_receivable_titles frt on frt.contract_id = c.id
+join financial_receipt_titles frt2 on frt2.financial_receivable_title_id = frt.id
+left join financers_natures fn on fn.id = frt2.financer_nature_id
+where c.v_status <> 'Cancelado'
+  and frt.title like '%FAT%'
+  and frt.deleted = 'False'
+  and frt.renegotiated = 'False'
+  and frt.bill_title_id is null
+  and (fn.title is null or fn.title <> 'DF - TARIFA BAIXA DE TÍTULO')
+  and date(frt.issue_date) >= '${FROM_DATE}'
+  and frt2.client_paid_date is not null
+  and c.contract_number::text = any($1::text[])
+group by c.contract_number
+`,
+  },
+  {
     id: 'Q_RENEG_AGG', engine: 'financeiro', db: 'postgres',
     title: 'Renegociações por contrato',
     description: 'Títulos FAT renegotiated=True por contrato.',

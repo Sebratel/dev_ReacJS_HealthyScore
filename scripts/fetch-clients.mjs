@@ -21,6 +21,9 @@ import { makeAutoIspPool } from './db-autoisp.mjs'
 import { buildEffectiveQueries } from './queries/index.mjs'
 import { FROM_DATE, NON_BILLED_CONTRACT_TYPES } from './queries/registry.mjs'
 import { buildCohort } from './queries/cohort.mjs'
+// Roda sob tsx: a classificação de faixa de atraso vem da PRÓPRIA engine, para
+// ETL e score nunca discordarem sobre onde um corte cai.
+import { lateKeyOf } from '../src/features/financial-engine/financialEngine.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // Snapshot gzipado. Caminho configurável por SNAPSHOT_OUT (o job noturno grava
@@ -58,7 +61,7 @@ const {
   Q_INST_PROT, Q_INST_SCHED, Q_INST_TECH_LIST,
   Q_REL_PROT, Q_REL_DIM, Q_REL_TYPE_LIST, Q_REL_ATT_LIST,
   Q_MARIA_SPLITTER, Q_NET_INFRA, Q_NET_INFRA_CANCELLED,
-  Q_INV_AGG, Q_RENEG_AGG, Q_TRUST_AGG,
+  Q_INV_AGG, Q_INV_DIAS, Q_RENEG_AGG, Q_TRUST_AGG,
   Q_AUTOISP_ONU_STATUS, Q_AUTOISP_ONU_HEALTH, Q_AUTOISP_ONU_LAN, Q_AUTOISP_CPE, Q_AUTOISP_WIFI,
   Q_WD_PROT,
 } = buildEffectiveQueries({ full: FULL })
@@ -410,8 +413,9 @@ try {
     if (m) c.onuStatusCounts = { ...m }
   }
 
-  const [inv, reneg, trust, monthly, equip, fieldProt, fieldSched, fieldReasons, instProt, instSched, relProt, relDim, netInfra] = await Promise.all([
+  const [inv, invDias, reneg, trust, monthly, equip, fieldProt, fieldSched, fieldReasons, instProt, instSched, relProt, relDim, netInfra] = await Promise.all([
     pool.query(Q_INV_AGG, [contractNumbers]),
+    pool.query(Q_INV_DIAS, [contractNumbers]),
     pool.query(Q_RENEG_AGG, [contractNumbers]),
     pool.query(Q_TRUST_AGG, [contractNumbers]),
     pool.query(Q_MONTHLY_OK),
@@ -518,6 +522,21 @@ try {
     c.lateInvoices = Number(r.late_invoices)
     c.overdueInvoices = Number(r.overdue_invoices)
     c.totalInvoices = Number(r.total_invoices)
+  }
+  // Faixas do Financeiro. A classificação usa `lateKeyOf` da própria engine —
+  // os cortes vivem num lugar só, senão ETL e score divergem no primeiro ajuste.
+  for (const r of invDias.rows) {
+    const c = byContract.get(String(r.contract_number)); if (!c) continue
+    const dias = r.pior_atraso_dias != null ? Number(r.pior_atraso_dias) : null
+    c.finWorstLateDays = dias
+    c.finWorstLateKey = lateKeyOf(dias)
+    c.finPaidBefore = Number(r.pagas_antes) || 0
+    c.finPaidOnDay = Number(r.pagas_no_dia) || 0
+    // Predominância decide o perfil: quem tem 20 faturas pagas antes e 1 no dia
+    // é "paga antes". Empate cai para o comportamento mais conservador.
+    c.finOnTimeKey = c.finPaidBefore + c.finPaidOnDay === 0
+      ? null
+      : (c.finPaidBefore > c.finPaidOnDay ? 'antes' : 'no_dia')
   }
   for (const r of reneg.rows) { const c = byContract.get(String(r.contract_number)); if (c) c.renegotiations = Number(r.renegotiations) }
   for (const r of trust.rows) { const c = byContract.get(String(r.contract_number)); if (c) c.trustReleases = Number(r.trust_releases) }

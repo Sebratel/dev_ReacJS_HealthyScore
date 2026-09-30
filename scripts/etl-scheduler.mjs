@@ -86,7 +86,9 @@ function runETL(reason) {
   if (running) { console.log('[etl] já em execução — ignorando gatilho.'); return }
   running = true
   console.log(`[etl] iniciando ETL completo (${reason}) → ${OUT}`)
-  const child = spawn(process.execPath, [ETL, 'full'], { stdio: 'inherit', env: process.env })
+  // Sob tsx como os demais jobs: o ETL importa a classificação de faixas da
+  // engine (.ts) para os cortes não viverem em dois lugares.
+  const child = spawn(process.execPath, ['--import', 'tsx', ETL, 'full'], { stdio: 'inherit', env: process.env })
   child.on('exit', (code) => {
     running = false
     console.log(`[etl] finalizado (code ${code}) em ${new Date().toISOString()}`)

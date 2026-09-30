@@ -180,7 +180,10 @@ export const useAppStore = create<AppState>()(
           const current = pm.indices ?? []
           const next = forms.map((title) => {
             const existing = current.find((i) => i.key === title)
-            return { key: title, label: title, points: existing?.points ?? 0 }
+            // Mantém o rótulo curado quando existe: a sincronia traz a lista do
+            // banco, não o texto. Sem isso, "Anual · Pix automático" voltava a
+            // ser "PF - ANUAL - PIX AUTOMÁTICO" na primeira carga.
+            return { key: title, label: existing?.label ?? title, points: existing?.points ?? 0 }
           })
           const same =
             next.length === current.length &&

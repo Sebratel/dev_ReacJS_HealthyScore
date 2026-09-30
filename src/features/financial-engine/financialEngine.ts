@@ -4,9 +4,16 @@ import type {
   FinancialScoreFactor, FinancialEngineConfig, FinancialIndicatorSummary,
   FinancialIndicatorKey,
 } from '@/types'
-import { DEFAULT_FINANCIAL_CONFIG, FINANCIAL_INDICATOR_ORDER } from './financialConfig'
+import { DEFAULT_FINANCIAL_CONFIG, FINANCIAL_INDICATOR_ORDER, LATE_RANGES } from './financialConfig'
 import { scoreToHealthClass } from '@/utils/health'
 const clamp = (v: number, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(v)))
+
+// Dias de atraso → chave da faixa. Exportada porque o ETL classifica com ESTA
+// função: se cada lado tivesse a sua, os cortes divergiriam no primeiro ajuste.
+export function lateKeyOf(dias: number | null | undefined): string | null {
+  if (dias == null || dias <= 0) return null
+  return (LATE_RANGES.find((r) => dias <= r.maxDias) ?? LATE_RANGES[LATE_RANGES.length - 1]).key
+}
 
 // ─── Score por cliente — 100% real + config ────────────────────
 // Modo manual → pontuação fixa configurada, aplicada por presença do indicador.
@@ -25,10 +32,15 @@ function scoreClient(c: RealClient, config: FinancialEngineConfig) {
     v += points
   }
 
-  // 1. Faturas Atrasadas (pagas em atraso + em aberto vencidas)
-  if (overdueTotal > 0) {
-    if (ind.overdueBills.mode === 'manual') add('overdueBills', `Faturas atrasadas (${overdueTotal})`, ind.overdueBills.points)
-    else add('overdueBills', `${overdueTotal} fatura(s) em atraso`, -Math.min(overdueTotal * 15, 60))
+  // 1. Faturas Atrasadas — faixa da PIOR fatura paga em atraso.
+  // Sem leitura de dias (contrato novo, sem fatura paga) não pontua: ausência
+  // de dado não é bom pagamento.
+  const lateKey = c.finWorstLateKey ?? null
+  if (ind.overdueBills.mode === 'manual') {
+    const faixa = lateKey ? ind.overdueBills.indices?.find((i) => i.key === lateKey) : undefined
+    if (faixa) add('overdueBills', `Atraso: ${faixa.label}`, faixa.points)
+  } else if (overdueTotal > 0) {
+    add('overdueBills', `${overdueTotal} fatura(s) em atraso`, -Math.min(overdueTotal * 15, 60))
   }
   // 2. Liberações por Confiança
   if (c.trustReleases > 0) {
@@ -40,10 +52,13 @@ function scoreClient(c: RealClient, config: FinancialEngineConfig) {
     if (ind.renegotiations.mode === 'manual') add('renegotiations', `Renegociações (${c.renegotiations})`, ind.renegotiations.points)
     else add('renegotiations', `${c.renegotiations} renegociação(ões)`, -Math.min(c.renegotiations * 15, 45))
   }
-  // 4. Faturas pagas no prazo
-  if (c.onTimeInvoices > 0) {
-    if (ind.onTimePayments.mode === 'manual') add('onTimePayments', `Faturas pagas no prazo (${c.onTimeInvoices})`, ind.onTimePayments.points)
-    else add('onTimePayments', `${c.onTimeInvoices} fatura(s) no prazo`, Math.min(c.onTimeInvoices * 5, 25))
+  // 4. Faturas pagas no prazo — antes do vencimento ou no próprio dia.
+  const onTimeKey = c.finOnTimeKey ?? null
+  if (ind.onTimePayments.mode === 'manual') {
+    const faixa = onTimeKey ? ind.onTimePayments.indices?.find((i) => i.key === onTimeKey) : undefined
+    if (faixa) add('onTimePayments', faixa.label, faixa.points)
+  } else if (c.onTimeInvoices > 0) {
+    add('onTimePayments', `${c.onTimeInvoices} fatura(s) no prazo`, Math.min(c.onTimeInvoices * 5, 25))
   }
   // 5. Forma de Pagamento (índice = forma real do contrato)
   if (ind.paymentMethod.mode === 'manual') {
@@ -56,10 +71,14 @@ function scoreClient(c: RealClient, config: FinancialEngineConfig) {
 
   // Breakdown: todos os indicadores configurados, com atributo real + pontuação
   const realValue: Record<FinancialIndicatorKey, string> = {
-    overdueBills: `${overdueTotal} fatura(s)`,
+    overdueBills: c.finWorstLateDays != null
+      ? `pior atraso: ${c.finWorstLateDays} dia(s)`
+      : (overdueTotal > 0 ? `${overdueTotal} fatura(s) em aberto` : 'sem atraso'),
     trustReleases: `${c.trustReleases} desbloqueio(s)`,
     renegotiations: `${c.renegotiations} reneg.`,
-    onTimePayments: `${c.onTimeInvoices} fatura(s)`,
+    onTimePayments: onTimeKey
+      ? `${onTimeKey === 'antes' ? 'antes do vencimento' : 'no dia'} (${c.finPaidBefore ?? 0} antes, ${c.finPaidOnDay ?? 0} no dia)`
+      : 'sem leitura',
     paymentMethod: c.paymentForm || 'Não informado',
   }
   const indicators = FINANCIAL_INDICATOR_ORDER.map((key) => ({

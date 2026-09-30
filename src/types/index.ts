@@ -492,6 +492,15 @@ export interface RealClient {
   // Conexão — qualidade do enlace na carga (AutoISP). Todos opcionais: um
   // snapshot gerado antes desta versão, ou com o AutoISP fora do ar, simplesmente
   // não traz os campos e os indicadores ficam sem pontuar.
+  // ── Financeiro: faixas calculadas no ETL ──
+  // O ETL entrega a FAIXA pronta (a chave), não o número cru: a mesma régua
+  // precisa valer para o score e para as sugestões, e recalcular a faixa em
+  // dois lugares é como elas passam a discordar.
+  finWorstLateKey?: string | null    // pior faixa de atraso entre as faturas pagas
+  finWorstLateDays?: number | null   // dias de atraso da pior fatura (para a tela)
+  finOnTimeKey?: string | null       // 'antes' | 'no_dia' — comportamento predominante
+  finPaidBefore?: number             // faturas pagas ANTES do vencimento
+  finPaidOnDay?: number              // faturas pagas NO DIA do vencimento
   connRxPower?: number | null        // potência óptica recebida (dBm, negativa)
   connOnuStatus?: string             // status corrente da ONU (OK, warning, …)
   connLanMbps?: number | null        // maior velocidade negociada na LAN (Mbps)
