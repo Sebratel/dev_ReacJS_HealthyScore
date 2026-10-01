@@ -501,6 +501,10 @@ export interface RealClient {
   finOnTimeKey?: string | null       // 'antes' | 'no_dia' — comportamento predominante
   finPaidBefore?: number             // faturas pagas ANTES do vencimento
   finPaidOnDay?: number              // faturas pagas NO DIA do vencimento
+  finTrustKey?: string | null        // faixa de recorrência do desbloqueio por confiança
+  finRenegKey?: string | null        // faixa de recorrência da renegociação
+  finTrustMeses?: number             // meses distintos com desbloqueio
+  finRenegMeses?: number             // meses distintos com renegociação
   connRxPower?: number | null        // potência óptica recebida (dBm, negativa)
   connOnuStatus?: string             // status corrente da ONU (OK, warning, …)
   connLanMbps?: number | null        // maior velocidade negociada na LAN (Mbps)

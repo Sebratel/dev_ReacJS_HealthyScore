@@ -24,6 +24,10 @@ import { buildCohort } from './queries/cohort.mjs'
 // Roda sob tsx: a classificação de faixa de atraso vem da PRÓPRIA engine, para
 // ETL e score nunca discordarem sobre onde um corte cai.
 import { lateKeyOf } from '../src/features/financial-engine/financialEngine.ts'
+import { recurrenceKeyOf } from '../src/features/financial-engine/recurrence.ts'
+import {
+  TRUST_EVENTUAL, TRUST_RECORRENTE, RENEG_EVENTUAL, RENEG_RECORRENTE,
+} from '../src/features/financial-engine/financialConfig.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // Snapshot gzipado. Caminho configurável por SNAPSHOT_OUT (o job noturno grava
@@ -538,8 +542,31 @@ try {
       ? null
       : (c.finPaidBefore > c.finPaidOnDay ? 'antes' : 'no_dia')
   }
-  for (const r of reneg.rows) { const c = byContract.get(String(r.contract_number)); if (c) c.renegotiations = Number(r.renegotiations) }
-  for (const r of trust.rows) { const c = byContract.get(String(r.contract_number)); if (c) c.trustReleases = Number(r.trust_releases) }
+  // Recorrência: a classificação (meses consecutivos = recorrente) vem de
+  // recurrence.ts, a mesma que a engine usa. O SQL entrega só os meses.
+  const RENEG_ESC = { eventual: RENEG_EVENTUAL, recorrente: RENEG_RECORRENTE }
+  const TRUST_ESC = { eventual: TRUST_EVENTUAL, recorrente: TRUST_RECORRENTE }
+  for (const r of reneg.rows) {
+    const c = byContract.get(String(r.contract_number)); if (!c) continue
+    c.renegotiations = Number(r.renegotiations)
+    const rec = recurrenceKeyOf(r.meses ?? [], RENEG_ESC)
+    c.finRenegKey = rec.key
+    c.finRenegMeses = rec.meses
+  }
+  for (const r of trust.rows) {
+    const c = byContract.get(String(r.contract_number)); if (!c) continue
+    c.trustReleases = Number(r.trust_releases)
+    const rec = recurrenceKeyOf(r.meses ?? [], TRUST_ESC)
+    c.finTrustKey = rec.key
+    c.finTrustMeses = rec.meses
+  }
+  // Quem NÃO apareceu nas queries acima nunca usou — e "nunca" vale +50, então
+  // precisa de chave explícita. Sem isto, não-uso ficaria indistinguível de
+  // dado ausente e perderia o bônus.
+  for (const c of clients) {
+    if (c.finRenegKey === undefined) c.finRenegKey = 'nunca'
+    if (c.finTrustKey === undefined) c.finTrustKey = 'nunca'
+  }
 
   for (const c of clients) applyOnu(c)
   const withOnu = clients.filter((c) => Object.keys(c.onuStatusCounts).length > 0).length

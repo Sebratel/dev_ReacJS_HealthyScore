@@ -34,6 +34,10 @@ function loadOriginalSql(argv2) {
     .replace(/import \{ makeMariaPool \} from '\.\/db-maria\.mjs'\n?/, '')
     .replace(/import \{ makeAutoIspPool \} from '\.\/db-autoisp\.mjs'\n?/, '')
     .replace(/const pool = makePool\(\)/, 'const pool = null')
+    // Imports do front (.ts, via tsx) só são usados no CORPO do ETL, que é
+    // cortado em `try {`. O módulo extraído roda sob node puro num tmpdir, onde
+    // nem o caminho nem o .ts resolvem — então saem fora.
+    .replace(/^import .*from '\.\.\/src\/.*$/gm, '')
     .replace(/from '\.\//g, `from '${scriptsDir}`)
   // Define process.argv ANTES do código (controla FULL/amostra).
   const preamble = `process.argv = ['node', 'etl'${argv2 ? `, ${JSON.stringify(argv2)}` : ''}]\n`

@@ -651,10 +651,11 @@ group by c.contract_number
   {
     id: 'Q_RENEG_AGG', engine: 'financeiro', db: 'postgres',
     title: 'Renegociações por contrato',
-    description: 'Títulos FAT renegotiated=True por contrato.',
+    description: 'Títulos FAT renegotiated=True por contrato, com os MESES distintos em que ocorreram. Os meses são o insumo da recorrência: meses consecutivos = recorrente, e a classificação em si é feita no código (recurrence.ts), não aqui.',
     params: ['$1 = contract_numbers (text[])'],
     sql: `
-select c.contract_number, count(distinct frt.id) renegotiations
+select c.contract_number, count(distinct frt.id) renegotiations,
+  array_agg(distinct to_char(frt.issue_date, 'YYYY-MM')) meses
 from contracts c
 join financial_receivable_titles frt on frt.contract_id = c.id
 where c.v_status <> 'Cancelado'
@@ -667,10 +668,11 @@ group by c.contract_number
   {
     id: 'Q_TRUST_AGG', engine: 'financeiro', db: 'postgres',
     title: 'Desbloqueios por confiança por contrato',
-    description: 'Eventos de desbloqueio financeiro por confiança por contrato.',
+    description: 'Eventos de desbloqueio financeiro por confiança, com os MESES distintos em que ocorreram. Meses consecutivos = uso recorrente, que a planilha pune muito mais que o uso espalhado.',
     params: ['$1 = contract_numbers (text[])'],
     sql: `
-select c.contract_number, count(*) trust_releases
+select c.contract_number, count(*) trust_releases,
+  array_agg(distinct to_char(ce."date", 'YYYY-MM')) meses
 from contracts c
 join contract_events ce on ce.contract_id = c.id
 where c.v_status <> 'Cancelado'

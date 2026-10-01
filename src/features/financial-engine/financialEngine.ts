@@ -42,15 +42,22 @@ function scoreClient(c: RealClient, config: FinancialEngineConfig) {
   } else if (overdueTotal > 0) {
     add('overdueBills', `${overdueTotal} fatura(s) em atraso`, -Math.min(overdueTotal * 15, 60))
   }
-  // 2. Liberações por Confiança
-  if (c.trustReleases > 0) {
-    if (ind.trustReleases.mode === 'manual') add('trustReleases', `Liberações por confiança (${c.trustReleases})`, ind.trustReleases.points)
-    else add('trustReleases', `${c.trustReleases} desbloqueio(s) por confiança`, -Math.min(c.trustReleases * 8, 32))
+  // 2. Liberações por Confiança — escada de recorrência (meses consecutivos).
+  const trustKey = c.finTrustKey ?? null
+  if (ind.trustReleases.mode === 'manual') {
+    const faixa = trustKey ? ind.trustReleases.indices?.find((i) => i.key === trustKey) : undefined
+    if (faixa) add('trustReleases', `Confiança: ${faixa.label}`, faixa.points)
+  } else if (c.trustReleases > 0) {
+    add('trustReleases', `${c.trustReleases} desbloqueio(s) por confiança`, -Math.min(c.trustReleases * 8, 32))
   }
-  // 3. Renegociações
-  if (c.renegotiations > 0) {
-    if (ind.renegotiations.mode === 'manual') add('renegotiations', `Renegociações (${c.renegotiations})`, ind.renegotiations.points)
-    else add('renegotiations', `${c.renegotiations} renegociação(ões)`, -Math.min(c.renegotiations * 15, 45))
+  // 3. Renegociações — mesma escada: dois meses seguidos pesam quase o triplo
+  // de dois meses espalhados.
+  const renegKey = c.finRenegKey ?? null
+  if (ind.renegotiations.mode === 'manual') {
+    const faixa = renegKey ? ind.renegotiations.indices?.find((i) => i.key === renegKey) : undefined
+    if (faixa) add('renegotiations', `Renegociação: ${faixa.label}`, faixa.points)
+  } else if (c.renegotiations > 0) {
+    add('renegotiations', `${c.renegotiations} renegociação(ões)`, -Math.min(c.renegotiations * 15, 45))
   }
   // 4. Faturas pagas no prazo — antes do vencimento ou no próprio dia.
   const onTimeKey = c.finOnTimeKey ?? null
@@ -74,8 +81,10 @@ function scoreClient(c: RealClient, config: FinancialEngineConfig) {
     overdueBills: c.finWorstLateDays != null
       ? `pior atraso: ${c.finWorstLateDays} dia(s)`
       : (overdueTotal > 0 ? `${overdueTotal} fatura(s) em aberto` : 'sem atraso'),
-    trustReleases: `${c.trustReleases} desbloqueio(s)`,
-    renegotiations: `${c.renegotiations} reneg.`,
+    trustReleases: trustKey === 'nunca' ? 'nunca usou'
+      : `${c.trustReleases} em ${c.finTrustMeses ?? 0} mês(es)${trustKey?.startsWith('rc:') ? ' · consecutivos' : ''}`,
+    renegotiations: renegKey === 'nunca' ? 'nunca solicitou'
+      : `${c.renegotiations} em ${c.finRenegMeses ?? 0} mês(es)${renegKey?.startsWith('rc:') ? ' · consecutivos' : ''}`,
     onTimePayments: onTimeKey
       ? `${onTimeKey === 'antes' ? 'antes do vencimento' : 'no dia'} (${c.finPaidBefore ?? 0} antes, ${c.finPaidOnDay ?? 0} no dia)`
       : 'sem leitura',

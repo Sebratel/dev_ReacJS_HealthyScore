@@ -92,17 +92,46 @@ describe('pontuação por faixa', () => {
     expect(pontosDe(semDado, 'overdueBills')).toBe(0)
   })
 
-  it('pagar antes do vencimento vale mais que pagar no dia', () => {
+  it('pagar em dia não rende bônus — só não desconta', () => {
+    // A planilha dá +50/+40 aqui, mas a engine começa em 100: ponto positivo
+    // não premia, cancela punição. Ver a nota de escala em financialConfig.
     const antes = contrato({ finOnTimeKey: 'antes', finPaidBefore: 10, finPaidOnDay: 1 })
     const noDia = contrato({ finOnTimeKey: 'no_dia', finPaidBefore: 1, finPaidOnDay: 10 })
-    expect(pontosDe(antes, 'onTimePayments')).toBe(50)
-    expect(pontosDe(noDia, 'onTimePayments')).toBe(40)
+    expect(pontosDe(antes, 'onTimePayments')).toBe(0)
+    expect(pontosDe(noDia, 'onTimePayments')).toBe(0)
   })
 
-  it('as cinco formas de pagamento da planilha pontuam como pedido', () => {
+  it('as formas de pagamento seguem a planilha nos valores negativos', () => {
     for (const [chave, , esperado] of PAYMENT_METHOD_INDICES) {
       const c = contrato({ paymentForm: chave })
       expect(pontosDe(c, 'paymentMethod'), `forma ${chave}`).toBe(esperado)
+    }
+  })
+
+  it('REGRESSÃO: bônus não pode cancelar punição', () => {
+    // Defeito real, shipado e corrigido: um contrato com 45 dias de atraso
+    // somava +50 (nunca renegociou) +50 (nunca usou confiança) +50 (paga antes)
+    // e fechava em 100 — "excelente", empatado com um cliente impecável.
+    const inadimplente = contrato({
+      finWorstLateDays: 45, finWorstLateKey: 'd45',
+      finOnTimeKey: 'antes', finPaidBefore: 5,
+      finRenegKey: 'nunca', finTrustKey: 'nunca',
+    })
+    const impecavel = contrato({
+      finWorstLateKey: null, finOnTimeKey: 'antes', finPaidBefore: 5,
+      finRenegKey: 'nunca', finTrustKey: 'nunca',
+    })
+    const [a, b] = buildEngineScores([inadimplente, impecavel], DEFAULT_FINANCIAL_CONFIG)
+    expect(a.healthScore, 'inadimplente grave não pode empatar com impecável')
+      .toBeLessThan(b.healthScore)
+    expect(a.classification).toBe('critical')
+
+    // Nenhum indicador pode valer ponto POSITIVO nesta engine.
+    for (const ind of Object.values(DEFAULT_FINANCIAL_CONFIG.indicators)) {
+      for (const i of ind.indices ?? []) {
+        expect(i.points, `${ind.key}/${i.key} tem ponto positivo`).toBeLessThanOrEqual(0)
+      }
+      expect(ind.points, `${ind.key} tem ponto positivo`).toBeLessThanOrEqual(0)
     }
   })
 
