@@ -34,6 +34,7 @@ import {
   SECTORS, SECTOR_LABELS,
 } from './roles.mjs'
 import { getOfficialConfig, setOfficialConfigs, setOfficialThresholds, mergeConfigsWithScope } from './officialConfig.mjs'
+import { withDefaults } from './engineDefaults.mjs'
 import { runChurnForecast } from './churnForecast.mjs'
 import { actionPlanRoutes } from './actionPlans/routes.mjs'
 
@@ -221,7 +222,9 @@ app.post('/api/dashboard', requireAuth(), (req, res) => {
     // cliente enviou (compat — nada quebra antes de um admin publicar a oficial).
     const official = getOfficialConfig()
     const result = runDashboard(clients, {
-      configs: official?.configs ?? b.configs,
+      // Sempre sobre os defaults do código: a config gravada traz as notas,
+      // a forma dos indicadores vem de cá. Ver server/engineDefaults.mjs.
+      configs: withDefaults(official?.configs ?? b.configs),
       thresholds: official?.thresholds ?? b.thresholds,
       monthly: getDataset()?.monthly || [],
       name: b.name, contract: b.contract, city: b.city, classification: b.classification, topN: b.topN,
@@ -245,7 +248,7 @@ app.post('/api/engine/:key', requireAuth(), (req, res) => {
     const official = getOfficialConfig()
     const result = runEngine(key, {
       clients,
-      config: official?.configs?.[key] ?? b.config,
+      config: withDefaults(official?.configs ?? b.configs ?? {})[key] ?? b.config,
       thresholds: official?.thresholds ?? b.thresholds,
       monthly: getDataset()?.monthly || [],
       page: b.page, pageSize: b.pageSize,

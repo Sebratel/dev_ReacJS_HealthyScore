@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { scoreAllClients } from './engines.mjs'
 import { getOfficialConfig } from './officialConfig.mjs'
+import { withDefaults } from './engineDefaults.mjs'
 
 const DAY = 86400000
 const toTime = (iso) => { const t = Date.parse(iso); return Number.isNaN(t) ? null : t }
@@ -102,7 +103,8 @@ export function computeForecast({ scoredActive, scoredCancelled, activeById, can
 // ── Wiring: pontua os coortes e chama o núcleo ─────────────────
 export function runChurnForecast(active, cancelled, { configs, thresholds, monthly = [], topN = 200, city, classification } = {}) {
   const official = getOfficialConfig()
-  const cfgs = official?.configs ?? configs
+  // Defaults do código por baixo: a config gravada traz as notas, não a forma.
+  const cfgs = withDefaults(official?.configs ?? configs)
   const thr = official?.thresholds ?? thresholds
   const scoredActive = scoreAllClients(active, { configs: cfgs, thresholds: thr, monthly })
   const scoredCancelled = scoreAllClients(cancelled, { configs: cfgs, thresholds: thr, monthly })

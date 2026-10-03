@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import { mergeEngineConfig } from '@/utils/mergeEngineConfig'
 import {
   Customer, FinancialEngineConfig, FinancialIndicatorKey, FinancialIndicatorConfig,
   CommercialEngineConfig, CommercialIndicatorKey, CommercialIndicatorConfig,
@@ -25,14 +26,12 @@ type IndexEntry = { key: string; label: string }
 // existia quando aquela config foi gravada — apareça na tela em vez de sumir.
 // Sem isso, um indicador adicionado depois da última publicação da config
 // oficial ficava invisível para todo mundo que usa a oficial.
-const mergeIndicatorConfig = <T extends { indicators: Record<string, any> }>(def: T, saved?: T): T => {
-  if (!saved?.indicators) return def
-  const indicators: Record<string, any> = { ...def.indicators }
-  for (const k of Object.keys(def.indicators)) {
-    if (saved.indicators[k]) indicators[k] = saved.indicators[k]
-  }
-  return { ...def, indicators } as T
-}
+// Estrutura vem do código, valores do salvo — ver mergeEngineConfig.
+// Antes isto trocava o indicador INTEIRO pelo salvo, e uma mudança de forma no
+// código (presença → faixa) fazia o indicador sumir para quem já tinha config
+// gravada.
+const mergeIndicatorConfig = <T extends { indicators: Record<string, any> }>(def: T, saved?: T): T =>
+  mergeEngineConfig(def as never, saved as never) as T
 
 interface AppState {
   selectedCustomer: Customer | null
