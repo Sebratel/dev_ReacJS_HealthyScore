@@ -37,7 +37,9 @@ function loadOriginalSql(argv2) {
     // Imports do front (.ts, via tsx) só são usados no CORPO do ETL, que é
     // cortado em `try {`. O módulo extraído roda sob node puro num tmpdir, onde
     // nem o caminho nem o .ts resolvem — então saem fora.
-    .replace(/^import .*from '\.\.\/src\/.*$/gm, '')
+    // Pega também o import de várias linhas (`import {\n a,\n b,\n} from …`):
+    // `[^}]` casa quebra de linha, então a lista entre chaves atravessa linhas.
+    .replace(/import\s+(?:\{[^}]*\}|[^;\n]+?)\s+from\s+'\.\.\/src\/[^']*'\s*/g, '')
     .replace(/from '\.\//g, `from '${scriptsDir}`)
   // Define process.argv ANTES do código (controla FULL/amostra).
   const preamble = `process.argv = ['node', 'etl'${argv2 ? `, ${JSON.stringify(argv2)}` : ''}]\n`
